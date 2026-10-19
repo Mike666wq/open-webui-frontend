@@ -19,6 +19,8 @@
 	import About from './Settings/About.svelte';
 	import General from './Settings/General.svelte';
 	import Interface from './Settings/Interface.svelte';
+	import AppearanceEditor from '$lib/components/appearance/AppearanceEditor.svelte';
+	import AppearanceSettings from '$lib/components/appearance/AppearanceSettings.svelte';
 	import Notifications from './Settings/Notifications.svelte';
 	import Shortcuts from './Settings/Shortcuts.svelte';
 	import Audio from './Settings/Audio.svelte';
@@ -67,6 +69,8 @@
 	export let show: boolean | string | SettingsModalRequest = false;
 	let modalShow = false;
 	let lastShow: boolean | string | SettingsModalRequest = false;
+	let appearancePagePreview = false;
+	let appearanceEditorOpen = false;
 	let tabState: Record<string, unknown> | null = null;
 	let personalUiSettings: Record<string, any> = {};
 
@@ -126,13 +130,18 @@
 		}
 	}
 
-	$: if (!modalShow && show !== false) {
+	$: if (!modalShow && show !== false && !appearancePagePreview) {
 		show = false;
 		search = '';
 		lastShow = false;
 		selectedTab = 'general';
 		tabState = null;
 	}
+
+	const handleAppearancePreview = (active: boolean) => {
+		appearancePagePreview = active;
+		modalShow = !active;
+	};
 
 	const isAdminTab = (tabId: string) => tabId.startsWith('admin:');
 	const adminTabSegment = (tabId: string) => tabId.replace('admin:', '');
@@ -143,6 +152,7 @@
 	$: personalSettingGroups = {
 		general: $i18n.t('Basics'),
 		interface: $i18n.t('Basics'),
+		appearance: $i18n.t('Preferences'),
 		notifications: $i18n.t('Basics'),
 		shortcuts: $i18n.t('Basics'),
 		connections: $i18n.t('Services'),
@@ -198,6 +208,12 @@
 			titleKey: 'settings.personal.interface.title',
 			title: $i18n.t('settings.personal.interface.title'),
 			searchPrefixes: ['settings.personal.interface.']
+		},
+		{
+			id: 'appearance',
+			titleKey: 'settings.personal.appearance.title',
+			title: $i18n.t('Appearance & reading'),
+			searchPrefixes: ['settings.personal.appearance.', 'appearance', 'wallpaper', 'glass']
 		},
 		{
 			id: 'notifications',
@@ -605,6 +621,19 @@
 							<AdjustmentsHorizontal className="size-3.5" strokeWidth="2" />
 							<span>{$i18n.t('settings.personal.interface.title')}</span>
 						</button>
+					{:else if tabId === 'appearance'}
+						<button
+							role="tab"
+							aria-controls="tab-appearance"
+							aria-selected={selectedTab === 'appearance'}
+							class={tabButtonClass(selectedTab === 'appearance')}
+							on:click={() => {
+								selectTab('appearance');
+							}}
+						>
+							<AdjustmentsHorizontal className="size-3.5" strokeWidth="2" />
+							<span>{$i18n.t('Appearance & reading')}</span>
+						</button>
 					{:else if tabId === 'notifications'}
 						<button
 							role="tab"
@@ -815,6 +844,8 @@
 						toast.success($i18n.t('Settings saved successfully!'));
 					}}
 				/>
+			{:else if selectedTab === 'appearance'}
+				<AppearanceSettings onedit={() => (appearanceEditorOpen = true)} />
 			{:else if selectedTab === 'notifications'}
 				<Notifications {saveSettings} />
 			{:else if selectedTab === 'shortcuts'}
@@ -923,3 +954,9 @@
 		</div>
 	</div>
 </Modal>
+
+<AppearanceEditor
+	open={appearanceEditorOpen}
+	onpreviewchange={handleAppearancePreview}
+	onclose={() => (appearanceEditorOpen = false)}
+/>

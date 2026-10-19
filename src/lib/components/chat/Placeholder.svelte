@@ -36,6 +36,7 @@
 
 	const i18n: any = getContext('i18n');
 
+	export let className: string = '';
 	export let createMessagePair: Function;
 	export let stopResponse: Function;
 
@@ -114,7 +115,7 @@
 		!$selectedFolder.write_access;
 </script>
 
-<div class="m-auto w-full max-w-[58rem] px-1 @2xl:px-20 translate-y-6 py-24 text-center">
+<div class="{className} m-auto w-full max-w-[58rem] px-1 @2xl:px-20 translate-y-6 py-24 text-center">
 	{#if $temporaryChatEnabled}
 		<Tooltip
 			content={$i18n.t("This chat won't appear in history and your messages will not be saved.")}
@@ -127,7 +128,7 @@
 		</Tooltip>
 	{/if}
 
-	<div class="w-full text-3xl text-gray-800 dark:text-gray-100 text-center flex items-center gap-4">
+	<div class="owui-welcome__main w-full text-3xl text-gray-800 dark:text-gray-100 text-center flex items-center gap-4">
 		<div class="w-full flex flex-col justify-center items-center">
 			{#if $selectedFolder}
 				<FolderTitle
@@ -143,7 +144,7 @@
 					}}
 				/>
 			{:else}
-				<div class="flex flex-row justify-center gap-2.5 @sm:gap-3 w-fit px-5 max-w-xl">
+				<div class="owui-welcome__identity flex flex-row justify-center gap-2.5 @sm:gap-3 w-fit px-5 max-w-xl">
 					<div class="flex shrink-0 justify-center">
 						<div class="flex -space-x-4 mb-0.5" in:fade={{ duration: 100 }}>
 							{#each models as model, modelIdx}
@@ -240,7 +241,7 @@
 				</div>
 			{/if}
 
-			<div class="text-base font-normal @md:max-w-3xl w-full py-3 {atSelectedModel ? 'mt-2' : ''}">
+			<div class="owui-welcome__composer text-base font-normal @md:max-w-3xl w-full py-3 {atSelectedModel ? 'mt-2' : ''}">
 				{#if !($selectedFolder && folderReadOnly)}
 					<MessageInput
 						{callActive}
@@ -291,7 +292,7 @@
 			<FolderPlaceholder folder={$selectedFolder} />
 		</div>
 	{:else}
-		<div class="mx-auto max-w-2xl mt-2" in:fade={{ duration: 200, delay: 200 }}>
+		<div class="owui-welcome__suggestions mx-auto max-w-2xl mt-2" in:fade={{ duration: 200, delay: 200 }}>
 			<div class="mx-5">
 				<Suggestions suggestionPrompts={selectedSuggestionPrompts} inputValue={prompt} {onSelect} />
 			</div>

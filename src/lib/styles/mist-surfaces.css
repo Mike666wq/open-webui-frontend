@@ -1,0 +1,780 @@
+/* Mist Glass surfaces and primitives. Intentionally small and component-agnostic. */
+.mist-backdrop {
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.mist-backdrop__layer {
+	position: absolute;
+	inset: -32px;
+	background-color: var(--mist-canvas);
+	background-repeat: no-repeat;
+	transform: scale(1.02);
+	transform-origin: center;
+}
+
+.mist-backdrop--wallpaper .mist-backdrop__layer {
+	background-color: var(--mist-canvas);
+}
+
+.mist-backdrop__scrim {
+	position: absolute;
+	inset: 0;
+	background-color: rgb(7 11 20 / var(--mist-wallpaper-mask, 0.22));
+}
+
+.mist-surface {
+	border: 1px solid var(--mist-border);
+	border-radius: var(--mist-radius);
+	color: var(--mist-ink);
+	box-shadow:
+		inset 0 1px 0 var(--mist-highlight),
+		0 8px 30px var(--mist-shadow);
+	background-color: rgb(
+		var(--mist-surface-rgb) / var(--mist-surface-alpha, var(--mist-glass-content))
+	);
+}
+
+.mist-surface--navigation {
+	--mist-surface-alpha: var(--mist-navigation-alpha);
+	border-radius: var(--mist-navigation-radius);
+	backdrop-filter: blur(var(--mist-navigation-blur)) saturate(1.08);
+}
+
+.mist-surface--control {
+	--mist-surface-alpha: var(--mist-composer-alpha);
+	border-radius: var(--mist-composer-radius);
+	backdrop-filter: blur(var(--mist-composer-blur)) saturate(1.06);
+}
+
+.mist-surface--reading {
+	--mist-surface-alpha: var(--mist-reading-alpha);
+	border-radius: var(--mist-reading-radius);
+	background-color: rgb(var(--mist-reading-rgb) / var(--mist-surface-alpha));
+	backdrop-filter: blur(var(--mist-reading-blur));
+}
+
+.mist-surface__scrim {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	border-radius: inherit;
+	background-color: rgb(7 11 20 / var(--mist-wallpaper-mask, 0.22));
+}
+
+.mist-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 10000;
+	display: flex;
+	justify-content: center;
+	background-color: rgb(5 9 16 / var(--mist-overlay-scrim, 0.4));
+	overflow: hidden;
+	overscroll-behavior: contain;
+}
+
+.mist-modal--below-topbar {
+	z-index: 15;
+}
+
+.mist-modal__backdrop {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	border: 0;
+	background-color: transparent;
+	cursor: default;
+}
+
+.mist-modal > .mist-panel {
+	position: relative;
+	z-index: 1;
+	margin: auto 0;
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--mist-border);
+	border-radius: var(--mist-overlay-radius);
+	background-color: rgb(var(--mist-surface-rgb) / var(--mist-overlay-alpha));
+	backdrop-filter: blur(var(--mist-overlay-blur)) saturate(1.08);
+	box-shadow:
+		inset 0 1px 0 var(--mist-highlight),
+		0 24px 80px var(--mist-shadow);
+}
+
+.mist-modal--preview {
+	background-color: rgb(5 9 16 / calc(var(--mist-overlay-scrim) * 0.3));
+}
+
+.mist-modal--compact {
+	background-color: rgb(5 9 16 / calc(var(--mist-overlay-scrim) * 0.12));
+}
+
+.mist-modal--compact > .mist-panel--right {
+	width: min(390px, calc(100vw - 24px));
+}
+
+.mist-modal--compact > .mist-panel--bottom {
+	max-height: 62dvh;
+}
+
+.mist-modal--page-preview {
+	pointer-events: none;
+	background: transparent;
+}
+
+.mist-modal--page-preview .mist-modal__backdrop {
+	display: none;
+}
+
+.mist-modal--page-preview > .mist-panel {
+	pointer-events: auto;
+	width: min(620px, calc(100vw - 24px));
+	height: auto !important;
+	min-height: 0 !important;
+	max-height: none !important;
+	align-self: flex-end;
+	margin:
+		auto 12px calc(var(--mist-preview-composer-offset, 122px) + env(safe-area-inset-bottom))
+		auto !important;
+	border-radius: 16px;
+}
+
+.mist-modal--page-preview > .mist-panel .mist-panel__header,
+.mist-modal--page-preview > .mist-panel .mist-panel__body {
+	display: none;
+}
+
+.mist-modal--page-preview > .mist-panel .mist-panel__footer {
+	padding: 8px;
+	border-top: 0;
+	gap: 6px;
+}
+
+@media (max-width: 767px) {
+	.mist-modal--page-preview > .mist-panel {
+		margin-bottom: calc(
+			var(--mist-preview-composer-offset, 122px) + 24px + env(safe-area-inset-bottom)
+		) !important;
+	}
+
+	.mist-modal--page-preview > .mist-panel .mist-panel__footer > button:first-child {
+		display: none;
+	}
+
+	.mist-modal--page-preview > .mist-panel .mist-panel__footer > .mist-button {
+		flex: 1;
+		padding-inline: 10px;
+	}
+}
+
+.mist-modal > .mist-panel--left {
+	margin: 0 auto 0 0;
+}
+
+.mist-modal > .mist-panel--right {
+	margin: 0 0 0 auto;
+}
+
+.mist-modal > .mist-panel--bottom {
+	width: 100%;
+	align-self: flex-end;
+	margin: 0;
+}
+
+.mist-panel__handle {
+	width: 100%;
+	height: 44px;
+	border: 0;
+	background-color: transparent;
+}
+
+.mist-panel__handle::before {
+	content: '';
+	display: block;
+	width: 36px;
+	height: 4px;
+	margin: auto;
+	border-radius: 999px;
+	background-color: rgb(var(--mist-surface-rgb) / 0.35);
+}
+
+.mist-panel__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 16px 18px 10px;
+}
+
+.mist-panel__eyebrow {
+	margin: 0 0 2px;
+	color: var(--mist-muted);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.mist-panel__header h2 {
+	margin: 0;
+	color: var(--mist-ink);
+	font-size: 18px;
+	font-weight: 700;
+}
+
+.mist-panel__body {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 0 18px 18px;
+}
+
+.mist-panel__footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+	border-top: 1px solid var(--mist-border);
+	background-color: rgb(var(--mist-reading-rgb) / min(1, calc(var(--mist-reading-alpha) + 0.22)));
+	backdrop-filter: blur(var(--mist-reading-blur));
+}
+
+.mist-nav-item__icon {
+	display: inline-flex;
+	width: 18px;
+	height: 18px;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+	.mist-surface--navigation,
+	.mist-surface--control {
+		--mist-surface-alpha: min(1, calc(var(--mist-reading-alpha) + 0.3));
+	}
+}
+
+@media (prefers-reduced-transparency: reduce) {
+	:root {
+		--mist-glass-alpha: 0.9;
+		--mist-navigation-alpha: 0.92;
+		--mist-composer-alpha: 0.94;
+		--mist-reading-alpha: 0.96;
+		--mist-overlay-alpha: 0.96;
+		--mist-blur-background: 0px;
+		--mist-blur-control: 0px;
+		--mist-navigation-blur: 0px;
+		--mist-composer-blur: 0px;
+		--mist-overlay-blur: 0px;
+		--mist-reading-blur: 0px;
+	}
+}
+
+.mist-focusable:focus-visible {
+	outline: 2px solid var(--mist-accent);
+	outline-offset: 2px;
+}
+
+.mist-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	min-height: 40px;
+	padding: 0 14px;
+	border: 1px solid transparent;
+	border-radius: var(--mist-radius-sm);
+	font-size: 0.875rem;
+	font-weight: 600;
+	line-height: 1.2;
+	transition:
+		background-color var(--mist-duration-fast) var(--mist-ease),
+		color var(--mist-duration-fast) var(--mist-ease),
+		border-color var(--mist-duration-fast) var(--mist-ease),
+		transform var(--mist-duration-fast) var(--mist-ease);
+}
+
+.mist-button:active {
+	transform: translateY(1px);
+}
+
+.mist-button:disabled {
+	opacity: 0.55;
+	pointer-events: none;
+}
+
+.mist-button--primary {
+	background-color: var(--mist-accent);
+	color: var(--mist-accent-contrast);
+}
+
+.mist-button--primary:hover {
+	background-color: var(--mist-accent-strong);
+}
+
+.mist-button--secondary {
+	border-color: var(--mist-border);
+	background-color: rgb(var(--mist-surface-rgb) / var(--mist-glass-control));
+	color: var(--mist-ink);
+	backdrop-filter: blur(var(--mist-blur-control));
+}
+
+.mist-button--secondary:hover {
+	background-color: rgb(var(--mist-surface-rgb) / var(--mist-glass-reading));
+}
+
+.mist-button--ghost {
+	background-color: transparent;
+	color: var(--mist-muted);
+}
+
+.mist-button--ghost:hover {
+	background-color: rgb(var(--mist-surface-rgb) / 0.08);
+	color: var(--mist-ink);
+}
+
+.mist-button--danger {
+	border-color: rgb(185 28 28 / 0.32);
+	background-color: transparent;
+	color: #b91c1c;
+}
+
+.mist-button--danger:hover {
+	background-color: rgb(185 28 28 / 0.08);
+}
+
+.mist-button--icon {
+	width: 40px;
+	padding: 0;
+}
+
+.mist-topbar {
+	position: relative;
+	z-index: 20;
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+	min-height: 52px;
+	padding: 0 12px;
+	border-bottom: 1px solid var(--mist-border);
+	background-color: rgb(var(--mist-surface-rgb) / var(--mist-navigation-alpha));
+	backdrop-filter: blur(var(--mist-navigation-blur)) saturate(1.08);
+}
+
+.mist-topbar__title {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--mist-ink);
+	font-size: 15px;
+	font-weight: 600;
+	text-align: center;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mist-topbar__actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.mist-nav-item {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	gap: 10px;
+	min-height: var(--owui-navigation-min-height);
+	padding: 0 12px;
+	border: 0;
+	border-radius: var(--mist-radius-sm);
+	background-color: transparent;
+	color: var(--mist-muted);
+	text-align: left;
+	transition:
+		background-color var(--mist-duration-fast) var(--mist-ease),
+		color var(--mist-duration-fast) var(--mist-ease);
+}
+
+.mist-nav-item:hover {
+	background-color: rgb(var(--mist-surface-rgb) / 0.08);
+	color: var(--mist-ink);
+}
+
+.mist-nav-item[data-current='true'] {
+	color: var(--mist-ink);
+}
+
+html[data-owui-navigation-current='rail'] .mist-nav-item[data-current='true'] {
+	box-shadow: inset 3px 0 0 var(--mist-accent);
+}
+
+html[data-owui-navigation-current='fill'] .mist-nav-item[data-current='true'] {
+	background-color: color-mix(in srgb, var(--mist-accent) 11%, transparent);
+}
+
+html[data-owui-navigation-current='both'] .mist-nav-item[data-current='true'] {
+	background-color: color-mix(in srgb, var(--mist-accent) 10%, transparent);
+	box-shadow: inset 3px 0 0 var(--mist-accent);
+}
+
+.mist-nav-item__label {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 0.875rem;
+}
+
+.mist-nav-item__badge {
+	flex-shrink: 0;
+	border-radius: 999px;
+	background-color: rgb(var(--mist-surface-rgb) / 0.16);
+	padding: 2px 7px;
+	font-size: 0.6875rem;
+	color: var(--mist-muted);
+}
+
+.mist-nav-item__icon {
+	display: inline-flex;
+	width: 18px;
+	height: 18px;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+
+.mist-message-row {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.mist-message-row--user {
+	align-items: flex-end;
+}
+
+.mist-bubble {
+	max-width: min(84%, 620px);
+	padding: 12px 14px;
+	border-radius: 18px;
+	border-bottom-right-radius: 6px;
+}
+
+.mist-assistant-card {
+	width: 100%;
+	max-width: var(--owui-assistant-width);
+	padding: 16px 18px;
+}
+
+.mist-message-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	color: var(--mist-muted);
+	font-size: 0.75rem;
+}
+
+.mist-message-action {
+	display: inline-flex;
+	min-height: 30px;
+	align-items: center;
+	gap: 5px;
+	border: 0;
+	border-radius: 10px;
+	padding: 0 7px;
+	background-color: transparent;
+	color: inherit;
+	transition:
+		background-color var(--mist-duration-fast) var(--mist-ease),
+		color var(--mist-duration-fast) var(--mist-ease);
+}
+
+.mist-message-action:hover {
+	background-color: rgb(var(--mist-surface-rgb) / 0.1);
+	color: var(--mist-ink);
+}
+
+.mist-assistant-card__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	margin-bottom: 12px;
+	color: var(--mist-muted);
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.mist-composer__header {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.mist-composer__chip-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.mist-chip {
+	display: inline-flex;
+	min-height: 30px;
+	align-items: center;
+	gap: 6px;
+	border: 1px solid var(--mist-border);
+	border-radius: 999px;
+	background-color: rgb(var(--mist-surface-rgb) / 0.1);
+	padding: 0 9px;
+	color: var(--mist-muted);
+	font-size: 12px;
+}
+
+.mist-chip[data-selected='true'] {
+	background-color: color-mix(in srgb, var(--mist-accent) 12%, transparent);
+	border-color: color-mix(in srgb, var(--mist-accent) 36%, transparent);
+	color: var(--mist-ink);
+}
+
+.mist-composer {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px;
+}
+
+.mist-composer__body {
+	min-width: 0;
+}
+
+.mist-composer__footer {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.mist-composer__textarea {
+	width: 100%;
+	min-height: 48px;
+	max-height: 240px;
+	resize: none;
+	border: 0;
+	outline: none;
+	background-color: transparent;
+	color: var(--mist-ink);
+	font-size: 15px;
+	line-height: 1.5;
+}
+
+.mist-composer__textarea::placeholder {
+	color: var(--mist-muted);
+}
+
+.mist-range-control {
+	display: grid;
+	gap: 4px;
+	color: var(--mist-muted);
+	font-size: 0.8125rem;
+}
+
+.mist-range-control__value {
+	color: var(--mist-ink);
+	font-variant-numeric: tabular-nums;
+}
+
+.mist-settings-grid {
+	display: grid;
+	gap: 12px;
+}
+
+.mist-setting-section > header {
+	display: grid;
+	gap: 3px;
+	margin-bottom: 12px;
+}
+
+.mist-setting-section h3 {
+	margin: 0;
+	color: var(--mist-ink);
+	font-size: 15px;
+	font-weight: 650;
+}
+
+.mist-setting-section p {
+	margin: 0;
+	color: var(--mist-muted);
+	font-size: 13px;
+}
+
+.mist-setting-section > div {
+	display: grid;
+	gap: 12px;
+}
+
+.mist-setting-row {
+	display: flex;
+	min-height: 44px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 8px 0;
+	border-bottom: 1px solid rgb(var(--mist-surface-rgb) / 0.08);
+	color: var(--mist-ink);
+	font-size: 14px;
+}
+
+.mist-setting-row:last-child {
+	border-bottom: 0;
+}
+
+.mist-setting-row p {
+	margin: 3px 0 0;
+	color: var(--mist-muted);
+	font-size: 12px;
+}
+
+.mist-empty {
+	display: grid;
+	place-items: center;
+	gap: 8px;
+	padding: 48px 16px;
+	text-align: center;
+}
+
+.mist-empty__eyebrow {
+	color: var(--mist-muted);
+	font-size: 12px;
+	font-weight: 650;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.mist-empty__title {
+	margin: 0;
+	color: var(--mist-ink);
+	font-size: clamp(22px, 4vw, 32px);
+	font-weight: 700;
+	line-height: 1.15;
+}
+
+.mist-empty__description {
+	margin: 0;
+	max-width: 42ch;
+	color: var(--mist-muted);
+	font-size: 14px;
+	line-height: 1.55;
+}
+
+.mist-suggestion-grid {
+	display: grid;
+	gap: 10px;
+}
+
+.mist-suggestion {
+	display: flex;
+	min-height: 48px;
+	width: 100%;
+	align-items: center;
+	gap: 10px;
+	border: 1px solid var(--mist-border);
+	border-radius: var(--mist-radius-sm);
+	background-color: rgb(var(--mist-surface-rgb) / 0.34);
+	padding: 10px 12px;
+	text-align: left;
+	color: var(--mist-ink);
+	transition:
+		background-color var(--mist-duration-fast) var(--mist-ease),
+		transform var(--mist-duration-fast) var(--mist-ease);
+}
+
+.mist-suggestion:hover {
+	background-color: rgb(var(--mist-surface-rgb) / var(--mist-glass-reading));
+}
+
+.mist-suggestion span {
+	min-width: 0;
+	flex: 1;
+	font-size: 14px;
+}
+
+.mist-suggestion small {
+	color: var(--mist-muted);
+	font-size: 11px;
+}
+
+.mist-range {
+	appearance: none;
+	-webkit-appearance: none;
+	width: 100%;
+	height: 44px;
+	background-color: transparent;
+	margin: 0;
+}
+
+.mist-range::-moz-range-track {
+	height: 4px;
+	border-radius: 999px;
+	background-color: rgb(var(--mist-surface-rgb) / 0.25);
+}
+
+.mist-range::-moz-range-thumb {
+	width: 20px;
+	height: 20px;
+	border: 2px solid rgb(var(--mist-surface-rgb) / 0.9);
+	border-radius: 999px;
+	background-color: var(--mist-accent);
+	box-shadow: 0 1px 4px var(--mist-shadow);
+}
+
+.mist-range::-webkit-slider-runnable-track {
+	height: 4px;
+	border-radius: 999px;
+	background-color: rgb(var(--mist-surface-rgb) / 0.25);
+}
+
+.mist-range::-webkit-slider-thumb {
+	appearance: none;
+	width: 20px;
+	height: 20px;
+	margin-top: -8px;
+	border: 2px solid rgb(var(--mist-surface-rgb) / 0.9);
+	border-radius: 999px;
+	background-color: var(--mist-accent);
+	box-shadow: 0 1px 4px var(--mist-shadow);
+}
+
+.mist-code {
+	overflow: hidden;
+}
+
+.mist-code__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--mist-border);
+	background-color: rgb(var(--mist-reading-rgb) / 0.72);
+	color: var(--mist-muted);
+	font-size: 12px;
+}
+
+.mist-code__body {
+	margin: 0;
+	padding: 14px;
+	overflow: auto;
+	background-color: rgb(var(--mist-reading-rgb) / 0.94);
+	color: var(--mist-ink);
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+	font-size: 13px;
+	line-height: 1.6;
+}

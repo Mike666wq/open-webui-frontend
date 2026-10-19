@@ -50,7 +50,14 @@
 	import AccountPending from '$lib/components/layout/Overlay/AccountPending.svelte';
 	import UpdateInfoToast from '$lib/components/layout/UpdateInfoToast.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
+	import { AppBackdrop } from '$lib/components/mist';
+	import {
+		AppearanceProvider,
+		appearanceSettings,
+		wallpaperVariant
+	} from '$lib/appearance';
 	import { loadKeybindings, matchKeybinding, Shortcut } from '$lib/shortcuts';
+	import { navigatorOpen } from '$lib/stores/navigator';
 
 	const i18n = getContext('i18n');
 
@@ -480,9 +487,17 @@
 {/if}
 
 {#if $user}
-	<div class="app relative">
+	<AppearanceProvider />
+	<div
+		class="app owui-mist-app relative"
+		data-appearance={$appearanceSettings.enabled ? 'on' : 'off'}
+		data-navigator-open={$navigatorOpen ? 'true' : 'false'}
+	>
+		{#if $appearanceSettings.enabled}
+			<AppBackdrop variant={$wallpaperVariant} />
+		{/if}
 		<div
-			class=" text-gray-700 dark:text-gray-100 bg-white dark:bg-gray-900 h-screen max-h-[100dvh] overflow-auto flex flex-row justify-end"
+			class="owui-app-shell text-gray-700 dark:text-gray-100 h-screen max-h-[100dvh] overflow-auto flex flex-row justify-end"
 		>
 			{#if !['user', 'admin'].includes($user?.role)}
 				<AccountPending />

@@ -15,6 +15,8 @@
 	import Spinner from '../common/Spinner.svelte';
 
 	import ChatPlaceholder from './ChatPlaceholder.svelte';
+	import { branchFingerprint, buildNavigatorEntries } from '$lib/appearance/navigator';
+	import { clearNavigator, publishNavigatorEntries } from '$lib/stores/navigator';
 
 	const i18n = getContext('i18n');
 
@@ -65,6 +67,7 @@
 
 	onDestroy(() => {
 		cancelAnimationFrame(pendingRebuild);
+		clearNavigator();
 	});
 
 	const loadMoreMessages = async () => {
@@ -87,6 +90,33 @@
 
 	let pendingRebuild = null;
 	let lastCurrentId = null;
+	let lastNavigatorSignature = '';
+
+	const publishNavigator = () => {
+		if (typeof window === 'undefined') return;
+		const userMessages = messages.filter((message) => message?.role === 'user');
+		if (!messages.length) {
+			lastNavigatorSignature = '';
+			clearNavigator();
+			return;
+		}
+		const branchId = branchFingerprint(messages);
+		const entries = buildNavigatorEntries(userMessages);
+		const signature = JSON.stringify({
+			chatId,
+			branchId,
+			entries: entries.map(({ id, ordinal, preview }) => ({ id, ordinal, preview }))
+		});
+		if (signature === lastNavigatorSignature) return;
+		lastNavigatorSignature = signature;
+		publishNavigatorEntries({
+			origin: window.location.origin,
+			chatId: chatId || 'local',
+			branchId,
+			messages: userMessages,
+			currentMessageId: entries.at(-1)?.id ?? null
+		});
+	};
 
 	const buildMessages = () => {
 		let _messages = [];
@@ -106,6 +136,7 @@
 		}
 
 		messages = _messages.reverse();
+		publishNavigator();
 	};
 
 	// Throttle message list rebuilds to once per animation frame during streaming.
@@ -113,6 +144,7 @@
 	const handleHistoryChange = (currentId, _messages) => {
 		if (!currentId) {
 			messages = [];
+			publishNavigator();
 			return;
 		}
 

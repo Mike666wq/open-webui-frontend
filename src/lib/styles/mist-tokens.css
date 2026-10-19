@@ -1,0 +1,91 @@
+/*
+ * Mist Glass v3 defaults.
+ * applyAppearanceCss() overwrites these with contrast-checked values.
+ */
+:root {
+	--mist-accent: #2563eb;
+	--mist-accent-strong: #1d4ed8;
+	--mist-accent-text: #1d4ed8;
+	--mist-accent-contrast: #ffffff;
+	--mist-canvas: #dce8f3;
+	--mist-canvas-rgb: 220 232 243;
+	--mist-ink: #101923;
+	--mist-muted: #4d5d6e;
+	--mist-surface-rgb: 246 249 253;
+	--mist-reading-rgb: 243 247 251;
+	--mist-border: rgb(16 25 35 / 0.2);
+	--mist-border-strong: rgb(16 25 35 / 0.34);
+	--mist-highlight: rgb(255 255 255 / 0.58);
+	--mist-shadow: rgb(19 32 48 / 0.12);
+
+	--mist-glass-alpha: 0.5;
+	--mist-blur-background: 8px;
+	--mist-blur-control: 18px;
+	--mist-radius: 20px;
+	--mist-radius-sm: 14px;
+	--mist-wallpaper-mask: 0.22;
+	--mist-overlay-scrim: 0.4;
+
+	--mist-navigation-alpha: 0.5;
+	--mist-navigation-blur: 18px;
+	--mist-navigation-radius: 20px;
+	--mist-composer-alpha: 0.5;
+	--mist-composer-blur: 18px;
+	--mist-composer-radius: 20px;
+	--mist-overlay-alpha: 0.5;
+	--mist-overlay-blur: 18px;
+	--mist-overlay-radius: 20px;
+	--mist-reading-alpha: 0.5;
+	--mist-reading-blur: 18px;
+	--mist-reading-radius: 20px;
+	--mist-user-alpha: 0.5;
+	--mist-user-radius: 20px;
+	--mist-assistant-alpha: 0.5;
+	--mist-assistant-radius: 20px;
+
+	--mist-glass-nav: var(--mist-navigation-alpha);
+	--mist-glass-content: var(--mist-assistant-alpha);
+	--mist-glass-control: var(--mist-composer-alpha);
+	--mist-glass-reading: var(--mist-reading-alpha);
+
+	--owui-reading-font-size: 15px;
+	--owui-reading-line-height: 1.65;
+	--owui-reading-paragraph-gap: 0.8em;
+	--owui-code-font-size: 13px;
+	--owui-code-white-space: pre;
+	--owui-code-word-break: normal;
+	--owui-navigation-min-height: 48px;
+	--owui-user-max-width: 72%;
+	--owui-user-align: flex-end;
+	--owui-user-radius: 20px;
+	--owui-user-avatar-display: none;
+	--owui-assistant-width: 880px;
+	--owui-assistant-avatar-display: flex;
+	--owui-model-title-display: block;
+	--owui-composer-width: 820px;
+
+	--mist-motion-scale: 1;
+	--mist-duration-fast: 120ms;
+	--mist-duration-base: 180ms;
+	--mist-ease: cubic-bezier(0.22, 1, 0.36, 1);
+	color-scheme: light;
+}
+
+html[data-owui-resolved-theme='dark'] {
+	color-scheme: dark;
+}
+
+html[data-owui-motion='off'],
+html[data-owui-motion-reduced='true'] {
+	--mist-motion-scale: 0;
+	--mist-duration-fast: 0ms;
+	--mist-duration-base: 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--mist-motion-scale: 0;
+		--mist-duration-fast: 0ms;
+		--mist-duration-base: 0ms;
+	}
+}

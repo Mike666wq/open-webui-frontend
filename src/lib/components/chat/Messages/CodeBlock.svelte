@@ -437,7 +437,7 @@
 
 <div>
 	<div
-		class="relative {className} flex flex-col rounded-2xl border border-gray-100/30 dark:border-gray-850/30 my-0.5 overflow-clip"
+		class="owui-code-block relative {className} flex flex-col rounded-2xl border border-gray-100/30 dark:border-gray-850/30 my-0.5 overflow-clip"
 		dir="ltr"
 	>
 		{#if ['mermaid', 'vega', 'vega-lite'].includes(lang)}
@@ -463,11 +463,11 @@
 			{/if}
 		{:else}
 			<div
-				class="sticky {stickyButtonsClassName} left-0 right-0 py-1.5 px-3.5 gap-2 flex items-center justify-end w-full z-10 text-xs text-black dark:text-white bg-white dark:bg-black"
+				class="owui-code-block__header sticky {stickyButtonsClassName} left-0 right-0 py-1.5 px-3.5 gap-2 flex items-center justify-end w-full z-10 text-xs"
 			>
 				<div class="flex-1 truncate">
 					<Tooltip content={lang} placement="top-start">
-						<span class=" truncate text-ellipsis">
+						<span class="owui-code-block__language truncate text-ellipsis">
 							{lang}
 						</span>
 					</Tooltip>
@@ -556,8 +556,6 @@
 						? ''
 						: 'rounded-b-2xl'} overflow-hidden"
 			>
-				<div class=" pt-6.5 bg-white dark:bg-black"></div>
-
 				{#if !collapsed}
 					{#if isDiff && !(edit && editingDiff)}
 						<DiffBlock code={_code} />
@@ -590,7 +588,7 @@
 					{/if}
 				{:else}
 					<div
-						class="bg-white dark:bg-black dark:text-white rounded-b-2xl! pt-1 pb-2 px-4 flex flex-col gap-2 text-xs"
+						class="bg-transparent text-[rgb(var(--mist-muted))] rounded-b-2xl! pt-1 pb-2 px-4 flex flex-col gap-2 text-xs"
 					>
 						<span class="text-gray-500 italic">
 							{$i18n.t('{{COUNT}} hidden lines', {

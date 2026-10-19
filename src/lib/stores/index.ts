@@ -146,7 +146,7 @@ export type ChannelQueuedMessage = {
 };
 export const channelRequestQueues = writable<Record<string, ChannelQueuedMessage[]>>({});
 
-export const sidebarWidth = writable(245);
+export const sidebarWidth = writable(280);
 
 export type SettingsModalRequest = {
 	tab: string;

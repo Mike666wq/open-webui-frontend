@@ -947,7 +947,7 @@
 
 	{#if !$mobile && !$showSidebar}
 		<div
-			class="w-[calc(42px*var(--app-text-scale,1))] shrink-0 py-[calc(0.25rem*var(--app-text-scale,1))] px-[calc(0.25rem*var(--app-text-scale,1))] flex flex-col justify-between text-gray-700 dark:text-gray-300 hover:bg-gray-50/30 dark:hover:bg-gray-800/30 h-full z-10 transition-all border-e-[0.5px] border-gray-50 dark:border-gray-850/30"
+			class="owui-sidebar-shell owui-sidebar--rail w-[calc(42px*var(--app-text-scale,1))] shrink-0 py-[calc(0.25rem*var(--app-text-scale,1))] px-[calc(0.25rem*var(--app-text-scale,1))] flex flex-col justify-between text-gray-700 dark:text-gray-300 hover:bg-gray-50/30 dark:hover:bg-gray-800/30 h-full z-10 transition-all border-e-[0.5px] border-gray-50 dark:border-gray-850/30"
 			id="sidebar"
 			role="navigation"
 			aria-label={$i18n.t('Chat history')}
@@ -1131,7 +1131,11 @@
 			aria-label={$i18n.t('Chat history')}
 			aria-hidden={!$showSidebar}
 			inert={!$showSidebar}
-			class="h-screen max-h-[100dvh] min-h-screen select-none {$mobile
+			class="owui-sidebar-shell {$mobile
+				? 'owui-sidebar--mobile'
+				: $showSidebar
+					? 'owui-sidebar--expanded'
+					: 'owui-sidebar--collapsed'} h-screen max-h-[100dvh] min-h-screen select-none {$mobile
 				? visible
 					? 'bg-gray-50 dark:bg-gray-950 z-50'
 					: 'bg-transparent z-0 pointer-events-none'

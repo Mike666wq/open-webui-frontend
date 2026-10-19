@@ -36,9 +36,16 @@
 	import ChatCheck from '../icons/ChatCheck.svelte';
 	import Knobs from '../icons/Knobs.svelte';
 	import { isTemporaryChatId } from '$lib/utils/chatId';
+	import { directoryEnabled } from '$lib/appearance';
+	import {
+		navigatorEntryCount,
+		navigatorOpen,
+		toggleNavigator
+	} from '$lib/stores/navigator';
 
 	const i18n: any = getContext('i18n');
 
+	export let className: string = '';
 	export let initNewChat: Function;
 	export let readOnly: boolean = false;
 	export let shareEnabled: boolean = false;
@@ -79,7 +86,7 @@
 />
 
 <nav
-	class="sticky top-0 z-30 w-full {$mobile
+	class="{className} sticky top-0 z-30 w-full {$mobile
 		? 'pt-1.5'
 		: 'pt-0.5'} pb-1 -mb-12 flex flex-col items-center drag-region"
 >
@@ -176,6 +183,35 @@
 
 				<div class="lg:mr-1 flex flex-none items-center gap-2 self-center">
 					<!-- <div class="md:hidden flex self-center w-[0.0625rem] h-5 mx-2 bg-gray-300 dark:bg-stone-700" /> -->
+
+					{#if $directoryEnabled}
+						<Tooltip
+							content={$navigatorEntryCount === 0
+								? $i18n.t('No user questions in the loaded messages')
+								: $i18n.t('Conversation navigator')}
+						>
+							<button
+								id="conversation-navigator-button"
+								class="owui-navigator-button flex size-6 cursor-pointer items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-50/40 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-400 dark:hover:bg-gray-800/40 dark:hover:text-gray-200"
+								disabled={$navigatorEntryCount === 0}
+								aria-label={$i18n.t('Conversation navigator')}
+								aria-expanded={$navigatorOpen}
+								on:click={toggleNavigator}
+							>
+								<svg
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="1.7"
+									stroke-linecap="round"
+									aria-hidden="true"
+									class="size-4.5"
+								>
+									<path d="M5 6h.01M9 6h10M5 12h.01M9 12h10M5 18h.01M9 18h7" />
+								</svg>
+							</button>
+						</Tooltip>
+					{/if}
 
 					{#if $user?.role === 'user' ? ($user?.permissions?.chat?.temporary ?? true) && !($user?.permissions?.chat?.temporary_enforced ?? false) : true}
 						{#if !chat?.id}
