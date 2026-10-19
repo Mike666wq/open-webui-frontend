@@ -14,6 +14,7 @@
 	import XMark from '$lib/components/icons/XMark.svelte';
 	import FullHeightIframe from '$lib/components/common/FullHeightIframe.svelte';
 
+	import { appearanceSettings } from '$lib/appearance/state';
 	import { settings } from '$lib/stores';
 
 	const i18n = getContext<Writable<i18nType>>('i18n');
@@ -41,7 +42,7 @@
 	export let resolvingCallId = '';
 	export let onResolve: (callId: string, approved: boolean) => void = () => {};
 
-	let open = $settings?.expandDetails ?? false;
+	let open = $appearanceSettings.layout.assistantMessage.details === 'expanded';
 
 	function parseJSONString(str: string) {
 		try {

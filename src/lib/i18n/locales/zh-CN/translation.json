@@ -3993,5 +3993,9 @@
 	"YouTube": "YouTube",
 	"YouTube video player": "YouTube 视频播放器",
 	"Zoom in": "放大",
-	"Zoom out": "缩小"
+	"Zoom out": "缩小",
+	"Appearance & reading": "外观与阅读",
+	"Conversation navigator": "对话目录",
+	"No user questions in the loaded messages": "当前已加载消息中没有用户提问",
+	"settings.personal.appearance.title": "外观与阅读"
 }

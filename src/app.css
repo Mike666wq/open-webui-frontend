@@ -368,12 +368,13 @@ input[type='number'] {
 	outline: none;
 }
 
-.cm-gutters {
-	@apply !bg-white dark:!bg-black !border-none;
+.owui-mist-app .cm-gutters {
+	background-color: transparent;
+	border: none;
 }
 
-.cm-editor {
-	@apply bg-white dark:bg-black;
+.owui-mist-app .cm-editor {
+	background-color: transparent;
 }
 
 .tippy-box[data-theme~='dark'] {

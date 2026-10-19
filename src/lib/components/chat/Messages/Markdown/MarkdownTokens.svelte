@@ -12,6 +12,7 @@
 
 	import { WEBUI_BASE_URL } from '$lib/constants';
 	import { settings } from '$lib/stores';
+	import { appearanceSettings } from '$lib/appearance/state';
 	import { toast } from 'svelte-sonner';
 
 	import CodeBlock from '$lib/components/chat/Messages/CodeBlock.svelte';
@@ -451,14 +452,14 @@
 							resolvable={!!chatId && !!messageId && save}
 							resolving={resolvingCallId === detailToken.attributes?.id}
 							onResolve={(approved) => resolveToolCall(detailToken.attributes?.id ?? '', approved)}
-							open={$settings?.expandDetails ?? false}
+							open={$appearanceSettings.layout.assistantMessage.details === 'expanded'}
 							className="w-full"
 							buttonClassName={detailButtonClassName}
 						/>
 					{:else if textContent.length > 0}
 						<Collapsible
 							title={detailToken.summary}
-							open={$settings?.expandDetails ?? false}
+							open={$appearanceSettings.layout.assistantMessage.details === 'expanded'}
 							attributes={detailToken?.attributes}
 							messageDone={done}
 							className="w-full"
@@ -512,14 +513,14 @@
 				resolvable={!!chatId && !!messageId && save}
 				resolving={resolvingCallId === token.attributes?.id}
 				onResolve={(approved) => resolveToolCall(token.attributes?.id ?? '', approved)}
-				open={$settings?.expandDetails ?? false}
+				open={$appearanceSettings.layout.assistantMessage.details === 'expanded'}
 				className="w-full space-y-2"
 				buttonClassName={detailButtonClassName}
 			/>
 		{:else if textContent.length > 0}
 			<Collapsible
 				title={token.summary}
-				open={$settings?.expandDetails ?? false}
+				open={$appearanceSettings.layout.assistantMessage.details === 'expanded'}
 				attributes={token?.attributes}
 				messageDone={done}
 				className="w-full space-y-2"

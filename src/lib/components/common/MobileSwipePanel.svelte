@@ -9,7 +9,7 @@
 
 	export let open = false;
 	export let enabled = false;
-	export let width = 245;
+	export let width = 280;
 	export let onOpenChange: (open: boolean) => void = () => {};
 
 	let mounted = false;
@@ -30,7 +30,7 @@
 	let lastOpen: boolean | null = null;
 	let lastEnabled: boolean | null = null;
 
-	$: panelWidth = width || 245;
+	$: panelWidth = width || 280;
 	$: progress = enabled ? Math.max(0, Math.min(1, swipeProgress)) : 1;
 	$: visible = open || (enabled && mounted);
 	$: panelStyle = enabled

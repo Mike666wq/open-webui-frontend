@@ -123,6 +123,7 @@
 	import MessageInput from '$lib/components/chat/MessageInput.svelte';
 	import Messages from '$lib/components/chat/Messages.svelte';
 	import Navbar from '$lib/components/chat/Navbar.svelte';
+	import ConversationNavigator from '$lib/components/chat/ConversationNavigator.svelte';
 	import ChatControls from './ChatControls.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
 	import ElicitationDialog from './ElicitationDialog.svelte';
@@ -4944,11 +4945,11 @@
 		<div in:fade={{ duration: 50 }} class="w-full h-full flex flex-col">
 			{#if backgroundImage}
 				<div
-					class="pointer-events-none absolute top-0 left-0 w-full h-full bg-cover bg-center bg-no-repeat"
+					class="owui-official-background pointer-events-none absolute top-0 left-0 w-full h-full bg-cover bg-center bg-no-repeat"
 					style="background-image: url({backgroundImage})"
 				/>
 				<div
-					class="pointer-events-none absolute top-0 left-0 w-full h-full bg-linear-to-t from-white to-white/85 dark:from-gray-900 dark:to-gray-900/90 z-0"
+					class="owui-official-background pointer-events-none absolute top-0 left-0 w-full h-full bg-linear-to-t from-white to-white/85 dark:from-gray-900 dark:to-gray-900/90 z-0"
 				></div>
 			{/if}
 
@@ -4984,6 +4985,7 @@
 						</div>
 					{:else}
 						<Navbar
+							className="owui-chat-topbar"
 							bind:this={navbarElement}
 							readOnly={isShared}
 							chat={{
@@ -5074,7 +5076,7 @@
 										}}
 										bind:selectedModels
 										{atSelectedModel}
-										className={embedded ? 'h-full flex pt-4' : 'h-full flex pt-18'}
+										className={embedded ? 'h-full flex pt-4' : 'owui-messages h-full flex pt-2'}
 										{sendMessage}
 										{showMessage}
 										{submitMessage}
@@ -5110,8 +5112,10 @@
 								{/if}
 							{:else}
 								<div
+									class="owui-composer-dock"
 									id={embedded ? messageInputDropzoneId : undefined}
-									class=" pb-2 {dragged ? 'z-0' : 'z-10'}"
+									class:z-0={dragged}
+									class:z-10={!dragged}
 								>
 									<MessageInput
 										{typingUsers}
@@ -5273,8 +5277,9 @@
 								</div>
 							</div>
 						{:else}
-							<div class="flex items-center h-full">
+							<div class="owui-welcome-host flex items-center h-full">
 								<Placeholder
+									className="owui-welcome"
 									callActive={!!(bridge?.connected || bridge?.connecting)}
 									callEnabled={!isShared}
 									bind:selectedModelIdx
@@ -5353,6 +5358,7 @@
 						{eventTarget}
 						{codeInterpreterEnabled}
 					/>
+					<ConversationNavigator />
 				{/if}
 			</div>
 		</div>

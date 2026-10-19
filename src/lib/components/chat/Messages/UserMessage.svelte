@@ -143,7 +143,7 @@
 />
 
 <div
-	class="flex w-full user-message group {!isOwn && !message?.meta?.internal
+	class="owui-user-message flex w-full user-message group {!isOwn && !message?.meta?.internal
 		? compactPreview
 			? 'my-2'
 			: 'mb-2'
@@ -154,7 +154,7 @@
 >
 	{#if !compactPreview && (!($settings?.chatBubble ?? true) || !isOwn) && !(message?.meta?.internal === true && message?.meta?.type === 'subagent') && !(message?.meta?.internal === true && message?.meta?.type === 'timer')}
 		<div
-			class="shrink-0 me-2 {($settings?.chatBubble ?? true) ? 'mt-6' : 'hidden @lg:flex mt-0.5'}"
+			class="owui-user-avatar shrink-0 me-2 {($settings?.chatBubble ?? true) ? 'mt-6' : 'hidden @lg:flex mt-0.5'}"
 		>
 			<!-- LICENSE covers this Open WebUI fallback logo.
 			Do not alter, remove, obscure, or replace it except as LICENSE permits:
@@ -410,7 +410,7 @@
 							: 'w-full'}"
 					>
 						<div
-							class="rounded-3xl {($settings?.chatBubble ?? true)
+							class="owui-user-bubble rounded-3xl {($settings?.chatBubble ?? true)
 								? `max-w-[90%] px-4 py-1.5  bg-gray-50 dark:bg-gray-850 ${
 										message.files ? (isOwn ? 'rounded-se-lg' : 'rounded-ss-lg') : ''
 									}`
