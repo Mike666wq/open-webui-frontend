@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getContext } from 'svelte';
+	import { getContext, onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 
 	import { mobile, showSidebar, user } from '$lib/stores';
@@ -20,11 +20,15 @@
 	import Pin from '../icons/Pin.svelte';
 	import PinnedMessagesModal from './PinnedMessagesModal.svelte';
 	import ChannelMenu from './ChannelMenu.svelte';
+	import { subscribePresence } from '$lib/messaging/presence';
 
 	const i18n: any = getContext('i18n');
 
 	let showChannelPinnedMessagesModal = false;
 	let showChannelInfoModal = false;
+	let dmPresence: boolean | null = null;
+	let unsubscribePresence: (() => void) | null = null;
+	let presencePeerId: string | null = null;
 
 	const hasPublicReadGrant = (grants: any) =>
 		Array.isArray(grants) &&
@@ -49,6 +53,29 @@
 
 	export let onPin = (messageId, pinned) => {};
 	export let onUpdate = () => {};
+
+	$: dmPeerId =
+		channel?.type === 'dm' ? (channel?.users ?? []).find((u) => u.id !== $user?.id)?.id : null;
+
+	$: if (typeof window !== 'undefined') {
+		const peerId = dmPeerId;
+		if (peerId !== presencePeerId) {
+			unsubscribePresence?.();
+			unsubscribePresence = null;
+			presencePeerId = peerId;
+			dmPresence = null;
+			if (peerId) {
+				unsubscribePresence = subscribePresence(localStorage.token, peerId, (active) => {
+					if (presencePeerId === peerId) dmPresence = active;
+				});
+			}
+		}
+	}
+
+	onDestroy(() => {
+		unsubscribePresence?.();
+		unsubscribePresence = null;
+	});
 </script>
 
 <PinnedMessagesModal bind:show={showChannelPinnedMessagesModal} {channel} {onPin} />
@@ -112,8 +139,8 @@
 										<div class="absolute bottom-0 right-0">
 											<span class="relative flex size-2">
 												<span
-													class="relative inline-flex size-2 rounded-full {channelMembers[0]
-														?.is_active
+													class="relative inline-flex size-2 rounded-full {(dmPresence ??
+													channelMembers[0]?.is_active)
 														? 'bg-green-500'
 														: 'bg-gray-300 dark:bg-gray-700'} border-[1.5px] border-white dark:border-gray-900"
 												></span>

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { getContext, onDestroy, tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { v4 as uuidv4 } from 'uuid';
 	import { mobile } from '$lib/stores';
 	import MistDrawer from '$lib/components/mist/MistDrawer.svelte';
 	import {
@@ -288,7 +289,7 @@
 		try {
 			const blob = await processWallpaperFile(file);
 			previewGeneration += 1;
-			const assetId = crypto.randomUUID();
+			const assetId = uuidv4();
 			const previousUrl = previewUrls[editorMode];
 			if (previousUrl) URL.revokeObjectURL(previousUrl);
 			const objectUrl = URL.createObjectURL(blob);

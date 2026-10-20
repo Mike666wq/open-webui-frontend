@@ -41,6 +41,9 @@
 		desktopEvent
 	} from '$lib/stores';
 	import { refreshChatList } from '$lib/stores/chatList';
+	import { sortChannels } from '$lib/messaging/model';
+	import { subscribePresenceAlerts } from '$lib/messaging/presence-alerts';
+	import { postNativeNotification } from '$lib/messaging/native-notify';
 	import { getFileContentById } from '$lib/apis/files';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -54,6 +57,8 @@
 	import '$lib/styles/mist-tokens.css';
 	import '$lib/styles/mist-surfaces.css';
 	import '$lib/styles/mist-app.css';
+	import '$lib/styles/mist-messages.css';
+	import '$lib/styles/mist-messages-panel.css';
 	import 'tippy.js/dist/tippy.css';
 
 	import { executeToolServer, getBackendConfig, getModels, getVersion } from '$lib/apis';
@@ -87,7 +92,10 @@
 	import { getUserSettings } from '$lib/apis/users';
 	import { getChannelById, getChannels } from '$lib/apis/channels';
 	import { shouldNotifyChannelMessage } from '$lib/utils/channelNotifications';
+	import { messagePreview } from '$lib/messaging/model';
 	import { resolveTerminalConnection, terminalRequest } from '$lib/apis/terminal';
+
+	const notifiedChannelMessageIds = new Set();
 
 	const unregisterServiceWorkers = async () => {
 		if ('serviceWorker' in navigator) {
@@ -126,6 +134,7 @@
 
 	let loaded = false;
 	let tokenTimer = null;
+	let unsubscribePresenceAlerts = null;
 	let isAuthRedirectInProgress = false;
 
 	let showRefresh = false;
@@ -853,10 +862,13 @@
 
 			if (res) {
 				await channels.set(
-					res.sort(
-						(a, b) =>
-							['', null, 'group', 'dm'].indexOf(a.type) - ['', null, 'group', 'dm'].indexOf(b.type)
-					)
+					sortChannels(res).map((row) => ({
+						...row,
+						type: row.type ?? null,
+						is_channel_muted: !!row.is_channel_muted,
+						unread_count: row.unread_count ?? 0,
+						last_message_at: row.last_message_at ?? null
+					}))
 				);
 			}
 
@@ -890,7 +902,8 @@
 									return {
 										...ch,
 										unread_count: (ch.unread_count ?? 0) + 1,
-										last_message_at: event.created_at
+										last_message_at: event.created_at,
+										last_message: messagePreview(data)
 									};
 								}
 							}
@@ -904,17 +917,27 @@
 
 					if (res) {
 						await channels.set(
-							res.sort(
-								(a, b) =>
-									['', null, 'group', 'dm'].indexOf(a.type) -
-									['', null, 'group', 'dm'].indexOf(b.type)
-							)
+							sortChannels(res).map((row) => ({
+								...row,
+								type: row.type ?? null,
+								is_channel_muted: !!row.is_channel_muted,
+								unread_count: row.unread_count ?? 0,
+								last_message_at: row.last_message_at ?? null
+							}))
 						);
 					}
 				}
 			}
 
 			if (type === 'message') {
+			if (event.message_id) {
+				if (notifiedChannelMessageIds.has(event.message_id)) return;
+				notifiedChannelMessageIds.add(event.message_id);
+				if (notifiedChannelMessageIds.size > 200) {
+					notifiedChannelMessageIds.delete(notifiedChannelMessageIds.keys().next().value);
+				}
+			}
+
 				const preference =
 					$channels?.find((item) => item.id === event.channel_id) ??
 					(await getChannelById(localStorage.token, event.channel_id).catch(() => null));
@@ -929,10 +952,29 @@
 					return;
 				}
 				const title = `${data?.user?.name}${event?.channel?.type !== 'dm' ? ` (#${event?.channel?.name})` : ''}`;
-				const content = data?.content?.replace(
-					/<([@#])([^|>\s]+)(?:\|([^>]*))?>/g,
-					(_, trigger, id, label) => trigger + (label || id)
-				);
+				const content =
+					messagePreview(data) ||
+					data?.content?.replace(
+						/<([@#])([^|>\s]+)(?:\|([^>]*))?>/g,
+						(_, trigger, id, label) => trigger + (label || id)
+					) ||
+					'New message';
+
+				// In the Android shell the WebView keeps running in the background but
+				// its UI is invisible, so hand the alert to the native layer instead of
+				// an in-app toast that nobody can see. Foreground stays in-app.
+				if (isInBackground) {
+					postNativeNotification({
+						type: 'message',
+						channelId: event.channel_id,
+						messageId: event.message_id,
+						title,
+						text: content,
+						senderId: data?.user?.id,
+						isDm: event?.channel?.type === 'dm'
+					});
+					return;
+				}
 
 				if ($isLastActiveTab) {
 					if ($settings?.notificationEnabled ?? false) {
@@ -1309,9 +1351,22 @@
 					clearInterval(tokenTimer);
 				}
 				tokenTimer = setInterval(checkTokenExpiry, 15000);
+
+				// Opt-in "member came online" alerts. Subscribing is cheap; the
+				// watcher only acts when the user enabled it in settings. It shares
+				// the member-directory polling, so it does not add extra requests
+				// beyond refreshing DM partners' presence.
+				unsubscribePresenceAlerts?.();
+				unsubscribePresenceAlerts = subscribePresenceAlerts(
+					localStorage.token,
+					value?.id ?? null
+				);
 			} else {
 				$socket?.off('events', chatEventHandler);
 				$socket?.off('events:channel', channelEventHandler);
+
+				unsubscribePresenceAlerts?.();
+				unsubscribePresenceAlerts = null;
 			}
 		});
 

@@ -164,6 +164,61 @@ html[data-owui-appearance='on'] body {
 	scrollbar-color: rgb(var(--mist-surface-rgb) / 0.24) transparent;
 }
 
+#channel-container {
+	background-color: transparent !important;
+	color: var(--mist-ink) !important;
+}
+
+html:not([data-owui-appearance='on']) #channel-container {
+	background-color: rgb(var(--mist-reading-rgb) / 0.74) !important;
+}
+
+#channel-container nav > #navbar-bg-gradient-to-b {
+	display: none !important;
+}
+
+#channel-container nav {
+	border-bottom: 1px solid var(--mist-border);
+	background-color: rgb(var(--mist-navigation-rgb, var(--mist-surface-rgb)) / 0.22) !important;
+	backdrop-filter: blur(calc(var(--mist-navigation-blur) * 0.6));
+}
+
+#channel-container #messages-container {
+	background-color: transparent !important;
+}
+
+#channel-container #messages-container > div {
+	background-color: transparent !important;
+}
+
+#channel-container .swipe-reply-wrapper > div[id^='message-'] {
+	border-radius: 16px;
+	background-color: rgb(var(--mist-reading-rgb) / 0.12) !important;
+}
+
+#channel-container .swipe-reply-wrapper > div[id^='message-']:hover {
+	background-color: rgb(var(--mist-reading-rgb) / 0.2) !important;
+}
+
+#channel-container .swipe-reply-wrapper > div[id^='message-'] > div[class*='absolute'] > div {
+	border-color: var(--mist-border) !important;
+	background-color: rgb(var(--mist-surface-rgb) / 0.82) !important;
+	backdrop-filter: blur(calc(var(--mist-overlay-blur) * 0.5));
+}
+
+#channel-container #messages-container :where(.rounded-lg, .rounded-xl, .rounded-2xl) {
+	border-color: var(--mist-border) !important;
+}
+
+#channel-container #message-input-container {
+	border-color: var(--mist-border) !important;
+	background-color: rgb(var(--mist-composer-rgb, var(--mist-surface-rgb)) / 0.18) !important;
+	box-shadow:
+		inset 0 1px 0 var(--mist-highlight),
+		0 10px 28px var(--mist-shadow);
+	backdrop-filter: blur(calc(var(--mist-composer-blur) * 0.65)) saturate(1.08);
+}
+
 .owui-messages > div {
 	width: 100%;
 }

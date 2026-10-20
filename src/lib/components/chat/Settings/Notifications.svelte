@@ -25,6 +25,9 @@
 
 	let notificationEnabled = false;
 	let notificationSound = true;
+	let presenceAlertsEnabled = false;
+	let presenceAlertsPopup = true;
+	let presenceAlertsSound = true;
 	let targets: NotificationTarget[] = [];
 	// Keep dynamically translated event keys visible to i18next-parser.
 	// $i18n.t('Chat finished'); $i18n.t('A chat run finished successfully.');
@@ -187,7 +190,20 @@
 	onMount(async () => {
 		notificationEnabled = $settings.notificationEnabled ?? false;
 		notificationSound = $settings?.notificationSound ?? true;
+		presenceAlertsEnabled = $settings?.presenceAlerts?.enabled ?? false;
+		presenceAlertsPopup = $settings?.presenceAlerts?.popup ?? true;
+		presenceAlertsSound = $settings?.presenceAlerts?.sound ?? true;
 	});
+
+	const savePresenceAlerts = () => {
+		saveSettings({
+			presenceAlerts: {
+				enabled: presenceAlertsEnabled,
+				popup: presenceAlertsPopup,
+				sound: presenceAlertsSound
+			}
+		});
+	};
 </script>
 
 <div id="tab-notifications" class="flex h-full flex-col text-sm">
@@ -223,6 +239,47 @@
 					}}
 				/>
 			</label>
+
+			<div class="mt-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+				<label class="flex cursor-pointer items-center justify-between">
+					<span class="text-xs text-gray-600 dark:text-gray-400">
+						{$i18n.t('Member online alerts')}
+					</span>
+					<Switch
+						bind:state={presenceAlertsEnabled}
+						ariaLabel={$i18n.t('Member online alerts')}
+						on:change={savePresenceAlerts}
+					/>
+				</label>
+				<p class="-mt-1 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+					{$i18n.t('Notify when a member you chat with comes online.')}
+				</p>
+
+				{#if presenceAlertsEnabled}
+					<div class="mt-2 flex flex-col gap-2.5 pl-3">
+						<label class="flex cursor-pointer items-center justify-between">
+							<span class="text-xs text-gray-600 dark:text-gray-400">
+								{$i18n.t('Popup notification')}
+							</span>
+							<Switch
+								bind:state={presenceAlertsPopup}
+								ariaLabel={$i18n.t('Popup notification')}
+								on:change={savePresenceAlerts}
+							/>
+						</label>
+						<label class="flex cursor-pointer items-center justify-between">
+							<span class="text-xs text-gray-600 dark:text-gray-400">
+								{$i18n.t('Alert sound')}
+							</span>
+							<Switch
+								bind:state={presenceAlertsSound}
+								ariaLabel={$i18n.t('Alert sound')}
+								on:change={savePresenceAlerts}
+							/>
+						</label>
+					</div>
+				{/if}
+			</div>
 
 			{#if canUseWebhooks}
 				<div class="mt-3 flex items-center justify-between">
