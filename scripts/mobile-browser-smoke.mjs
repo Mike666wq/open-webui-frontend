@@ -657,7 +657,24 @@ async function main() {
 				resolve();
 			});
 		});
-		await rm(userDataDirectory, { recursive: true, force: true });
+		// Chromium can outlive SIGTERM long enough to keep writing its profile
+		// (the `Default` dir), which makes a single rmdir fail with ENOTEMPTY.
+		// Retry briefly so a slow shutdown does not fail an otherwise-passing run.
+		let removeError = null;
+		for (let attempt = 0; attempt < 6; attempt += 1) {
+			try {
+				await rm(userDataDirectory, { recursive: true, force: true });
+				removeError = null;
+				break;
+			} catch (error) {
+				removeError = error;
+				await sleep(400);
+			}
+		}
+		if (removeError) {
+			// A leftover temp profile must never fail a run whose checks passed.
+			console.warn(`Could not remove Chromium profile ${userDataDirectory}: ${removeError.message}`);
+		}
 	}
 }
 
