@@ -691,15 +691,26 @@
 		</div>
 
 		<div class="owui-assistant-card flex-auto w-0 pl-1 relative">
-			{#if !compactPreview}
-				<Name>
-					<Tooltip content={localizedModelName} placement="top-start">
-						<span id="response-message-model-name" class="line-clamp-1 text-black dark:text-white">
-							{localizedModelName}
-						</span>
-					</Tooltip>
-				</Name>
-			{/if}
+			<div class="owui-assistant-card__header">
+				<div class="owui-assistant-avatar owui-assistant-avatar--mobile shrink-0">
+					<ProfileImage
+						src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${model?.id ?? message.model}&lang=${$i18n.language}`}
+						className={'size-7 assistant-message-profile-image'}
+					/>
+				</div>
+				{#if !compactPreview}
+					<Name>
+						<Tooltip content={localizedModelName} placement="top-start">
+							<span
+								id="response-message-model-name"
+								class="line-clamp-1 text-black dark:text-white"
+							>
+								{localizedModelName}
+							</span>
+						</Tooltip>
+					</Name>
+				{/if}
+			</div>
 
 			<div>
 				<div class="chat-{message.role} w-full min-w-full">
