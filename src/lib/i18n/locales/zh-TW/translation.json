@@ -90,7 +90,7 @@
 	"Action": "操作",
 	"Actions": "動作",
 	"Activate this command by typing \"/{{COMMAND}}\" to chat input.": "在對話輸入框中輸入 \"/{{COMMAND}}\" 來啟用此命令。",
-	"Active": "線上",
+	"Active": "近期活跃",
 	"Active Users": "活躍使用者",
 	"Activity": "活動",
 	"Add": "新增",
@@ -325,7 +325,7 @@
 	"Avatar setup": "虛擬形象設定",
 	"Average messages per active day": "每個活躍日的平均訊息數",
 	"Average tokens per chat": "每個對話的平均 Token 數",
-	"Away": "離開",
+	"Away": "暂未活跃",
 	"Awful": "糟糕",
 	"Azure AI Speech": "Azure AI 語音",
 	"Azure OpenAI": "Azure OpenAI",
@@ -3979,5 +3979,13 @@
 	"YouTube": "YouTube",
 	"YouTube video player": "YouTube 影片播放器",
 	"Zoom in": "放大",
-	"Zoom out": "縮小"
+	"Zoom out": "縮小",
+	"Status unavailable": "状态暂不可用",
+	"Recently active": "近期活跃",
+	"Not recently active": "暂未活跃",
+	"Member online alerts": "成员上线提醒",
+	"Notify when a member you chat with comes online.": "当与你有私聊的成员上线时提醒你。",
+	"Popup notification": "弹窗提醒",
+	"Alert sound": "提示音",
+	"is now active": "现已上线"
 }

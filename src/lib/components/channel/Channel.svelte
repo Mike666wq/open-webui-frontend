@@ -60,7 +60,23 @@
 		}
 	};
 
+	const handleVisibility = () => {
+		if (document.visibilityState === 'visible' && scrollEnd) {
+			updateLastReadAt(id);
+		}
+	};
+
+	const isAtLatest = () =>
+		!!messagesContainerElement &&
+		Math.abs(messagesContainerElement.scrollTop) <= 50;
+
 	const updateLastReadAt = async (channelId) => {
+		if (
+			typeof document !== 'undefined' &&
+			(document.visibilityState !== 'visible' || !scrollEnd || !isAtLatest())
+		) {
+			return;
+		}
 		$socket?.emit('events:channel', {
 			channel_id: channelId,
 			message_id: null,
@@ -160,6 +176,7 @@
 					await tick();
 					if (scrollEnd) {
 						scrollToBottom();
+						updateLastReadAt(id);
 					}
 				}
 			} else if (type === 'message:update') {
@@ -303,6 +320,8 @@
 
 		$socket?.on('events:channel', channelEventHandler);
 
+		document.addEventListener('visibilitychange', handleVisibility);
+
 		mediaQuery = window.matchMedia('(min-width: 1024px)');
 
 		mediaQuery.addEventListener('change', handleMediaQuery);
@@ -314,6 +333,7 @@
 		updateLastReadAt(id);
 		_channelId.set(null);
 		$socket?.off('events:channel', channelEventHandler);
+		document.removeEventListener('visibilitychange', handleVisibility);
 		mediaQuery?.removeEventListener('change', handleMediaQuery);
 	});
 </script>
@@ -366,8 +386,10 @@
 						class=" pb-2.5 max-w-full z-10 scrollbar-hidden w-full h-full pt-6 flex-1 flex flex-col-reverse overflow-auto"
 						id="messages-container"
 						bind:this={messagesContainerElement}
-						on:scroll={(e) => {
-							scrollEnd = Math.abs(messagesContainerElement.scrollTop) <= 50;
+						on:scroll={() => {
+							const wasAtEnd = scrollEnd;
+							scrollEnd = isAtLatest();
+							if (!wasAtEnd && scrollEnd) updateLastReadAt(id);
 						}}
 					>
 						{#key id}

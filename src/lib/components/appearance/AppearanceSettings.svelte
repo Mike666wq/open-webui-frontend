@@ -47,6 +47,26 @@
 		</span>
 	</header>
 
+	<div class="mist-settings-actions">
+		<div>
+			<h3>{copy('编辑外观与壁纸', 'Edit appearance and wallpaper')}</h3>
+			<p>
+				{copy(
+					'参数会在真实聊天页面上实时预览，点击应用后才保存。',
+					'Adjustments preview on the real chat page and are saved only after you apply them.'
+				)}
+			</p>
+		</div>
+		<button
+			type="button"
+			class="mist-button mist-button--primary"
+			onclick={() => onedit?.()}
+			id="open-mist-appearance-editor"
+		>
+			{copy('打开编辑器', 'Open editor')}
+		</button>
+	</div>
+
 	<div class="mist-settings-preview" aria-hidden="true">
 		<div class="mist-settings-preview__rail">
 			<i></i><i></i><i></i>
@@ -83,26 +103,6 @@
 			<strong>{$appearanceSettings.reading.fontSize}px</strong>
 			<span>{$appearanceSettings.reading.lineHeight.toFixed(2)} ×</span>
 		</div>
-	</div>
-
-	<div class="mist-settings-actions">
-		<div>
-			<h3>{copy('外观与阅读编辑器', 'Appearance & reading editor')}</h3>
-			<p>
-				{copy(
-					'预设、背景、色彩、六类组件覆盖、阅读和动效都可在真实页面上预览。',
-					'Preview presets, backgrounds, colors, six component slots, reading and motion on the real page.'
-				)}
-			</p>
-		</div>
-		<button
-			type="button"
-			class="mist-button mist-button--primary"
-			onclick={() => onedit?.()}
-			id="open-mist-appearance-editor"
-		>
-			{copy('打开编辑器', 'Open editor')}
-		</button>
 	</div>
 
 	<p class="mist-settings-footnote">

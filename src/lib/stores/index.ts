@@ -253,6 +253,11 @@ type Settings = {
 	expandDetails?: boolean;
 	notificationSound?: boolean;
 	notificationSoundAlways?: boolean;
+	presenceAlerts?: {
+		enabled?: boolean;
+		popup?: boolean;
+		sound?: boolean;
+	};
 	stylizedPdfExport?: boolean;
 	notifications?: any;
 	imageCompression?: boolean;

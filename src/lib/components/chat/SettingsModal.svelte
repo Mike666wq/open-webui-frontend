@@ -827,7 +827,7 @@
 	</nav>
 
 	<div class="flex-1 min-w-0 min-h-0 p-4 md:px-5 flex flex-col">
-		<div class="flex-1 min-h-0 overflow-hidden">
+		<div class="settings-content-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
 			{#if selectedTab === 'general'}
 				<General
 					{getModels}
@@ -960,3 +960,15 @@
 	onpreviewchange={handleAppearancePreview}
 	onclose={() => (appearanceEditorOpen = false)}
 />
+
+<style>
+	/*
+	 * Each settings page owns vertical scrolling inside the fixed modal. The
+	 * panel never clips a page whose editor entry sits below the first screen.
+	 */
+	.settings-content-scroll {
+		overscroll-behavior: contain;
+		scrollbar-gutter: stable;
+		-webkit-overflow-scrolling: touch;
+	}
+</style>

@@ -164,6 +164,61 @@ html[data-owui-appearance='on'] body {
 	scrollbar-color: rgb(var(--mist-surface-rgb) / 0.24) transparent;
 }
 
+#channel-container {
+	background-color: transparent !important;
+	color: var(--mist-ink) !important;
+}
+
+html:not([data-owui-appearance='on']) #channel-container {
+	background-color: rgb(var(--mist-reading-rgb) / 0.74) !important;
+}
+
+#channel-container nav > #navbar-bg-gradient-to-b {
+	display: none !important;
+}
+
+#channel-container nav {
+	border-bottom: 1px solid var(--mist-border);
+	background-color: rgb(var(--mist-navigation-rgb, var(--mist-surface-rgb)) / 0.22) !important;
+	backdrop-filter: blur(calc(var(--mist-navigation-blur) * 0.6));
+}
+
+#channel-container #messages-container {
+	background-color: transparent !important;
+}
+
+#channel-container #messages-container > div {
+	background-color: transparent !important;
+}
+
+#channel-container .swipe-reply-wrapper > div[id^='message-'] {
+	border-radius: 16px;
+	background-color: rgb(var(--mist-reading-rgb) / 0.12) !important;
+}
+
+#channel-container .swipe-reply-wrapper > div[id^='message-']:hover {
+	background-color: rgb(var(--mist-reading-rgb) / 0.2) !important;
+}
+
+#channel-container .swipe-reply-wrapper > div[id^='message-'] > div[class*='absolute'] > div {
+	border-color: var(--mist-border) !important;
+	background-color: rgb(var(--mist-surface-rgb) / 0.82) !important;
+	backdrop-filter: blur(calc(var(--mist-overlay-blur) * 0.5));
+}
+
+#channel-container #messages-container :where(.rounded-lg, .rounded-xl, .rounded-2xl) {
+	border-color: var(--mist-border) !important;
+}
+
+#channel-container #message-input-container {
+	border-color: var(--mist-border) !important;
+	background-color: rgb(var(--mist-composer-rgb, var(--mist-surface-rgb)) / 0.18) !important;
+	box-shadow:
+		inset 0 1px 0 var(--mist-highlight),
+		0 10px 28px var(--mist-shadow);
+	backdrop-filter: blur(calc(var(--mist-composer-blur) * 0.65)) saturate(1.08);
+}
+
 .owui-messages > div {
 	width: 100%;
 }
@@ -236,6 +291,7 @@ html[data-owui-appearance='on'] body {
 
 .owui-assistant-message {
 	width: 100%;
+	min-width: 0;
 	max-width: var(--owui-assistant-width);
 	margin-inline: auto;
 }
@@ -244,8 +300,22 @@ html[data-owui-appearance='on'] body {
 	display: var(--owui-assistant-avatar-display);
 }
 
+.owui-assistant-card__header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.owui-assistant-avatar--mobile {
+	display: none;
+}
+
 .owui-assistant-message > .owui-assistant-card {
-	width: 100%;
+	flex: 1 1 0%;
+	width: auto;
+	min-width: 0;
+	max-width: 100%;
 	padding: 18px 20px 12px !important;
 	border: 1px solid var(--mist-border);
 	border-radius: var(--mist-assistant-radius);
@@ -280,6 +350,8 @@ html[data-owui-assistant-surface='reading'] .owui-assistant-message > .owui-assi
 
 .owui-assistant-message .buttons,
 .owui-user-message > .flex-auto > .flex:last-child {
+	flex-wrap: wrap;
+	min-width: 0;
 	padding-top: 6px;
 	color: var(--mist-muted) !important;
 }
@@ -314,7 +386,9 @@ html[data-owui-assistant-surface='reading'] .owui-assistant-message > .owui-assi
 .owui-code-block {
 	border: 1px solid var(--mist-border) !important;
 	border-radius: 14px !important;
-	background-color: rgb(var(--mist-reading-rgb) / min(1, calc(var(--mist-reading-alpha) + 0.28))) !important;
+	background-color: rgb(
+		var(--mist-reading-rgb) / min(1, calc(var(--mist-reading-alpha) + 0.28))
+	) !important;
 	margin-block: 12px !important;
 	box-shadow:
 		inset 0 1px 0 var(--mist-highlight),
@@ -337,12 +411,11 @@ html[data-owui-code-tone='solid'] .owui-code-block {
 	min-height: 36px;
 	padding-top: 3px !important;
 	padding-bottom: 3px !important;
-	background:
-		linear-gradient(
-			110deg,
-			rgb(var(--mist-surface-rgb) / 0.18),
-			rgb(var(--mist-reading-rgb) / 0.08)
-		) !important;
+	background: linear-gradient(
+		110deg,
+		rgb(var(--mist-surface-rgb) / 0.18),
+		rgb(var(--mist-reading-rgb) / 0.08)
+	) !important;
 	backdrop-filter: blur(12px) saturate(1.08);
 	border-bottom: 1px solid var(--mist-border);
 	color: var(--mist-muted) !important;
@@ -394,7 +467,8 @@ html[data-owui-code-tone='solid'] .owui-code-block {
 
 .owui-code-block .cm-editor {
 	color: var(--mist-ink) !important;
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace !important;
+	font-family:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace !important;
 	font-size: var(--owui-code-font-size) !important;
 	line-height: 1.6 !important;
 }
@@ -402,7 +476,8 @@ html[data-owui-code-tone='solid'] .owui-code-block {
 .owui-code-block pre.hljs {
 	background-color: transparent !important;
 	color: var(--mist-ink) !important;
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace !important;
+	font-family:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace !important;
 	font-size: var(--owui-code-font-size) !important;
 	line-height: 1.6 !important;
 	margin: 0 !important;
@@ -435,7 +510,9 @@ html[data-owui-code-tone='solid'] .owui-code-block {
 	min-height: 58px;
 	border: 1px solid var(--mist-border) !important;
 	border-radius: min(var(--mist-composer-radius), 28px) !important;
-	background-color: rgb(var(--mist-surface-rgb) / var(--owui-composer-surface-alpha, 0.64)) !important;
+	background-color: rgb(
+		var(--mist-surface-rgb) / var(--owui-composer-surface-alpha, 0.64)
+	) !important;
 	backdrop-filter: blur(var(--mist-composer-blur)) saturate(1.08) !important;
 	box-shadow:
 		inset 0 1px 0 var(--mist-highlight),
@@ -444,12 +521,16 @@ html[data-owui-code-tone='solid'] .owui-code-block {
 }
 
 html[data-owui-composer-style='solid'] .owui-composer-dock #message-input-container {
-	background-color: rgb(var(--mist-reading-rgb) / min(1, calc(var(--mist-composer-alpha) + 0.34))) !important;
+	background-color: rgb(
+		var(--mist-reading-rgb) / min(1, calc(var(--mist-composer-alpha) + 0.34))
+	) !important;
 }
 
 html[data-owui-composer-style='minimal'] .owui-composer-dock #message-input-container {
 	border-color: transparent !important;
-	background-color: rgb(var(--mist-reading-rgb) / min(0.8, calc(var(--mist-composer-alpha) + 0.18))) !important;
+	background-color: rgb(
+		var(--mist-reading-rgb) / min(0.8, calc(var(--mist-composer-alpha) + 0.18))
+	) !important;
 	box-shadow: 0 8px 28px var(--mist-shadow) !important;
 }
 
@@ -492,11 +573,7 @@ html[data-owui-composer-density='compact'] .owui-composer-dock #message-input-co
 }
 
 .owui-composer-dock #send-message-button:disabled {
-	background-color: color-mix(
-		in srgb,
-		rgb(var(--mist-surface-rgb)) 72%,
-		transparent
-	) !important;
+	background-color: color-mix(in srgb, rgb(var(--mist-surface-rgb)) 72%, transparent) !important;
 	color: var(--mist-muted) !important;
 }
 
@@ -610,7 +687,9 @@ html[data-owui-composer-density='compact'] .owui-composer-dock #message-input-co
 .owui-mist-app #main-content canvas,
 .owui-mist-app #main-content iframe {
 	border-radius: min(var(--mist-reading-radius), 16px);
-	background-color: rgb(var(--mist-reading-rgb) / min(1, calc(var(--mist-reading-alpha) + 0.26))) !important;
+	background-color: rgb(
+		var(--mist-reading-rgb) / min(1, calc(var(--mist-reading-alpha) + 0.26))
+	) !important;
 	color: var(--mist-ink) !important;
 }
 
@@ -702,12 +781,45 @@ html[data-owui-composer-density='compact'] .owui-composer-dock #message-input-co
 	}
 
 	.owui-message-listitem {
-		width: calc(100% - 16px);
+		width: 100%;
+		max-width: 100% !important;
 		margin-bottom: 12px !important;
+		padding-inline: 8px !important;
 	}
 
 	.owui-user-message > .flex-auto {
 		max-width: 88%;
+	}
+
+	.owui-assistant-message,
+	.owui-user-message,
+	.owui-assistant-message > .owui-assistant-card,
+	.owui-user-message > .flex-auto {
+		min-width: 0;
+	}
+
+	.owui-assistant-message {
+		width: 100%;
+		max-width: 100%;
+	}
+
+	.owui-assistant-message > .owui-assistant-avatar {
+		display: none;
+	}
+
+	.owui-assistant-avatar {
+		display: none;
+	}
+
+	.owui-assistant-message .owui-assistant-avatar--mobile {
+		display: var(--owui-assistant-avatar-display);
+	}
+
+	.owui-assistant-message > .owui-assistant-card {
+		order: 1;
+		width: 100%;
+		min-width: 0;
+		flex: 1 1 0;
 	}
 
 	.owui-assistant-message > .owui-assistant-card {
@@ -715,10 +827,18 @@ html[data-owui-composer-density='compact'] .owui-composer-dock #message-input-co
 		border-radius: min(var(--mist-radius), 18px);
 	}
 
+	.owui-assistant-message .buttons,
+	.owui-user-message > .flex-auto > .flex:last-child {
+		gap: 2px;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
 	.owui-assistant-message .buttons button,
 	.owui-user-message > .flex-auto > .flex:last-child button {
-		min-width: 40px;
-		min-height: 40px;
+		flex: 0 0 auto;
+		min-width: 36px;
+		min-height: 36px;
 	}
 
 	.owui-composer-dock {

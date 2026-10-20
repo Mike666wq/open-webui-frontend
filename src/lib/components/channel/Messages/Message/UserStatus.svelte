@@ -17,6 +17,7 @@
 	import { goto } from '$app/navigation';
 	import Emoji from '$lib/components/common/Emoji.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import { subscribePresence } from '$lib/messaging/presence';
 
 	export let user: {
 		id: string;
@@ -32,10 +33,30 @@
 
 	let now = new Date();
 	let localTime = '';
+	let presence: boolean | null = null;
+	let unsubscribePresence: (() => void) | null = null;
+	let presenceUserId: string | null = null;
+
+	$: if (typeof window !== 'undefined') {
+		const nextId = user?.id ?? null;
+		if (nextId !== presenceUserId) {
+			unsubscribePresence?.();
+			unsubscribePresence = null;
+			presenceUserId = nextId;
+			presence = user?.is_active ?? null;
+			if (nextId) {
+				unsubscribePresence = subscribePresence(localStorage.token, nextId, (active) => {
+					if (presenceUserId === nextId) presence = active;
+				});
+			}
+		}
+	}
+
+	$: isActive = presence ?? user?.is_active ?? false;
 
 	$: lastSeen = user?.last_active_at
 		? dayjs(user.last_active_at * 1000)
-				.locale(getDayjsLocale($i18n.language))
+				.locale(getDayjsLocale($i18n.language ?? 'en'))
 				.from(now)
 		: '';
 	$: lastSeenTimestamp = user?.last_active_at
@@ -63,7 +84,11 @@
 
 	onMount(() => {
 		const interval = setInterval(() => (now = new Date()), 30_000);
-		return () => clearInterval(interval);
+		return () => {
+			clearInterval(interval);
+			unsubscribePresence?.();
+			unsubscribePresence = null;
+		};
 	});
 
 	const directMessageHandler = async () => {
@@ -102,12 +127,16 @@
 						class="-mt-0.25 flex items-center gap-1.5 text-[0.6875rem] leading-4 text-gray-500 dark:text-gray-400"
 					>
 						<span
-							class="size-1.5 shrink-0 rounded-full {user.is_active
-								? 'bg-green-500'
-								: 'bg-gray-400'}"
+							class="size-1.5 shrink-0 rounded-full {isActive ? 'bg-green-500' : 'bg-gray-400'}"
 							aria-hidden="true"
 						></span>
-						<span>{user.is_active ? $i18n.t('Active') : $i18n.t('Away')}</span>
+						<span
+							>{presence === null && user?.is_active === undefined
+								? $i18n.t('Status unavailable')
+								: isActive
+									? $i18n.t('Active')
+									: $i18n.t('Away')}</span
+						>
 					</div>
 				</div>
 			</div>

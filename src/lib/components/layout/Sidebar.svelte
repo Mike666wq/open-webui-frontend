@@ -37,6 +37,7 @@
 		setChatReadAt
 	} from '$lib/stores/chatList';
 	import { onMount, getContext, tick, onDestroy } from 'svelte';
+	import * as FocusTrap from 'focus-trap';
 
 	const i18n: any = getContext('i18n');
 
@@ -61,6 +62,7 @@
 	import { createNewNote, getPinnedNoteList, toggleNotePinnedStatusById } from '$lib/apis/notes';
 	import { updateUserSettings } from '$lib/apis/users';
 	import { createNoteHandler } from '$lib/components/notes/utils';
+	import { sortChannels } from '$lib/messaging/model';
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 
 	import UserMenu from './Sidebar/UserMenu.svelte';
@@ -87,6 +89,7 @@
 	import SearchIcon from './Sidebar/icons/Search.svelte';
 	import Sidebar from '../icons/Sidebar.svelte';
 	import WorkspaceIcon from './Sidebar/icons/Workspace.svelte';
+	import ChatBubble from '../icons/ChatBubble.svelte';
 	import HotkeyHint from '../common/HotkeyHint.svelte';
 	import Dropdown from '../common/Dropdown.svelte';
 	import DropdownMenu from '../common/DropdownMenu.svelte';
@@ -113,6 +116,11 @@
 	$: selectedChatId = $chatId || null;
 
 	let showCreateChannel = false;
+	let showMessages = false;
+	let messagesQuery = '';
+	let messagesPanelElement: HTMLElement | null = null;
+	let messagesPanelTrigger: HTMLElement | null = null;
+	let messagesFocusTrap: FocusTrap.FocusTrap | null = null;
 
 	// Pagination variables
 	let chatListLoading = false;
@@ -155,6 +163,21 @@
 	};
 
 	$: pinnedItems = $settings?.pinnedMenuItems ?? DEFAULT_PINNED_ITEMS;
+	$: channelEnabled =
+		$config?.features?.enable_channels &&
+		($user?.role === 'admin' || ($user?.permissions?.features?.channels ?? true));
+	$: sortedChannels = channelEnabled ? sortChannels($channels ?? []) : [];
+	$: messageRows = sortedChannels.filter((channel) =>
+		messagesQuery
+			? (
+					channel.name ||
+					channel.users?.find((item) => item.id !== $user?.id)?.name ||
+					'Private chat'
+				)
+					.toLowerCase()
+					.includes(messagesQuery.trim().toLowerCase())
+			: true
+	);
 
 	$: isMenuItemVisible = (id) => {
 		switch (id) {
@@ -370,10 +393,13 @@
 
 		if (res) {
 			await channels.set(
-				res.sort(
-					(a, b) =>
-						['', null, 'group', 'dm'].indexOf(a.type) - ['', null, 'group', 'dm'].indexOf(b.type)
-				)
+				sortChannels(res).map((row) => ({
+					...row,
+					type: row.type ?? null,
+					is_channel_muted: !!row.is_channel_muted,
+					unread_count: row.unread_count ?? 0,
+					last_message_at: row.last_message_at ?? null
+				}))
 			);
 		}
 	};
@@ -578,6 +604,11 @@
 		if (e.key === 'Shift') {
 			shiftKey = true;
 		}
+
+		if (showMessages && e.key === 'Escape') {
+			e.preventDefault();
+			closeMessagesPanel();
+		}
 	};
 
 	const onKeyUp = (e) => {
@@ -597,6 +628,36 @@
 		if ($mobile) {
 			showSidebar.set(false);
 		}
+	};
+
+	const openMessagesPanel = (trigger: HTMLElement | null) => {
+		if (showMessages) {
+			closeMessagesPanel();
+			return;
+		}
+		messagesPanelTrigger =
+			trigger ??
+			(document.activeElement instanceof HTMLElement ? document.activeElement : null);
+		showMessages = true;
+		void tick().then(() => {
+			if (!messagesPanelElement || !showMessages) return;
+			messagesFocusTrap = FocusTrap.createFocusTrap(messagesPanelElement, {
+				escapeDeactivates: false,
+				returnFocusOnDeactivate: false
+			});
+			messagesFocusTrap.activate();
+			messagesPanelElement.querySelector<HTMLElement>('input')?.focus();
+		});
+	};
+
+	const closeMessagesPanel = () => {
+		showMessages = false;
+		messagesFocusTrap?.deactivate();
+		messagesFocusTrap = null;
+		void tick().then(() => {
+			if (messagesPanelTrigger?.isConnected) messagesPanelTrigger.focus();
+			messagesPanelTrigger = null;
+		});
 	};
 
 	const MIN_WIDTH = 220;
@@ -649,6 +710,7 @@
 	};
 
 	onDestroy(() => {
+		messagesFocusTrap?.deactivate();
 		if (isResizing) {
 			document.body.style.userSelect = '';
 		}
@@ -840,7 +902,84 @@
 	};
 
 	const isWindows = /Windows/i.test(navigator.userAgent);
+
+	function channelTitleFromChannel(channel: any) {
+		if (channel.type !== 'dm') return channel.name || 'Channel';
+		return channel.users?.find((item: any) => item.id !== $user?.id)?.name || 'Private chat';
+	}
 </script>
+
+{#if channelEnabled}
+	<div class="mist-messages-panel" data-open={showMessages}>
+		<button
+			type="button"
+			class="mist-messages-panel__backdrop"
+			aria-label="Close messages panel"
+			onclick={closeMessagesPanel}
+		></button>
+		<section
+			class="mist-messages-panel__sheet"
+			bind:this={messagesPanelElement}
+			role="dialog"
+			aria-modal="true"
+			aria-label="Messages and members"
+		>
+			<header>
+				<div>
+					<p>Messages</p>
+					<h2>{$i18n.t('Messages')} & {$i18n.t('Members')}</h2>
+				</div>
+				<button
+					type="button"
+					class="mist-messages-panel__close mist-focusable"
+					aria-label="Close messages panel"
+					onclick={closeMessagesPanel}
+				>
+					Close
+				</button>
+			</header>
+			<input
+				type="search"
+				bind:value={messagesQuery}
+				placeholder="Search conversations and members"
+				aria-label="Search conversations and members"
+			/>
+			<div class="mist-messages-panel__actions">
+				<a
+					href="/messages"
+					onclick={() => {
+						closeMessagesPanel();
+						if ($mobile) showSidebar.set(false);
+					}}
+				>
+					Open message center
+				</a>
+			</div>
+			<div class="mist-messages-panel__scroll">
+				<ul aria-label="Conversations">
+					{#each messageRows as channel (channel.id)}
+						<li>
+							<a
+								href={`/channels/${channel.id}`}
+								onclick={() => {
+									closeMessagesPanel();
+									if ($mobile) showSidebar.set(false);
+								}}
+							>
+								<span>{channelTitleFromChannel(channel)}</span>
+								{#if (channel.unread_count ?? 0) > 0}
+									<b>{channel.unread_count}</b>
+								{/if}
+							</a>
+						</li>
+					{:else}
+						<li class="mist-messages-panel__empty">No conversations yet</li>
+					{/each}
+				</ul>
+			</div>
+		</section>
+	</div>
+{/if}
 
 <ChannelModal
 	bind:show={showCreateChannel}
@@ -921,7 +1060,7 @@
 				? ''
 				: 'pointer-events-none'}"
 			style={backdropStyle}
-			on:mousedown={() => {
+			onmousedown={() => {
 				showSidebar.set(false);
 			}}
 		></div>
@@ -939,7 +1078,7 @@
 	<button
 		id="sidebar-new-chat-button"
 		class="hidden"
-		on:click={() => {
+		onclick={() => {
 			goto('/');
 			newChatHandler();
 		}}
@@ -954,7 +1093,7 @@
 		>
 			<button
 				class="flex flex-col flex-1 {isWindows ? 'cursor-pointer' : 'cursor-[e-resize]'}"
-				on:click={async () => {
+				onclick={async () => {
 					showSidebar.set(!$showSidebar);
 				}}
 			>
@@ -994,7 +1133,7 @@
 								class=" cursor-pointer flex size-8 items-center justify-center transition group"
 								href="/"
 								draggable="false"
-								on:click={async (e) => {
+								onclick={async (e) => {
 									e.stopImmediatePropagation();
 									e.preventDefault();
 
@@ -1016,7 +1155,7 @@
 						<Tooltip content={$i18n.t('Search')} placement="right">
 							<button
 								class=" cursor-pointer flex size-8 items-center justify-center transition group"
-								on:click={(e) => {
+								onclick={(e) => {
 									e.stopImmediatePropagation();
 									e.preventDefault();
 
@@ -1034,6 +1173,27 @@
 						</Tooltip>
 					</div>
 
+					{#if channelEnabled}
+						<div>
+							<Tooltip content={$i18n.t('Messages')} placement="right">
+								<button
+									type="button"
+									class="cursor-pointer flex size-8 items-center justify-center transition group"
+									onclick={(event) => openMessagesPanel(event.currentTarget)}
+									aria-haspopup="dialog"
+									aria-expanded={showMessages}
+									aria-label={$i18n.t('Messages')}
+								>
+									<div
+										class="self-center flex size-[calc(30px*var(--app-text-scale,1))] items-center justify-center rounded-lg transition group-hover:bg-gray-100 dark:group-hover:bg-gray-900"
+									>
+										<ChatBubble className="size-4" strokeWidth="1.5" />
+									</div>
+								</button>
+							</Tooltip>
+						</div>
+					{/if}
+
 					{#each pinnedItems as itemId (itemId)}
 						{@const meta = getMenuItemMeta(itemId)}
 						{#if meta && isMenuItemVisible(itemId)}
@@ -1042,7 +1202,7 @@
 									<a
 										class=" cursor-pointer flex size-8 items-center justify-center transition group"
 										href={meta.href}
-										on:click={async (e) => {
+										onclick={async (e) => {
 											e.stopImmediatePropagation();
 											e.preventDefault();
 											goto(meta.href);
@@ -1160,7 +1320,7 @@
 						class="flex items-center rounded-xl size-8.5 h-full justify-center hover:bg-gray-100 dark:hover:bg-gray-900 transition no-drag-region"
 						href="/"
 						draggable="false"
-						on:click={newChatHandler}
+						onclick={newChatHandler}
 					>
 						<!-- LICENSE covers this Open WebUI sidebar logo.
 					Do not alter, remove, obscure, or replace it except as LICENSE permits:
@@ -1173,7 +1333,7 @@
 						/>
 					</a>
 
-					<a href="/" class="flex flex-1 px-0.5" on:click={newChatHandler}>
+					<a href="/" class="flex flex-1 px-0.5" onclick={newChatHandler}>
 						<!-- LICENSE covers this Open WebUI sidebar name.
 					Do not alter, remove, obscure, or replace it except as LICENSE permits:
 					https://docs.openwebui.com/license. -->
@@ -1192,7 +1352,7 @@
 							class="flex size-[1.875rem] justify-center items-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900 transition {isWindows
 								? 'cursor-pointer'
 								: 'cursor-[w-resize]'}"
-							on:click={() => {
+							onclick={() => {
 								showSidebar.set(!$showSidebar);
 							}}
 							aria-label={$showSidebar ? $i18n.t('Close Sidebar') : $i18n.t('Open Sidebar')}
@@ -1212,7 +1372,7 @@
 
 				<div
 					class="relative flex flex-col flex-1 overflow-y-auto scrollbar-hidden space-y-1.5 pt-2.5 pb-2.5"
-					on:scroll={(e) => {
+					onscroll={(e) => {
 						if (e.target.scrollTop === 0) {
 							scrollTop = 0;
 						} else {
@@ -1227,7 +1387,7 @@
 								class="group grow flex items-center space-x-2 rounded-xl px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-900 transition outline-none"
 								href="/"
 								draggable="false"
-								on:click={newChatHandler}
+								onclick={newChatHandler}
 								aria-label={$i18n.t('New Chat')}
 							>
 								<div class="self-center flex size-4 shrink-0 items-center justify-center">
@@ -1246,7 +1406,7 @@
 							<button
 								id="sidebar-search-button"
 								class="group grow flex items-center space-x-2 rounded-xl px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-900 transition outline-none"
-								on:click={() => {
+								onclick={() => {
 									showSearch.set(true);
 								}}
 								draggable="false"
@@ -1262,6 +1422,34 @@
 								<HotkeyHint name="search" className=" hover-reveal " />
 							</button>
 						</div>
+
+						{#if channelEnabled}
+							<div class="px-1 flex justify-center text-gray-700 dark:text-gray-300">
+								<button
+									id="sidebar-messages-button"
+									type="button"
+								class="group grow flex items-center space-x-2 rounded-xl px-2 py-1.5 transition hover:bg-gray-100 dark:hover:bg-gray-900 outline-none"
+									onclick={(event) => openMessagesPanel(event.currentTarget)}
+									aria-haspopup="dialog"
+									aria-expanded={showMessages}
+								>
+								<div class="self-center flex size-4 shrink-0 items-center justify-center">
+									<ChatBubble className="size-4" strokeWidth="1.5" />
+								</div>
+								<div class="flex flex-1 self-center translate-y-[0.5px]">
+									<div class="self-center text-[0.8125rem] leading-5">{$i18n.t('Messages')}</div>
+								</div>
+									{#if sortedChannels.reduce((sum, channel) => sum + (channel.unread_count ?? 0), 0) > 0}
+										<span class="mist-messages-panel__badge">
+											{sortedChannels.reduce(
+												(sum, channel) => sum + (channel.unread_count ?? 0),
+												0
+											)}
+										</span>
+									{/if}
+								</button>
+							</div>
+						{/if}
 
 						<div id="pinned-menu-items-list">
 							{#each pinnedItems as itemId (itemId)}
@@ -1280,7 +1468,7 @@
 													: 'bg-black/[0.035] dark:bg-white/[0.045]'
 												: 'hover:bg-gray-100 dark:hover:bg-gray-900'}"
 											href={meta.href}
-											on:click={itemClickHandler}
+											onclick={itemClickHandler}
 											draggable="false"
 											aria-label={$i18n.t(meta.label)}
 										>
@@ -1522,7 +1710,7 @@
 									<DropdownMenu className="min-w-[10.625rem]">
 										<button
 											class="flex h-[1.6875rem] w-full items-center gap-2 rounded-xl px-2 text-[0.8125rem] select-none cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-900"
-											on:click={markAllChatsReadHandler}
+											onclick={markAllChatsReadHandler}
 										>
 											<CheckIcon className="size-3.5" />
 											<div class="flex items-center">{$i18n.t('Mark all as read')}</div>
@@ -1770,7 +1958,7 @@
 			<div
 				class="relative flex items-center justify-center group border-r border-gray-50 dark:border-gray-850/30 hover:border-gray-200 dark:hover:border-gray-800 transition z-20 bg-transparent p-0 appearance-none"
 				id="sidebar-resizer"
-				on:pointerdown={resizeStartHandler}
+				onpointerdown={resizeStartHandler}
 				role="separator"
 			>
 				<div
