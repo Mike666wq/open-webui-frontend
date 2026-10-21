@@ -61,7 +61,7 @@ html[data-owui-appearance='on'] body {
 /* Reveal the same wallpaper through navigation rather than painting another
  * nearly opaque, heavily blurred canvas over it. Respect per-slot settings. */
 html[data-owui-appearance='on'][data-owui-wallpaper='local-image'] .owui-sidebar-shell,
-html[data-owui-appearance='on'][data-owui-wallpaper='local-image'] .owui-chat-topbar {
+html[data-owui-appearance='on'][data-owui-wallpaper='local-image'] .owui-mist-app #main-content nav.drag-region {
 	background-color: rgb(var(--mist-surface-rgb) / calc(var(--mist-navigation-alpha) * 0.5)) !important;
 	backdrop-filter: blur(calc(var(--mist-navigation-blur) * 0.35)) saturate(1.04);
 }
@@ -911,6 +911,12 @@ html[data-owui-composer-density='compact'] .owui-composer-dock #message-input-co
 }
 
 @media (prefers-reduced-transparency: reduce) {
+	html[data-owui-appearance='on'][data-owui-wallpaper='local-image'] .owui-sidebar-shell,
+	html[data-owui-appearance='on'][data-owui-wallpaper='local-image'] .owui-mist-app #main-content nav.drag-region {
+		background-color: rgb(var(--mist-reading-rgb) / 0.94) !important;
+		backdrop-filter: none;
+	}
+
 	.owui-sidebar-shell,
 	.owui-chat-topbar,
 	.owui-composer-dock #message-input-container {
