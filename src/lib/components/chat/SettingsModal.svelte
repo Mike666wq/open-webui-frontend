@@ -743,6 +743,19 @@
 							<UsageIcon className="size-3.5" strokeWidth="2" />
 							<span>{$i18n.t('settings.personal.usage.title')}</span>
 						</button>
+					{:else if tabId === 'resources'}
+						<button
+							role="tab"
+							aria-controls="tab-resources"
+							aria-selected={selectedTab === 'resources'}
+							class={tabButtonClass(selectedTab === 'resources')}
+							on:click={() => {
+								selectTab('resources');
+							}}
+						>
+							<ArchiveBox className="size-3.5" strokeWidth="2" />
+							<span>{$i18n.t('Resources & Storage')}</span>
+						</button>
 					{:else if tabId === 'archived_chats'}
 						<button
 							role="tab"
