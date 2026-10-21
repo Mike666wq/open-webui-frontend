@@ -5,6 +5,7 @@
 	import { mobile } from '$lib/stores';
 	import MistDrawer from '$lib/components/mist/MistDrawer.svelte';
 	import CropEditor from '$lib/components/appearance/CropEditor.svelte';
+	import InterfacePreview from '$lib/components/appearance/InterfacePreview.svelte';
 	import {
 		APPEARANCE_PRESETS,
 		applyPreset,
@@ -67,6 +68,13 @@
 
 	const currentMode = $derived(draft.modes[editorMode]);
 	const currentBackground = $derived(currentMode.background);
+	const previewWallpaperUrl = $derived(
+		currentBackground.kind === 'local-image'
+			? (library.find((item) => item.id === currentBackground.assetId)?.url ??
+					previewUrls[editorMode] ??
+					null)
+			: null
+	);
 	const tokens = $derived(themeColorTokens(currentMode.colors));
 	const contrastReadable = (foreground: string, background: string) =>
 		`${contrastRatio(foreground, background).toFixed(1)}:1`;
@@ -795,6 +803,8 @@
 			hidden
 			onchange={chooseWallpaper}
 		/>
+		<p class="mist-editor-mode-label">{copy('界面预览', 'Interface preview')}</p>
+		<InterfacePreview settings={draft} wallpaperUrl={previewWallpaperUrl} />
 		{#if currentBackground.kind === 'gradient'}
 			{@render selectRow(
 				copy('渐变样式', 'Gradient'),
