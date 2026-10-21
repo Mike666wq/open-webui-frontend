@@ -26,6 +26,7 @@
 	import Audio from './Settings/Audio.svelte';
 	import DataControls from './Settings/DataControls.svelte';
 	import Resources from './Settings/Resources.svelte';
+	import SettingsTabRail from './SettingsTabRail.svelte';
 	import Usage from './Settings/Usage.svelte';
 	import ArchivedChats from './Settings/ArchivedChats.svelte';
 	import Personalization from './Settings/Personalization.svelte';
@@ -579,9 +580,7 @@
 				: ''}
 		</div>
 
-		<div
-			class="tabs scrollbar-none max-h-32 md:max-h-none flex min-w-0 flex-1 min-h-0 overflow-x-auto md:overflow-x-hidden md:overflow-y-auto md:flex-col p-1 pl-0 md:pl-1 gap-px"
-		>
+		<SettingsTabRail previousLabel={$i18n.t('Previous')} nextLabel={$i18n.t('Next')}>
 			<span
 				class="hidden md:block text-[0.625rem] text-gray-600 dark:text-gray-500 px-2 mt-1.5 mb-0.5"
 			>
@@ -837,7 +836,7 @@
 					{$i18n.t('No matches')}
 				</div>
 			{/if}
-		</div>
+		</SettingsTabRail>
 	</nav>
 
 	<div class="flex-1 min-w-0 min-h-0 p-4 md:px-5 flex flex-col">
