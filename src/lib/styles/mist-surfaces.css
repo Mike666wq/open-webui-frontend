@@ -782,3 +782,34 @@ html[data-owui-navigation-current='both'] .mist-nav-item[data-current='true'] {
 	font-size: 13px;
 	line-height: 1.6;
 }
+
+.mist-backdrop__layer--wallpaper {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	transform: none;
+}
+
+.mist-backdrop__wallpaper {
+	position: absolute;
+	max-width: none;
+	user-select: none;
+	pointer-events: none;
+	will-change: left, transform;
+	transform: scale(1.04);
+	transform-origin: center;
+}
+
+/*
+ * A custom wallpaper behaves like a viewport wider than the phone. Let the
+ * app keep vertical scrolling and text selection while reserving horizontal
+ * touch gestures for the wallpaper pan. Components that genuinely scroll
+ * horizontally (code, tables, carousels) declare their own touch-action.
+ */
+@media (pointer: coarse) {
+	html[data-owui-wallpaper='local-image'] body,
+	html[data-owui-wallpaper='local-image'] #chat-pane,
+	html[data-owui-wallpaper='local-image'] #messages-container {
+		touch-action: pan-y;
+	}
+}

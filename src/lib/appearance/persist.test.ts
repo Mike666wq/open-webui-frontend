@@ -7,8 +7,7 @@ const localImageSettings = (assetId: string): AppearanceSettings => {
 	settings.modes.light.background = {
 		kind: 'local-image',
 		assetId,
-		crop: { x: 0, y: 0, width: 1, height: 1 },
-		scale: 100,
+		focus: { portrait: 0.5, landscape: 0.5 },
 		mask: 22,
 		blur: 8
 	};

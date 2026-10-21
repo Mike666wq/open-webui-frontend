@@ -1,4 +1,4 @@
-export const APPEARANCE_SCHEMA_VERSION = 4 as const;
+export const APPEARANCE_SCHEMA_VERSION = 5 as const;
 
 export const APPEARANCE_PRESET_IDS = [
 	'mist-blue',
@@ -39,18 +39,15 @@ export type ModeColors = {
 	borderStrength: number;
 };
 
-export type CropRect = { x: number; y: number; width: number; height: number };
-
 export type LocalImageBackground = {
 	kind: 'local-image';
 	assetId: string;
 	/**
-	 * Normalised crop rectangles (0-1) of the source image, remembered per
-	 * viewport orientation so portrait and landscape each fill the screen
-	 * without distortion. The crop rectangle IS the zoom: a smaller region
-	 * shows a closer view.
+	 * Horizontal focus (0-1) of the wallpaper, remembered per viewport
+	 * orientation. The wallpaper fills the screen height and may overflow
+	 * horizontally; the focus slides the window left/right across it.
 	 */
-	crop: { portrait: CropRect; landscape: CropRect };
+	focus: { portrait: number; landscape: number };
 	mask: number;
 	blur: number;
 };
@@ -144,74 +141,65 @@ const clampNumber = (value: unknown, fallback: number, min: number, max: number)
 const isRecord = (value: unknown): value is UnknownRecord =>
 	typeof value === 'object' && value !== null && !Array.isArray(value);
 
-export const DEFAULT_CROP = { x: 0, y: 0, width: 1, height: 1 } as const;
+export const DEFAULT_FOCUS = { portrait: 0.5, landscape: 0.5 };
 
-export const DEFAULT_CROP_PAIR: { portrait: CropRect; landscape: CropRect } = {
-	portrait: { ...DEFAULT_CROP },
-	landscape: { ...DEFAULT_CROP }
+const focusFromCropRect = (value: unknown): number => {
+	if (!isRecord(value)) return 0.5;
+	const width = clampNumber(value.width, 1, 0.05, 1);
+	const x = clampNumber(value.x, 0, 0, 1 - width);
+	// The crop rectangle's centre becomes the horizontal window position.
+	return clampNumber(x + width / 2, 0.5, 0, 1);
 };
 
 /**
- * Normalise a single crop rectangle into a clamped 0-1 box with a usable
- * minimum size.
+ * Normalise the per-orientation horizontal focus. Migrates earlier shapes:
+ * v4 `crop: { portrait, landscape }` rectangles, v3 single `crop` rectangle,
+ * and the original focusX/focusY + scale model.
  */
-const normalizeCropRect = (value: unknown): CropRect => {
-	const MIN = 0.05;
-	if (isRecord(value)) {
-		const width = clampNumber(value.width, 1, MIN, 1);
-		const height = clampNumber(value.height, 1, MIN, 1);
-		return {
-			x: clampNumber(value.x, 0, 0, 1 - width),
-			y: clampNumber(value.y, 0, 0, 1 - height),
-			width,
-			height
-		};
-	}
-	return { ...DEFAULT_CROP };
-};
-
-/**
- * Normalise the per-orientation crop pair. Migrates earlier shapes:
- * a single `crop` rectangle (v3), or the legacy focusX/focusY + scale model
- * (pre-crop). The single/legacy rect becomes the portrait framing and the
- * landscape starts from a centred full-frame default.
- */
-const normalizeCrop = (
+const normalizeFocus = (
 	value: unknown,
+	pairSource: unknown,
 	legacySource?: UnknownRecord
-): { portrait: CropRect; landscape: CropRect } => {
-	if (isRecord(value) && (isRecord(value.portrait) || isRecord(value.landscape))) {
-		return {
-			portrait: normalizeCropRect(value.portrait),
-			landscape: isRecord(value.landscape)
-				? normalizeCropRect(value.landscape)
-				: { ...DEFAULT_CROP }
-		};
-	}
-	let single: CropRect | null = null;
-	if (isRecord(value) && (value.width !== undefined || value.x !== undefined)) {
-		single = normalizeCropRect(value);
-	} else if (
-		legacySource &&
-		(legacySource.focusX !== undefined || legacySource.focusY !== undefined)
-	) {
-		// Approximate the old cover+focus framing as a centred crop rectangle.
-		const scale = clampNumber(legacySource.scale, 100, 100, 300) / 100;
-		const width = Math.min(1, 1 / scale);
-		const height = Math.min(1, 1 / scale);
-		const focusX = clampNumber(legacySource.focusX, 50, 0, 100) / 100;
-		const focusY = clampNumber(legacySource.focusY, 50, 0, 100) / 100;
-		single = {
-			x: Math.min(1 - width, Math.max(0, focusX - width / 2)),
-			y: Math.min(1 - height, Math.max(0, focusY - height / 2)),
-			width,
-			height
-		};
-	}
-	return {
-		portrait: single ?? { ...DEFAULT_CROP },
-		landscape: { ...DEFAULT_CROP }
+): { portrait: number; landscape: number } => {
+	const fromPair = (input: unknown): { portrait: number; landscape: number } | null => {
+		if (!isRecord(input)) return null;
+		if (isRecord(input.portrait) || isRecord(input.landscape)) {
+			return {
+				portrait: focusFromCropRect(input.portrait),
+				landscape: focusFromCropRect(input.landscape)
+			};
+		}
+		return null;
 	};
+
+	const direct = (input: unknown): number | null => {
+		if (typeof input === 'number') return clampNumber(input, 0.5, 0, 1);
+		return null;
+	};
+
+	if (isRecord(value) && (direct(value.portrait) !== null || direct(value.landscape) !== null)) {
+		return {
+			portrait: direct(value.portrait) ?? 0.5,
+			landscape: direct(value.landscape) ?? 0.5
+		};
+	}
+
+	const migratedPair = fromPair(pairSource);
+	if (migratedPair) return migratedPair;
+
+	// v3 single crop rectangle.
+	if (isRecord(pairSource) && (pairSource.width !== undefined || pairSource.x !== undefined)) {
+		return { portrait: focusFromCropRect(pairSource), landscape: 0.5 };
+	}
+	if (isRecord(value) && (value.width !== undefined || value.x !== undefined)) {
+		return { portrait: focusFromCropRect(value), landscape: 0.5 };
+	}
+
+	// Original cover + focusX model expressed in 0-100 percentages.
+	if (legacySource && legacySource.focusX !== undefined) {
+		return { portrait: clampNumber(legacySource.focusX, 50, 0, 100) / 100, landscape: 0.5 };
+	}
+	return { ...DEFAULT_FOCUS };
 };
 
 const stringEnum = <T extends string>(
@@ -431,7 +419,7 @@ const normalizeBackground = (
 			return {
 				kind: 'local-image',
 				assetId,
-				crop: normalizeCrop(source.crop, source),
+				focus: normalizeFocus(source.focus, source.crop, source),
 				mask: clampNumber(source.mask, fallback.mask, 0, 80),
 				blur: clampNumber(source.blur, fallback.blur, 0, 16)
 			};

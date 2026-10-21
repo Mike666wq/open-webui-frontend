@@ -39,7 +39,6 @@
 		type SurfaceSlot
 	} from '$lib/appearance';
 	import { GRADIENT_IDS } from '$lib/appearance/schema';
-	import type { CropRect } from '$lib/appearance/schema';
 
 	type Props = {
 		open: boolean;
@@ -68,7 +67,7 @@
 	let collapsed = $state(false);
 	let fullscreenFraming = $state(false);
 
-	// Track the live viewport so the crop frame matches the actual screen shape.
+	// Track the live viewport so the framing window matches the actual screen.
 	let viewportW = $state(0);
 	let viewportH = $state(0);
 	$effect(() => {
@@ -92,18 +91,17 @@
 
 	const currentMode = $derived(draft.modes[editorMode]);
 	const currentBackground = $derived(currentMode.background);
-	const DEFAULT_RECT: CropRect = { x: 0, y: 0, width: 1, height: 1 };
 	const orientationKey = $derived(isPortraitViewport ? 'portrait' : 'landscape');
-	const activeCrop = $derived(
+	const activeFocus = $derived(
 		currentBackground.kind === 'local-image'
-			? (currentBackground.crop[orientationKey] ?? DEFAULT_RECT)
-			: DEFAULT_RECT
+			? (currentBackground.focus[orientationKey] ?? 0.5)
+			: 0.5
 	);
-	function setActiveCrop(rect: CropRect) {
+	function setActiveFocus(focus: number) {
 		if (currentBackground.kind !== 'local-image') return;
 		setBackground({
 			...currentBackground,
-			crop: { ...currentBackground.crop, [orientationKey]: rect }
+			focus: { ...currentBackground.focus, [orientationKey]: focus }
 		});
 	}
 	const previewWallpaperUrl = $derived(
@@ -139,7 +137,12 @@
 	});
 
 	$effect(() => {
-		if (!open) return;
+		if (!open) {
+			// Closing by either Apply, Cancel, Escape, a route change or a
+			// responsive remount must always release the page-level preview.
+			endAppearancePreview();
+			return;
+		}
 		updateAppearancePreview(draft);
 	});
 
@@ -346,10 +349,7 @@
 		setBackground({
 			kind: 'local-image',
 			assetId,
-			crop: background?.crop ?? {
-				portrait: { ...DEFAULT_RECT },
-				landscape: { ...DEFAULT_RECT }
-			},
+			focus: background?.focus ?? { portrait: 0.5, landscape: 0.5 },
 			mask: currentBackground.mask,
 			blur: currentBackground.blur
 		});
@@ -827,10 +827,7 @@
 						setBackground({
 							kind: 'local-image',
 							assetId: '',
-							crop: {
-								portrait: { ...DEFAULT_RECT },
-								landscape: { ...DEFAULT_RECT }
-							},
+							focus: { portrait: 0.5, landscape: 0.5 },
 							mask: currentBackground.mask,
 							blur: currentBackground.blur
 						});
@@ -898,13 +895,13 @@
 					null}
 				{#if activeUrl}
 					<p class="mist-editor-mode-label">
-						{copy('取景（随当前屏幕比例）', 'Frame (matches your screen)')}
+						{copy('左右滑动取景（随当前屏幕比例）', 'Slide left/right (matches your screen)')}
 					</p>
 					<CropEditor
 						imageUrl={activeUrl}
-						crop={activeCrop}
+						focus={activeFocus}
 						aspectRatio={screenAspect}
-						onchange={setActiveCrop}
+						onchange={setActiveFocus}
 					/>
 					<div class="mist-editor-image-actions">
 						<button
@@ -1433,9 +1430,9 @@
 			<div class="mist-framing__stage">
 				<CropEditor
 					imageUrl={frameUrl}
-					crop={activeCrop}
+					focus={activeFocus}
 					aspectRatio={screenAspect}
-					onchange={setActiveCrop}
+					onchange={setActiveFocus}
 				/>
 			</div>
 			<div class="mist-framing__controls">
@@ -2010,5 +2007,60 @@
 		.mist-preset-grid {
 			grid-template-columns: 1fr;
 		}
+	}
+
+	.mist-framing {
+		position: fixed;
+		inset: 0;
+		z-index: 60;
+		display: flex;
+		flex-direction: column;
+		justify-content: flex-end;
+		background: rgb(6 10 18 / 0.72);
+		backdrop-filter: blur(6px);
+	}
+
+	.mist-framing__stage {
+		flex: 1;
+		min-height: 0;
+		padding: 16px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.mist-framing__stage :global(.crop-editor) {
+		width: auto;
+		height: 100%;
+		max-width: 100%;
+		max-height: 100%;
+		aspect-ratio: auto;
+	}
+
+	.mist-framing__controls {
+		display: grid;
+		gap: 10px;
+		padding: 16px 18px calc(16px + env(safe-area-inset-bottom));
+		border-radius: 20px 20px 0 0;
+		background: rgb(var(--mist-reading-rgb) / 0.96);
+		box-shadow: 0 -10px 30px rgb(0 0 0 / 0.25);
+	}
+
+	.mist-framing__slider {
+		display: grid;
+		gap: 6px;
+		color: var(--mist-muted);
+		font-size: 12px;
+	}
+
+	.mist-framing__slider input {
+		width: 100%;
+		accent-color: var(--mist-accent);
+	}
+
+	.mist-framing__actions {
+		display: flex;
+		gap: 8px;
+		justify-content: flex-end;
 	}
 </style>

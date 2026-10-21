@@ -42,7 +42,12 @@
 		style:height={scaledHeight > 0 ? `${scaledHeight}px` : '100%'}
 		style:transform={`scale(${scale})`}
 	>
-		<AppBackdrop variant={wallpaperUrl ? 'wallpaper' : 'gradient'} {settings} {wallpaperUrl} />
+		<AppBackdrop
+			variant={wallpaperUrl ? 'wallpaper' : 'gradient'}
+			{settings}
+			{wallpaperUrl}
+			interactive={false}
+		/>
 
 		<div class="interface-preview__ui">
 			<AppTopbar title="Mist Glass">
