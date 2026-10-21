@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { markDraftFiles, updateDraftFiles } from '$lib/resources/upload-drafts';
 	import { v4 as uuidv4 } from 'uuid';
 	import { toast } from 'svelte-sonner';
 
@@ -1840,11 +1841,33 @@
 		}
 	};
 
+	const resourceChangedHandler = async (data: { type?: string; id?: string; action?: string }) => {
+		if (!data?.type || !data?.action) return;
+		// Only react to changes for the currently open chat/channel to avoid
+		// refreshing unrelated conversations or leaking stale state.
+		if (data.type === 'channel' && data.id && data.action === 'clear') {
+			// Another device cleared this channel for itself; no action needed here.
+			return;
+		}
+		if (data.type === 'chat' && data.id === $chatId && data.action === 'recycle') {
+			// Current chat was recycled on another device; navigate away.
+			toast.info($i18n.t('This conversation was moved to the recycle bin.'));
+			await goto('/');
+			return;
+		}
+		if (data.type === 'chat' && data.id === $chatId && data.action === 'restore') {
+			// Current chat was restored; reload to show the recovered content.
+			await loadChat();
+			return;
+		}
+	};
+
 	onMount(() => {
 		loading = true;
 		console.log('mounted');
 		window.addEventListener('message', onMessageHandler);
 		$socket?.on('events', chatEventHandler);
+		$socket?.on('resources:changed', resourceChangedHandler);
 		$socket?.on('connect', handleSocketConnect);
 		$socket?.on('disconnect', clearTyping);
 		$socket?.on('disconnect', cancelBrowserInteractions);
@@ -1952,6 +1975,7 @@
 
 				window.removeEventListener('message', onMessageHandler);
 				$socket?.off('events', chatEventHandler);
+				$socket?.off('resources:changed', resourceChangedHandler);
 				$socket?.off('connect', handleSocketConnect);
 				$socket?.off('disconnect', clearTyping);
 				$socket?.off('disconnect', cancelBrowserInteractions);
@@ -4659,7 +4683,12 @@
 
 		if (draft.prompt !== null && draft.prompt.length < MAX_DRAFT_LENGTH) {
 			const key = `chat-input${chatId ? `-${chatId}` : ''}`;
-			const write = () => sessionStorage.setItem(key, JSON.stringify(draft));
+			const write = () => {
+				let previous: unknown;
+				try { previous = JSON.parse(sessionStorage.getItem(key) ?? '{}'); } catch { previous = {}; }
+				sessionStorage.setItem(key, JSON.stringify(draft));
+				void updateDraftFiles(previous, draft, key).catch((error) => console.error(error));
+			};
 			if (debounce) {
 				saveDraftTimeout = setTimeout(write, 500);
 			} else {
@@ -4688,7 +4717,10 @@
 		if (saveDraftTimeout) {
 			clearTimeout(saveDraftTimeout);
 		}
-		await sessionStorage.removeItem(`chat-input${chatId ? `-${chatId}` : ''}`);
+		const key = `chat-input${chatId ? `-${chatId}` : ''}`;
+		try { await markDraftFiles(JSON.parse(sessionStorage.getItem(key) ?? '{}'), false, key); }
+		catch (error) { console.error(error); } // Retaining an upload is safe if the server is temporarily unavailable.
+		sessionStorage.removeItem(key);
 	};
 
 	const moveChatHandler = async (chatId, folderId) => {

@@ -255,7 +255,7 @@
 		{
 			id: 'resources',
 			titleKey: 'settings.personal.resources.title',
-			title: $i18n.t('Resources & Storage'),
+			title: $i18n.t('settings.personal.resources.title'),
 			searchPrefixes: ['settings.personal.resources.', 'resources', 'storage', 'recycle']
 		},
 		{
@@ -754,7 +754,7 @@
 							}}
 						>
 							<ArchiveBox className="size-3.5" strokeWidth="2" />
-							<span>{$i18n.t('Resources & Storage')}</span>
+							<span>{$i18n.t('settings.personal.resources.title')}</span>
 						</button>
 					{:else if tabId === 'archived_chats'}
 						<button
