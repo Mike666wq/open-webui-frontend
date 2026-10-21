@@ -25,6 +25,7 @@
 	import Shortcuts from './Settings/Shortcuts.svelte';
 	import Audio from './Settings/Audio.svelte';
 	import DataControls from './Settings/DataControls.svelte';
+	import Resources from './Settings/Resources.svelte';
 	import Usage from './Settings/Usage.svelte';
 	import ArchivedChats from './Settings/ArchivedChats.svelte';
 	import Personalization from './Settings/Personalization.svelte';
@@ -250,6 +251,12 @@
 			titleKey: 'settings.personal.dataControls.title',
 			title: $i18n.t('settings.personal.dataControls.title'),
 			searchPrefixes: ['settings.personal.dataControls.']
+		},
+		{
+			id: 'resources',
+			titleKey: 'settings.personal.resources.title',
+			title: $i18n.t('Resources & Storage'),
+			searchPrefixes: ['settings.personal.resources.', 'resources', 'storage', 'recycle']
 		},
 		{
 			id: 'usage',
@@ -736,6 +743,19 @@
 							<UsageIcon className="size-3.5" strokeWidth="2" />
 							<span>{$i18n.t('settings.personal.usage.title')}</span>
 						</button>
+					{:else if tabId === 'resources'}
+						<button
+							role="tab"
+							aria-controls="tab-resources"
+							aria-selected={selectedTab === 'resources'}
+							class={tabButtonClass(selectedTab === 'resources')}
+							on:click={() => {
+								selectTab('resources');
+							}}
+						>
+							<ArchiveBox className="size-3.5" strokeWidth="2" />
+							<span>{$i18n.t('Resources & Storage')}</span>
+						</button>
 					{:else if tabId === 'archived_chats'}
 						<button
 							role="tab"
@@ -874,6 +894,8 @@
 				/>
 			{:else if selectedTab === 'data_controls'}
 				<DataControls {saveSettings} />
+			{:else if selectedTab === 'resources'}
+				<Resources />
 			{:else if selectedTab === 'usage'}
 				<Usage />
 			{:else if selectedTab === 'archived_chats'}
