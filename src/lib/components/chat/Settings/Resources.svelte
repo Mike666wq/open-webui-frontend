@@ -7,6 +7,7 @@
 	import { userSignOut } from '$lib/apis/auths';
 	import { resourceRequest, summarizeTask, type Resource, type ResourceKind, type Preflight, type Task } from '$lib/resources/api';
 	import { clearDeviceCategory, deviceUsage, type DeviceCategory, type DeviceUsage } from '$lib/resources/device';
+	import { scrollableX } from '$lib/actions/scrollableX';
 
 	const i18n = getContext<any>('i18n');
 	$: zh = String($i18n.language ?? '').startsWith('zh');
@@ -43,6 +44,26 @@
 	let generation = 0;
 	let disposed = false;
 	let poll: ReturnType<typeof setInterval>;
+	const iconPaths: Record<string, string> = {
+		overview: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
+		resources: 'M3 7h7l2-3h9v16H3z', device: 'M3 4h18v13H3z M8 21h8 M12 17v4',
+		recycle: 'M3 6h18 M9 6V3h6v3 M5 6l1 15h12l1-15 M10 10v7 M14 10v7',
+		tasks: 'M8 4h12v17H4V4h4 M8 2h8v5H8z M8 11h8 M8 15h6',
+		chat: 'M3 4h18v13H9l-6 4z', channel: 'M8 4h13v10h-5 M3 9h13v10H8l-5 3z',
+		file: 'M5 2h9l5 5v15H5z M14 2v6h5 M8 13h8 M8 17h6',
+		note: 'M4 3h16v18H4z M8 8h8 M8 12h8 M8 16h5',
+		knowledge: 'M3 4c4-1 6-1 9 1 3-2 5-2 9-1v16c-4-1-6-1-9 1-3-2-5-2-9-1z M12 5v16',
+		share: 'M9 15l6-6 M8 16l-2 2a4 4 0 0 1-5-5l4-4a4 4 0 0 1 5 0 M16 8l2-2a4 4 0 0 1 5 5l-4 4a4 4 0 0 1-5 0',
+		shield: 'M12 2l9 4v6c0 5-9 10-9 10S3 17 3 12V6z M8 12l3 3 5-6'
+	};
+	const sectionCopy = (value: string) => ({
+		overview: tr('了解内容分布，从需要整理的类别开始。', 'See your content at a glance and choose where to begin.'),
+		resources: tr('筛选、选择，再查看清理影响。置顶和引用默认受到保护。', 'Filter, select and review the impact. Pins and references are protected.'),
+		device: tr('只管理当前浏览器的数据，和服务端内容分开。', 'Manage this browser separately from your server content.'),
+		recycle: tr('误删可以找回。内容在这里保留七天。', 'Changed your mind? Restore content within seven days.'),
+		tasks: tr('查看清理记录、处理结果和自动清理规则。', 'Review cleanup activity, results and automation rules.')
+	}[value] ?? '');
+
 	const key = (item: Resource) => `${item.type}:${item.id}`;
 	const label = (value: string) => ({
 		overview: tr('概览', 'Overview'), resources: tr('资源', 'Resources'),
@@ -220,21 +241,28 @@
 	onDestroy(() => { disposed = true; generation++; clearInterval(poll); });
 </script>
 
+{#snippet resourceIcon(kind: string)}
+	<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={iconPaths[kind] ?? iconPaths.file} /></svg>
+{/snippet}
+
 <svelte:window on:keydown={(event) => { if (event.key === 'Escape' && !busy) { preview = null; deviceConfirm = null; } }} />
 
 <section class="resources-page" aria-label={tr('资源与存储', 'Resources & Storage')}>
 	<header class="resources-header">
-		<div>
+		<div class="resources-heading">
+			<span class="resources-heading__icon">{@render resourceIcon('resources')}</span>
+			<div>
 			<p class="eyebrow">{tr('你的内容，由你管理', 'YOUR CONTENT, YOUR CONTROL')}</p>
 			<h2>{tr('资源与存储', 'Resources & Storage')}</h2>
 			<p class="muted">{tr('整理内容、保护引用，清楚了解每一次清理。', 'Organize content, preserve references, understand every cleanup.')}</p>
+			</div>
 		</div>
 		<button on:click={refresh} disabled={loading || busy}>{loading ? tr('刷新中…', 'Refreshing…') : tr('刷新', 'Refresh')}</button>
 	</header>
-	<nav class="section-tabs" aria-label={tr('资源管理分区', 'Resource sections')}>
+	<nav class="section-tabs" use:scrollableX aria-label={tr('资源管理分区', 'Resource sections')}>
 		{#each sections as value}
 			<button aria-current={section === value ? 'page' : undefined} class:active={section === value}
-				on:click={() => navigateSection(value)}>{label(value)}{value === 'recycle' && recycled.length ? ` · ${recycled.length}` : ''}</button>
+				on:click={() => navigateSection(value)}>{@render resourceIcon(value)}<span>{label(value)}</span>{#if value === 'recycle' && recycled.length}<span class="count-badge">{recycled.length}</span>{/if}</button>
 		{/each}
 	</nav>
 	{#if error}
@@ -251,16 +279,19 @@
 	{/if}
 
 	<div class="section-body">
+		<div class="section-intro"><div><h3>{label(section)}</h3><p class="muted">{sectionCopy(section)}</p></div>
+			{#if section === 'recycle'}<span class="retention-badge">7 {tr('天保留', 'days retained')}</span>{/if}
+		</div>
 		{#if section === 'overview'}
 			{#if stats}
 				<div class="metric-grid">
 					{#each Object.entries(stats.counts) as [kind, count]}
 						<button class="metric" on:click={() => { type = kind as ResourceKind; navigateSection('resources'); applyFilters(); }}>
-							<span>{label(kind)}</span><strong>{count}</strong>
+							<span class="metric__icon">{@render resourceIcon(kind)}</span><span class="metric__body"><span>{label(kind)}</span><strong>{count}</strong></span><span class="metric__arrow" aria-hidden="true">↗</span>
 						</button>
 					{/each}
 				</div>
-				<article class="surface capacity">
+				<article class="surface capacity storage-total">
 					<div><h3>{tr('上传文件登记容量', 'Registered upload size')}</h3>
 						<p class="muted">{tr('按文件记录计量，不是系统内存或整个服务器的磁盘占用。', 'Based on file records. Not RAM or total server disk usage.')}</p></div>
 					<strong>{bytes(stats.total_bytes)}</strong>
@@ -344,8 +375,8 @@
 			{/each}
 			<div class="surface capacity"><div><h3>{tr('登录状态', 'Session')}</h3><p class="muted">{tr('退出当前设备，服务端内容保留。', 'Sign out on this device; server content is retained.')}</p></div><button on:click={() => deviceConfirm = 'logout'}>{tr('退出登录…', 'Sign out…')}</button></div>
 		{:else if section === 'tasks'}
-			<article class="surface">
-				<h3>{tr('清理规则', 'Cleanup rules')}</h3>
+			<article class="surface rules-card">
+				<div class="rules-card__heading"><span class="rule-shield">{@render resourceIcon('shield')}</span><div><h3>{tr('清理规则', 'Cleanup rules')}</h3><p class="muted">{tr('默认保护，确认后清理', 'Protected by default. Reviewed before cleanup.')}</p></div><span class="retention-badge">7 {tr('天', 'days')}</span></div>
 				<p>{tr('回收站到期后清理，保留期七天。正常对话、笔记和知识库不按年龄自动删除。', 'Recycled content expires after seven days. Active chats, notes and knowledge are not automatically removed by age.')}</p>
 				{#if rules}
 					<label class="rule-control"><input type="checkbox" checked={rules.temporary_uploads} disabled={!rules.can_edit || busy}
@@ -355,9 +386,10 @@
 				{/if}
 			</article>
 			{#each tasks as task (task.id)}
-				<article class="surface"><div class="capacity"><h3>{task.action === 'recycle' ? tr('回收／个人清空', 'Recycle / personal clear') : label(task.action)}</h3><span class="type-badge">{label(task.state)}</span></div>
+				<article class="surface task-card"><div class="capacity"><h3>{task.action === 'recycle' ? tr('回收／个人清空', 'Recycle / personal clear') : label(task.action)}</h3><span class="type-badge" data-state={task.state}>{label(task.state)}</span></div>
 					<p class="muted">{date(task.created_at)} · {tr('执行次数', 'Attempts')}: {task.attempts}</p>
-					<p>{summarizeTask(task).success} {tr('项完成', 'completed')} · {summarizeTask(task).failed} {tr('项未完成', 'failed')}</p>
+					<div class="task-progress" aria-hidden="true"><span style:width={`${task.results.length ? summarizeTask(task).success / task.results.length * 100 : 0}%`}></span></div>
+					<p class="muted">{summarizeTask(task).success} {tr('项完成', 'completed')} · {summarizeTask(task).failed} {tr('项未完成', 'failed')}</p>
 					{#each task.results.filter((r) => !r.success) as item}<p class="error-text">{label(item.type)} · {reason(item.reason ?? '')}</p>{/each}
 					{#if ['failed', 'partial'].includes(task.state)}
 						{#if task.action === 'purge'}<button disabled={busy} on:click={() => retry(task)}>{tr('重试未完成步骤', 'Retry unfinished steps')}</button>
@@ -366,12 +398,12 @@
 				</article>
 			{:else}<p class="empty">{tr('尚无清理任务', 'No cleanup tasks yet')}</p>{/each}
 			{#if admin}
-				<article class="surface"><h3>{tr('管理员 · 账号级统计', 'Administrator · Account aggregates')}</h3>
+				<details class="surface admin-summary"><summary>{tr('管理员 · 账号级统计', 'Administrator · Account aggregates')}<span class="count-badge">{admin.accounts.length}</span></summary>
 					<p class="muted">{tr('这里只展示数量和任务结果，不提供他人的私人正文。', 'Counts and task outcomes only; no private content from other accounts.')}</p>
 					{#each admin.accounts as account}
-						<div class="account-stat"><code>{account.user_id}</code><p>{Object.entries(account.counts).map(([kind, count]) => `${label(kind)} ${count}`).join(' · ')}</p><p class="muted">{Object.entries(account.tasks ?? {}).map(([state, count]) => `${label(state)} ${count}`).join(' · ')}</p></div>
+						<div class="account-stat"><code title={account.user_id}>{tr('账号', 'Account')} · {account.user_id.slice(0, 8)}</code><p>{Object.entries(account.counts).map(([kind, count]) => `${label(kind)} ${count}`).join(' · ')}</p><p class="muted">{Object.entries(account.tasks ?? {}).map(([state, count]) => `${label(state)} ${count}`).join(' · ')}</p></div>
 					{/each}
-				</article>
+				</details>
 			{/if}
 		{/if}
 	</div>
@@ -411,6 +443,46 @@
 {/if}
 
 <style>
+	.rules-card__heading { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+	.rules-card__heading > div { flex:1; }
+	.rule-shield { display:grid; place-items:center; width:36px; height:40px; color:var(--mist-accent); background:var(--mist-highlight); border-radius:12px; }
+	.resources-page .rule-control { border-top:1px solid var(--mist-border); padding-top:14px; justify-content:space-between; flex-direction:row-reverse; }
+	.rule-control input { appearance:none; position:relative; width:36px; height:22px; border-radius:999px; background:#94a3b866; border:1px solid var(--mist-border); }
+	.rule-control input::after { content:''; position:absolute; width:16px; height:16px; border-radius:50%; background:white; left:2px; top:2px; box-shadow:0 1px 3px #0003; transition:transform .15s; }
+	.rule-control input:checked { background:var(--mist-accent); }
+	.rule-control input:checked::after { transform:translateX(14px); }
+	.rule-control input:disabled { opacity:.5; }
+	.task-card { position:relative; }
+	.task-card > .capacity { margin-bottom:4px; }
+	.task-progress { height:3px; background:var(--mist-highlight); overflow:hidden; border-radius:99px; margin:12px 0 7px; }
+	.task-progress span { display:block; height:100%; background:var(--mist-accent); opacity:.55; }
+	.resources-page .metric .metric__icon { color:var(--mist-accent); }
+	@media(min-width:1100px) { .resources-page .metric-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+
+	.resources-heading { display:flex; align-items:center; gap:12px; min-width:0; }
+	.resources-heading__icon { display:grid; place-items:center; width:44px; height:44px; flex-shrink:0; border-radius:14px; color:var(--mist-accent); background:var(--mist-highlight); border:1px solid var(--mist-border); }
+	.section-intro { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:4px; }
+	.section-intro h3 { font-size:15px; margin-bottom:4px; }
+	.count-badge, .retention-badge { display:inline-flex; align-items:center; padding:2px 7px; border-radius:99px; background:var(--mist-highlight); color:var(--mist-accent-text); font-size:10px; white-space:nowrap; }
+	.resources-page .section-tabs { gap:5px; padding:5px; border:1px solid var(--mist-border); border-radius:14px; background:rgb(var(--mist-surface-rgb) / .25); }
+	.resources-page .section-tabs button { display:flex; align-items:center; justify-content:center; gap:6px; flex:1; min-height:42px; padding:8px; border-radius:10px; }
+	.section-tabs button :global(svg) { width:16px; height:16px; flex-shrink:0; }
+	.resources-page .section-tabs .active { background:rgb(var(--mist-surface-rgb) / .85); box-shadow:0 2px 8px #0f172a0a; border-color:var(--mist-border); }
+	.resources-page .metric { position:relative; flex-direction:row; align-items:center; gap:12px; border:1px solid var(--mist-border); background:rgb(var(--mist-surface-rgb) / .35); }
+	.metric__icon { display:grid; place-items:center; width:38px; height:38px; background:var(--mist-highlight); color:var(--mist-accent); border-radius:12px; flex-shrink:0; }
+	.resources-page .metric__body { display:flex; flex-direction:column; gap:3px; }
+	.resources-page .metric__body strong { color:var(--mist-ink); line-height:1.15; font-size:25px; font-variant-numeric:tabular-nums; }
+	.metric__arrow { margin-inline-start:auto; opacity:.55; }
+	.resources-page .storage-total { background:linear-gradient(120deg,var(--mist-highlight),rgb(var(--mist-surface-rgb) / .45)); border-color:var(--mist-border-strong); }
+	.storage-total strong { font-variant-numeric:tabular-nums; color:var(--mist-accent-text); }
+	.type-badge[data-state='completed'] { color:#13704d; background:#16a36a16; }
+	.type-badge[data-state='failed'], .type-badge[data-state='partial'] { color:var(--mist-ink); background:#e9a73b24; }
+	.admin-summary summary { display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:600; cursor:pointer; min-height:24px; }
+	.admin-summary[open] > .muted { margin-top:10px; }
+	.resources-page .surface { box-shadow:0 2px 10px #0f172a04; }
+	.resources-page .resource-row:hover { border-color:var(--mist-border-strong); }
+	@media(max-width:560px) { .resources-heading__icon { display:none; } .resources-page .section-tabs button { flex-direction:column; gap:3px; min-width:65px; font-size:11px; } .resources-page .metric { padding:12px; gap:9px; } .metric__arrow { display:none; } .metric__icon { width:30px; height:34px; } }
+
 	.resources-page { display:flex; flex-direction:column; height:100%; min-height:0; min-width:0; color:var(--mist-ink, inherit); }
 	.resources-header { display:flex; justify-content:space-between; align-items:start; gap:12px; padding:4px 2px 16px; }
 	h2 { font-size:1.4rem; font-weight:650; letter-spacing:-.025em; }
@@ -421,7 +493,7 @@
 	button:hover:enabled, a:hover { background:var(--mist-highlight, #94a3b822); }
 	button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline:2px solid var(--mist-accent, #2563eb); outline-offset:3px; }
 	button:disabled { opacity:.45; cursor:not-allowed; }
-	.section-tabs { display:flex; gap:4px; overflow-x:auto; flex-shrink:0; border-bottom:1px solid var(--mist-border); padding-bottom:8px; }
+	.section-tabs { display:flex; gap:4px; overflow-x:auto; flex-shrink:0; border-bottom:1px solid var(--mist-border); padding-bottom:8px; scrollbar-width:thin; scrollbar-color:rgb(var(--mist-surface-rgb) / .35) transparent; overscroll-behavior-x:contain; touch-action:pan-x; }
 	.section-tabs button { white-space:nowrap; border-color:transparent; }
 	.section-tabs .active { color:var(--mist-accent); background:var(--mist-highlight); border-color:var(--mist-border-strong); font-weight:600; }
 	.section-body { overflow-y:auto; overscroll-behavior:contain; min-height:0; padding:16px 3px 24px; display:flex; flex-direction:column; gap:12px; }

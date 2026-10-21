@@ -6,6 +6,7 @@
 	import MistDrawer from '$lib/components/mist/MistDrawer.svelte';
 	import CropEditor from '$lib/components/appearance/CropEditor.svelte';
 	import InterfacePreview from '$lib/components/appearance/InterfacePreview.svelte';
+	import MistSelect from '$lib/components/appearance/MistSelect.svelte';
 	import {
 		APPEARANCE_PRESETS,
 		applyPreset,
@@ -53,6 +54,15 @@
 			.startsWith('zh')
 	);
 	const copy = (chinese: string, english: string) => (zh ? chinese : english);
+	const gradientLabel = (id: GradientId) =>
+		({
+			'mist-blue': copy('蓝雾', 'Mist blue'),
+			'teal-slate': copy('青灰', 'Teal slate'),
+			'warm-sand': copy('暖砂', 'Warm sand'),
+			graphite: copy('石墨', 'Graphite'),
+			'mist-rose': copy('雾粉', 'Mist rose'),
+			midnight: copy('极夜', 'Midnight')
+		})[id];
 
 	let draft = $state<AppearanceSettings>(structuredClone($appearanceSettings));
 	let editorMode = $state<ResolvedAppearanceTheme>('light');
@@ -148,6 +158,7 @@
 
 	onDestroy(() => {
 		cleanupPreviewUrls();
+		for (const item of library) URL.revokeObjectURL(item.url);
 		endAppearancePreview();
 	});
 
@@ -226,6 +237,39 @@
 				[mode]: { ...draft.modes[mode], background: next }
 			}
 		});
+	}
+
+	function setBackgroundKind(value: 'gradient' | 'local-image') {
+		if (value === 'gradient') {
+			setBackground({
+				kind: 'gradient',
+				gradient:
+					currentBackground.kind === 'gradient'
+						? currentBackground.gradient
+						: (draft.preset as GradientId),
+				mask: currentBackground.mask,
+				blur: currentBackground.blur
+			});
+			const previewUrl = previewUrls[editorMode];
+			if (previewUrl) URL.revokeObjectURL(previewUrl);
+			delete previewUrls[editorMode];
+			appearancePreviewWallpaperUrl.set(null);
+		} else if (value === 'local-image') {
+			// Prefer re-activating the most recent library image; otherwise show the
+			// empty library (with an Add tile) so the branch actually renders.
+			const fallback = library[0];
+			if (fallback) {
+				void selectLibraryImage(fallback.id);
+			} else if (currentBackground.kind !== 'local-image') {
+				setBackground({
+					kind: 'local-image',
+					assetId: '',
+					focus: { portrait: 0.5, landscape: 0.5 },
+					mask: currentBackground.mask,
+					blur: currentBackground.blur
+				});
+			}
+		}
 	}
 
 	function setGlass(key: keyof AppearanceSettings['glass'], value: number) {
@@ -337,11 +381,10 @@
 	function activateWallpaper(assetId: string, blob: Blob | null) {
 		previewGeneration += 1;
 		const previousUrl = previewUrls[editorMode];
-		if (previousUrl && !library.some((item) => item.url === previousUrl)) {
-			URL.revokeObjectURL(previousUrl);
-		}
-		const libraryUrl = library.find((item) => item.id === assetId)?.url ?? null;
-		const objectUrl = libraryUrl ?? (blob ? URL.createObjectURL(blob) : null);
+		if (previousUrl) URL.revokeObjectURL(previousUrl);
+		// The editor preview owns its URL. Library cards must remain valid after
+		// Apply/Cancel releases that preview and the editor is opened again.
+		const objectUrl = blob ? URL.createObjectURL(blob) : null;
 		if (!objectUrl) return;
 		previewUrls[editorMode] = objectUrl;
 		appearancePreviewWallpaperUrl.set(objectUrl);
@@ -585,14 +628,39 @@
 	options: Array<{ value: string | number; label: string }>,
 	onchange: (value: string) => void
 )}
-	<label class="mist-editor-field">
-		<span>{label}</span>
-		<select value={String(value)} onchange={(event) => onchange(event.currentTarget.value)}>
-			{#each options as option}
-				<option value={String(option.value)}>{option.label}</option>
-			{/each}
-		</select>
-	</label>
+	{@const selectOptions = options.map((option) => ({
+		value: String(option.value),
+		label: option.label
+	}))}
+	{#if options.length <= 3}
+		<div class="mist-editor-field mist-editor-field--segmented">
+			<span id="mist-seg-label-{label}">{label}</span>
+			<div class="mist-editor-segmented mist-editor-segmented--inline" role="radiogroup" aria-labelledby="mist-seg-label-{label}">
+				{#each selectOptions as option}
+					<button
+						type="button"
+						role="radio"
+						aria-checked={String(value) === option.value}
+						data-active={String(value) === option.value}
+						onclick={() => onchange(option.value)}
+					>
+						{option.label}
+					</button>
+				{/each}
+			</div>
+		</div>
+	{:else}
+		<div class="mist-editor-field">
+			<span id="mist-select-label-{label}">{label}</span>
+			<MistSelect
+				id="mist-select-{label}"
+				ariaLabel={label}
+				value={String(value)}
+				options={selectOptions}
+				{onchange}
+			/>
+		</div>
+	{/if}
 {/snippet}
 
 {#snippet rangeRow(
@@ -795,46 +863,17 @@
 				</button>
 			{/each}
 		</div>
-		{@render selectRow(
-			copy('背景类型', 'Background type'),
-			currentBackground.kind,
-			[
-				{ value: 'gradient', label: copy('渐变', 'Gradient') },
-				{ value: 'local-image', label: copy('本地图片', 'Local image') }
-			],
-			(value) => {
-				if (value === 'gradient') {
-					setBackground({
-						kind: 'gradient',
-						gradient:
-							currentBackground.kind === 'gradient'
-								? currentBackground.gradient
-								: (draft.preset as GradientId),
-						mask: currentBackground.mask,
-						blur: currentBackground.blur
-					});
-					const previewUrl = previewUrls[editorMode];
-					if (previewUrl) URL.revokeObjectURL(previewUrl);
-					delete previewUrls[editorMode];
-					appearancePreviewWallpaperUrl.set(null);
-				} else if (value === 'local-image') {
-					// Prefer re-activating the most recent library image; otherwise show the
-					// empty library (with an Add tile) so the branch actually renders.
-					const fallback = library[0];
-					if (fallback) {
-						void selectLibraryImage(fallback.id);
-					} else if (currentBackground.kind !== 'local-image') {
-						setBackground({
-							kind: 'local-image',
-							assetId: '',
-							focus: { portrait: 0.5, landscape: 0.5 },
-							mask: currentBackground.mask,
-							blur: currentBackground.blur
-						});
-					}
-				}
-			}
-		)}
+		<div class="mist-background-types" role="group" aria-label={copy('背景类型', 'Background type')}>
+			{#each ['gradient', 'local-image'] as const as kind}
+				<button type="button" aria-pressed={currentBackground.kind === kind}
+					data-active={currentBackground.kind === kind} onclick={() => setBackgroundKind(kind)}>
+					<span class="mist-background-types__icon" aria-hidden="true">{kind === 'gradient' ? '◐' : '▧'}</span>
+					<span><strong>{kind === 'gradient' ? copy('渐变背景', 'Gradient') : copy('本地图片', 'Local image')}</strong>
+					<small>{kind === 'gradient' ? copy('柔和配色，无需图片', 'Soft color, no image needed') : copy('从图库选择或添加图片', 'Choose or add a wallpaper')}</small></span>
+					<span class="mist-background-types__check" aria-hidden="true">{currentBackground.kind === kind ? '✓' : ''}</span>
+				</button>
+			{/each}
+		</div>
 		<input
 			bind:this={fileInput}
 			type="file"
@@ -848,7 +887,7 @@
 			{@render selectRow(
 				copy('渐变样式', 'Gradient'),
 				currentBackground.gradient,
-				GRADIENT_IDS.map((id) => ({ value: id, label: id })),
+				GRADIENT_IDS.map((id) => ({ value: id, label: gradientLabel(id) })),
 				(value) => setBackground({ ...currentBackground, gradient: value as GradientId })
 			)}
 		{:else}
@@ -1488,6 +1527,15 @@
 {/if}
 
 <style>
+	.mist-background-types { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:16px 0; }
+	.mist-background-types button { display:flex; align-items:center; gap:10px; padding:14px 12px; border:1px solid var(--mist-border); border-radius:14px; text-align:start; min-width:0; background:rgb(var(--mist-surface-rgb) / .14); }
+	.mist-background-types button[data-active='true'] { border-color:var(--mist-accent); background:var(--mist-highlight); box-shadow:inset 0 0 0 1px var(--mist-accent); }
+	.mist-background-types strong { display:block; font-size:13px; color:var(--mist-ink); }
+	.mist-background-types small { display:block; margin-top:4px; font-size:11px; color:var(--mist-muted); }
+	.mist-background-types__icon { font-size:25px; color:var(--mist-accent); }
+	.mist-background-types__check { margin-inline-start:auto; color:var(--mist-accent); }
+	@media(max-width:400px) { .mist-background-types button { padding:12px 9px; gap:7px; } .mist-background-types small { font-size:10px; } }
+
 	.mist-editor-status {
 		position: sticky;
 		top: 0;
@@ -1853,6 +1901,24 @@
 		background: rgb(var(--mist-surface-rgb) / 0.35);
 		color: var(--mist-ink);
 		box-shadow: 0 1px 5px var(--mist-shadow);
+	}
+	/* Inline variant used inside label rows in place of a native <select>. */
+	.mist-editor-field--segmented .mist-editor-segmented {
+		margin-top: 0;
+	}
+	.mist-editor-segmented--inline {
+		flex: 0 1 auto;
+		min-width: 0;
+		max-width: 62%;
+	}
+	.mist-editor-segmented--inline button {
+		min-height: 30px;
+		padding: 0 10px;
+		white-space: nowrap;
+	}
+	.mist-editor-segmented--inline button[role='radio']:focus-visible {
+		outline: 2px solid var(--mist-accent);
+		outline-offset: 1px;
 	}
 
 	.mist-editor-subhead,
