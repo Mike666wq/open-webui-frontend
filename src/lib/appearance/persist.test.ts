@@ -7,8 +7,7 @@ const localImageSettings = (assetId: string): AppearanceSettings => {
 	settings.modes.light.background = {
 		kind: 'local-image',
 		assetId,
-		focusX: 50,
-		focusY: 50,
+		crop: { x: 0, y: 0, width: 1, height: 1 },
 		scale: 100,
 		mask: 22,
 		blur: 8
@@ -55,7 +54,7 @@ describe('appearance persistence', () => {
 		expect(deleteAsset).toHaveBeenCalledWith('new');
 	});
 
-	it('commits the new asset and recycles the unreferenced old asset', async () => {
+	it('commits the new asset and keeps library images for reuse', async () => {
 		const deleteAsset = vi.fn().mockResolvedValue(undefined);
 		const result = await persistAppearanceChange({
 			origin: 'https://example.test',
@@ -67,6 +66,6 @@ describe('appearance persistence', () => {
 			deleteAsset
 		});
 		expect(result.modes.light.background).toMatchObject({ assetId: 'new' });
-		expect(deleteAsset).toHaveBeenCalledWith('old');
+		expect(deleteAsset).not.toHaveBeenCalledWith('old');
 	});
 });

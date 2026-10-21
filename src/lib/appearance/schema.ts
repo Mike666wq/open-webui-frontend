@@ -42,8 +42,8 @@ export type ModeColors = {
 export type LocalImageBackground = {
 	kind: 'local-image';
 	assetId: string;
-	focusX: number;
-	focusY: number;
+	/** Normalised crop rectangle (0-1) of the source image that fills the viewport. */
+	crop: { x: number; y: number; width: number; height: number };
 	scale: number;
 	mask: number;
 	blur: number;
@@ -137,6 +137,45 @@ const clampNumber = (value: unknown, fallback: number, min: number, max: number)
 
 const isRecord = (value: unknown): value is UnknownRecord =>
 	typeof value === 'object' && value !== null && !Array.isArray(value);
+
+export const DEFAULT_CROP = { x: 0, y: 0, width: 1, height: 1 } as const;
+
+/**
+ * Normalise a crop rectangle into a clamped 0-1 box with a usable minimum size.
+ * Falls back to the previous focusX/focusY + scale model when no explicit crop
+ * is present (migrating pre-crop settings), and finally to the full image.
+ */
+const normalizeCrop = (
+	value: unknown,
+	legacySource?: UnknownRecord
+): { x: number; y: number; width: number; height: number } => {
+	const MIN = 0.05;
+	if (isRecord(value)) {
+		const width = clampNumber(value.width, 1, MIN, 1);
+		const height = clampNumber(value.height, 1, MIN, 1);
+		return {
+			x: clampNumber(value.x, 0, 0, 1 - width),
+			y: clampNumber(value.y, 0, 0, 1 - height),
+			width,
+			height
+		};
+	}
+	if (legacySource && (legacySource.focusX !== undefined || legacySource.focusY !== undefined)) {
+		// Approximate the old cover+focus framing as a centred crop rectangle.
+		const scale = clampNumber(legacySource.scale, 100, 100, 300) / 100;
+		const width = Math.min(1, 1 / scale);
+		const height = Math.min(1, 1 / scale);
+		const focusX = clampNumber(legacySource.focusX, 50, 0, 100) / 100;
+		const focusY = clampNumber(legacySource.focusY, 50, 0, 100) / 100;
+		return {
+			x: Math.min(1 - width, Math.max(0, focusX - width / 2)),
+			y: Math.min(1 - height, Math.max(0, focusY - height / 2)),
+			width,
+			height
+		};
+	}
+	return { ...DEFAULT_CROP };
+};
 
 const stringEnum = <T extends string>(
 	value: unknown,
@@ -355,8 +394,7 @@ const normalizeBackground = (
 			return {
 				kind: 'local-image',
 				assetId,
-				focusX: clampNumber(source.focusX ?? source.cropX, 50, 0, 100),
-				focusY: clampNumber(source.focusY ?? source.cropY, 50, 0, 100),
+				crop: normalizeCrop(source.crop, source),
 				scale: clampNumber(source.scale, 100, 100, 300),
 				mask: clampNumber(source.mask, fallback.mask, 0, 80),
 				blur: clampNumber(source.blur, fallback.blur, 0, 30)

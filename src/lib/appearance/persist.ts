@@ -38,13 +38,9 @@ export async function persistAppearanceChange({
 				.filter((background) => background.kind === 'local-image')
 				.map((background) => background.assetId)
 		);
-		const obsolete = [previous.modes.light.background, previous.modes.dark.background]
-			.filter(
-				(background): background is Extract<typeof background, { kind: 'local-image' }> =>
-					background.kind === 'local-image' && !referenced.has(background.assetId)
-			)
-			.map((background) => background.assetId);
-		await Promise.allSettled(obsolete.map((assetId) => deleteAsset(assetId)));
+		// With a multi-image library, images that are no longer the active
+		// background stay in the library for reuse; they are only removed via an
+		// explicit delete in the editor, not as a side effect of switching.
 		return saved;
 	} catch (error) {
 		await Promise.allSettled(writtenAssets.map((assetId) => deleteAsset(assetId)));

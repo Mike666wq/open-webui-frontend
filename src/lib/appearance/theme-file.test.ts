@@ -6,8 +6,7 @@ const current = structuredClone(DEFAULT_APPEARANCE);
 current.modes.light.background = {
 	kind: 'local-image',
 	assetId: 'private-wallpaper',
-	focusX: 20,
-	focusY: 70,
+	crop: { x: 0.1, y: 0.2, width: 0.7, height: 0.6 },
 	scale: 130,
 	mask: 41,
 	blur: 9

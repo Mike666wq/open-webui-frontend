@@ -46,12 +46,17 @@ describe('appearance schema v3', () => {
 
 		expect(settings.version).toBe(3);
 		expect(settings.enabled).toBe(false);
-		expect(settings.modes.light.background).toMatchObject({
-			kind: 'local-image',
-			assetId: 'old-wallpaper',
-			focusY: 64,
-			scale: 135
-		});
+		const lightBackground = settings.modes.light.background;
+		expect(lightBackground.kind).toBe('local-image');
+		if (lightBackground.kind === 'local-image') {
+			expect(lightBackground.assetId).toBe('old-wallpaper');
+			expect(lightBackground.scale).toBe(135);
+			// Migrated from legacy focus into a normalised crop rectangle.
+			expect(lightBackground.crop.width).toBeGreaterThan(0);
+			expect(lightBackground.crop.width).toBeLessThanOrEqual(1);
+			expect(lightBackground.crop.y).toBeGreaterThanOrEqual(0);
+			expect(lightBackground.crop.y + lightBackground.crop.height).toBeLessThanOrEqual(1);
+		}
 		expect(settings.modes.dark.background.kind).toBe('local-image');
 		expect(settings.components.userMessage).toEqual({
 			opacity: 66,
@@ -65,6 +70,32 @@ describe('appearance schema v3', () => {
 		});
 		expect(settings.reading.codeTone).toBe('solid');
 		expect(settings.layout.userMessage.alignment).toBe('right');
+	});
+
+	it('normalises and clamps an explicit crop rectangle', () => {
+		const settings = normalizeAppearance({
+			modes: {
+				light: {
+					background: {
+						kind: 'local-image',
+						assetId: 'img',
+						crop: { x: 0.9, y: -0.2, width: 1.4, height: 0.5 },
+						scale: 100,
+						mask: 22,
+						blur: 8
+					}
+				}
+			}
+		});
+		const background = settings.modes.light.background;
+		expect(background.kind).toBe('local-image');
+		if (background.kind === 'local-image') {
+			expect(background.crop.width).toBeLessThanOrEqual(1);
+			expect(background.crop.height).toBe(0.5);
+			expect(background.crop.x).toBeGreaterThanOrEqual(0);
+			expect(background.crop.x + background.crop.width).toBeLessThanOrEqual(1);
+			expect(background.crop.y).toBe(0);
+		}
 	});
 
 	it('clamps values at every numeric boundary', () => {

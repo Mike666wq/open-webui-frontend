@@ -13,6 +13,7 @@
 		compact?: boolean;
 		pagePreview?: boolean;
 		belowTopbar?: boolean;
+		hidden?: boolean;
 		onclose: () => void;
 		children?: Snippet;
 		footer?: Snippet;
@@ -27,6 +28,7 @@
 		compact = false,
 		pagePreview = false,
 		belowTopbar = false,
+		hidden = false,
 		onclose,
 		children,
 		footer,
@@ -92,6 +94,7 @@
 {#if open}
 	<div
 		use:portal
+		class:mist-modal--hidden={hidden}
 		class:mist-modal--preview={preview}
 		class:mist-modal--compact={compact}
 		class:mist-modal--page-preview={pagePreview}

@@ -8,6 +8,11 @@ type StoredWallpaper = {
 	createdAt: number;
 };
 
+export type WallpaperMeta = {
+	id: string;
+	createdAt: number;
+};
+
 let databasePromise: Promise<IDBDatabase> | null = null;
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -65,6 +70,20 @@ export async function deleteWallpaperAsset(assetId: string): Promise<void> {
 	const transaction = database.transaction(STORE_NAME, 'readwrite');
 	transaction.objectStore(STORE_NAME).delete(assetId);
 	await transactionComplete(transaction);
+}
+
+export async function listWallpaperAssets(): Promise<WallpaperMeta[]> {
+	const database = await openDatabase();
+	const transaction = database.transaction(STORE_NAME, 'readonly');
+	const request = transaction.objectStore(STORE_NAME).getAll();
+	const result = await new Promise<StoredWallpaper[]>((resolve, reject) => {
+		request.onsuccess = () => resolve((request.result as StoredWallpaper[]) ?? []);
+		request.onerror = () => reject(request.error ?? new Error('Unable to list wallpapers'));
+	});
+	await transactionComplete(transaction);
+	return result
+		.map((item) => ({ id: item.id, createdAt: item.createdAt }))
+		.sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export async function pruneWallpaperAssets(referencedIds: Iterable<string>): Promise<void> {
