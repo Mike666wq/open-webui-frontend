@@ -148,6 +148,7 @@
 
 	onDestroy(() => {
 		cleanupPreviewUrls();
+		for (const item of library) URL.revokeObjectURL(item.url);
 		endAppearancePreview();
 	});
 
@@ -337,11 +338,10 @@
 	function activateWallpaper(assetId: string, blob: Blob | null) {
 		previewGeneration += 1;
 		const previousUrl = previewUrls[editorMode];
-		if (previousUrl && !library.some((item) => item.url === previousUrl)) {
-			URL.revokeObjectURL(previousUrl);
-		}
-		const libraryUrl = library.find((item) => item.id === assetId)?.url ?? null;
-		const objectUrl = libraryUrl ?? (blob ? URL.createObjectURL(blob) : null);
+		if (previousUrl) URL.revokeObjectURL(previousUrl);
+		// The editor preview owns its URL. Library cards must remain valid after
+		// Apply/Cancel releases that preview and the editor is opened again.
+		const objectUrl = blob ? URL.createObjectURL(blob) : null;
 		if (!objectUrl) return;
 		previewUrls[editorMode] = objectUrl;
 		appearancePreviewWallpaperUrl.set(objectUrl);
