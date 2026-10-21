@@ -15,6 +15,7 @@ export const uploadFile = async (
 	}
 
 	const searchParams = new URLSearchParams();
+	searchParams.append('managed_temporary', 'true');
 	if (process !== undefined && process !== null) {
 		searchParams.append('process', String(process));
 	}
