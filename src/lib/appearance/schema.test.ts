@@ -44,18 +44,20 @@ describe('appearance schema v3', () => {
 			}
 		});
 
-		expect(settings.version).toBe(3);
+		expect(settings.version).toBe(4);
 		expect(settings.enabled).toBe(false);
 		const lightBackground = settings.modes.light.background;
 		expect(lightBackground.kind).toBe('local-image');
 		if (lightBackground.kind === 'local-image') {
 			expect(lightBackground.assetId).toBe('old-wallpaper');
-			expect(lightBackground.scale).toBe(135);
-			// Migrated from legacy focus into a normalised crop rectangle.
-			expect(lightBackground.crop.width).toBeGreaterThan(0);
-			expect(lightBackground.crop.width).toBeLessThanOrEqual(1);
-			expect(lightBackground.crop.y).toBeGreaterThanOrEqual(0);
-			expect(lightBackground.crop.y + lightBackground.crop.height).toBeLessThanOrEqual(1);
+			// Migrated from legacy focus into a per-orientation crop pair.
+			expect(lightBackground.crop.portrait.width).toBeGreaterThan(0);
+			expect(lightBackground.crop.portrait.width).toBeLessThanOrEqual(1);
+			expect(lightBackground.crop.portrait.y).toBeGreaterThanOrEqual(0);
+			expect(
+				lightBackground.crop.portrait.y + lightBackground.crop.portrait.height
+			).toBeLessThanOrEqual(1);
+			expect(lightBackground.crop.landscape).toEqual({ x: 0, y: 0, width: 1, height: 1 });
 		}
 		expect(settings.modes.dark.background.kind).toBe('local-image');
 		expect(settings.components.userMessage).toEqual({
@@ -90,11 +92,13 @@ describe('appearance schema v3', () => {
 		const background = settings.modes.light.background;
 		expect(background.kind).toBe('local-image');
 		if (background.kind === 'local-image') {
-			expect(background.crop.width).toBeLessThanOrEqual(1);
-			expect(background.crop.height).toBe(0.5);
-			expect(background.crop.x).toBeGreaterThanOrEqual(0);
-			expect(background.crop.x + background.crop.width).toBeLessThanOrEqual(1);
-			expect(background.crop.y).toBe(0);
+			expect(background.crop.portrait.width).toBeLessThanOrEqual(1);
+			expect(background.crop.portrait.height).toBe(0.5);
+			expect(background.crop.portrait.x).toBeGreaterThanOrEqual(0);
+			expect(
+				background.crop.portrait.x + background.crop.portrait.width
+			).toBeLessThanOrEqual(1);
+			expect(background.crop.portrait.y).toBe(0);
 		}
 	});
 

@@ -5,7 +5,7 @@
 		effectiveAppearance,
 		resolvedAppearanceTheme
 	} from '$lib/appearance/state';
-	import type { AppearanceSettings } from '$lib/appearance/schema';
+	import type { AppearanceSettings, CropRect } from '$lib/appearance/schema';
 
 	type Props = {
 		variant?: 'gradient' | 'wallpaper';
@@ -19,27 +19,50 @@
 		wallpaperUrl = $activeWallpaperUrl
 	}: Props = $props();
 
+	// Track the live viewport orientation so the correct per-orientation crop
+	// rectangle is used and the background re-fits without a reload.
+	let viewportW = $state(0);
+	let viewportH = $state(0);
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const update = () => {
+			viewportW = window.visualViewport?.width ?? window.innerWidth;
+			viewportH = window.visualViewport?.height ?? window.innerHeight;
+		};
+		update();
+		window.addEventListener('resize', update);
+		window.addEventListener('orientationchange', update);
+		return () => {
+			window.removeEventListener('resize', update);
+			window.removeEventListener('orientationchange', update);
+		};
+	});
+	const isPortrait = $derived(viewportH >= viewportW);
+
+	function pickCrop(crop: { portrait: CropRect; landscape: CropRect }): CropRect {
+		return isPortrait ? crop.portrait : crop.landscape;
+	}
+
 	const mode = $derived(settings.modes[$resolvedAppearanceTheme]);
 	const imageBackground = $derived(mode.background.kind === 'local-image');
 	const backdropStyle = $derived.by(() => {
 		if (mode.background.kind === 'local-image' && wallpaperUrl) {
 			const backgroundImage = `url("${wallpaperUrl.replaceAll('"', '%22')}")`;
-			const crop = mode.background.crop;
-			// Scale the image so the crop rectangle covers the viewport, then
-			// position it to the crop origin. Width/height are in image-relative
-			// percentages so the selected region exactly fills the layer.
-			const size = `${(100 / crop.width).toFixed(3)}% ${(100 / crop.height).toFixed(3)}%`;
-			const posX = crop.width >= 1 ? 0 : (crop.x / (1 - crop.width)) * 100;
-			const posY = crop.height >= 1 ? 0 : (crop.y / (1 - crop.height)) * 100;
+			const crop = pickCrop(mode.background.crop);
+			// Fit the crop rectangle to the viewport with a single cover scale on
+			// the longer axis, then centre it. The crop rectangle matches the
+			// viewport aspect ratio (the editor frames with the screen's aspect),
+			// so the selected region fills the screen edge-to-edge with no
+			// distortion and nothing important is cut off.
+			const size = `${(100 / crop.width).toFixed(3)}% auto`;
+			const posX = crop.width >= 1 ? 50 : (crop.x / (1 - crop.width)) * 100;
+			const posY = crop.height >= 1 ? 50 : (crop.y / (1 - crop.height)) * 100;
 			const position = `${posX.toFixed(3)}% ${posY.toFixed(3)}%`;
-			const scale = Math.max(1.0, mode.background.scale / 100);
 			return [
 				`background-image: ${backgroundImage}`,
 				`background-size: ${size}`,
 				`background-position: ${position}`,
 				'background-repeat: no-repeat',
-				`transform-origin: ${position}`,
-				`transform: scale(${scale.toFixed(4)})`,
 				`filter: blur(${mode.background.blur}px)`
 			].join(';');
 		}

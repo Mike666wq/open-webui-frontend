@@ -39,6 +39,7 @@
 		type SurfaceSlot
 	} from '$lib/appearance';
 	import { GRADIENT_IDS } from '$lib/appearance/schema';
+	import type { CropRect } from '$lib/appearance/schema';
 
 	type Props = {
 		open: boolean;
@@ -65,9 +66,46 @@
 	let initializedOpen = false;
 	let previewGeneration = 0;
 	let collapsed = $state(false);
+	let fullscreenFraming = $state(false);
+
+	// Track the live viewport so the crop frame matches the actual screen shape.
+	let viewportW = $state(0);
+	let viewportH = $state(0);
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const update = () => {
+			viewportW = window.visualViewport?.width ?? window.innerWidth;
+			viewportH = window.visualViewport?.height ?? window.innerHeight;
+		};
+		update();
+		window.addEventListener('resize', update);
+		window.addEventListener('orientationchange', update);
+		return () => {
+			window.removeEventListener('resize', update);
+			window.removeEventListener('orientationchange', update);
+		};
+	});
+	const screenAspect = $derived(
+		viewportW > 0 && viewportH > 0 ? viewportW / viewportH : 9 / 19.5
+	);
+	const isPortraitViewport = $derived(viewportH >= viewportW);
 
 	const currentMode = $derived(draft.modes[editorMode]);
 	const currentBackground = $derived(currentMode.background);
+	const DEFAULT_RECT: CropRect = { x: 0, y: 0, width: 1, height: 1 };
+	const orientationKey = $derived(isPortraitViewport ? 'portrait' : 'landscape');
+	const activeCrop = $derived(
+		currentBackground.kind === 'local-image'
+			? (currentBackground.crop[orientationKey] ?? DEFAULT_RECT)
+			: DEFAULT_RECT
+	);
+	function setActiveCrop(rect: CropRect) {
+		if (currentBackground.kind !== 'local-image') return;
+		setBackground({
+			...currentBackground,
+			crop: { ...currentBackground.crop, [orientationKey]: rect }
+		});
+	}
 	const previewWallpaperUrl = $derived(
 		currentBackground.kind === 'local-image'
 			? (library.find((item) => item.id === currentBackground.assetId)?.url ??
@@ -308,8 +346,10 @@
 		setBackground({
 			kind: 'local-image',
 			assetId,
-			crop: background?.crop ?? { x: 0, y: 0, width: 1, height: 1 },
-			scale: background?.scale ?? 100,
+			crop: background?.crop ?? {
+				portrait: { ...DEFAULT_RECT },
+				landscape: { ...DEFAULT_RECT }
+			},
 			mask: currentBackground.mask,
 			blur: currentBackground.blur
 		});
@@ -787,8 +827,10 @@
 						setBackground({
 							kind: 'local-image',
 							assetId: '',
-							crop: { x: 0, y: 0, width: 1, height: 1 },
-							scale: 100,
+							crop: {
+								portrait: { ...DEFAULT_RECT },
+								landscape: { ...DEFAULT_RECT }
+							},
 							mask: currentBackground.mask,
 							blur: currentBackground.blur
 						});
@@ -855,12 +897,24 @@
 					previewUrls[editorMode] ??
 					null}
 				{#if activeUrl}
-					<p class="mist-editor-mode-label">{copy('拖动取景', 'Frame the region')}</p>
+					<p class="mist-editor-mode-label">
+						{copy('取景（随当前屏幕比例）', 'Frame (matches your screen)')}
+					</p>
 					<CropEditor
 						imageUrl={activeUrl}
-						crop={currentBackground.crop}
-						onchange={(crop) => setBackground({ ...currentBackground, crop })}
+						crop={activeCrop}
+						aspectRatio={screenAspect}
+						onchange={setActiveCrop}
 					/>
+					<div class="mist-editor-image-actions">
+						<button
+							type="button"
+							class="mist-button mist-button--primary"
+							onclick={() => (fullscreenFraming = true)}
+						>
+							{copy('全屏取景', 'Frame full screen')}
+						</button>
+					</div>
 				{/if}
 			{/if}
 			<div class="mist-editor-image-actions">
@@ -868,15 +922,6 @@
 					{copy('从图片取色', 'Sample colors')}
 				</button>
 			</div>
-			{@render rangeRow(
-				copy('缩放', 'Scale'),
-				Math.round(currentBackground.scale),
-				100,
-				300,
-				5,
-				'%',
-				(value) => setBackground({ ...currentBackground, scale: value })
-			)}
 		{/if}
 		{@render rangeRow(
 			copy('遮罩', 'Mask'),
@@ -891,7 +936,7 @@
 			copy('静态模糊', 'Static blur'),
 			Math.round(currentBackground.blur),
 			0,
-			30,
+			16,
 			1,
 			'px',
 			(value) => setBackground({ ...currentBackground, blur: value })
@@ -1376,6 +1421,73 @@
 	>
 		<span aria-hidden="true">🎨</span>
 	</button>
+{/if}
+
+{#if open && fullscreenFraming && currentBackground.kind === 'local-image'}
+	{@const frameUrl =
+		library.find((item) => item.id === currentBackground.assetId)?.url ??
+		previewUrls[editorMode] ??
+		null}
+	{#if frameUrl}
+		<div class="mist-framing" role="dialog" aria-label={copy('全屏取景', 'Full-screen framing')}>
+			<div class="mist-framing__stage">
+				<CropEditor
+					imageUrl={frameUrl}
+					crop={activeCrop}
+					aspectRatio={screenAspect}
+					onchange={setActiveCrop}
+				/>
+			</div>
+			<div class="mist-framing__controls">
+				<label class="mist-framing__slider">
+					<span>{copy('遮罩', 'Mask')} {Math.round(currentBackground.mask)}%</span>
+					<input
+						type="range"
+						min="0"
+						max="80"
+						step="1"
+						value={currentBackground.mask}
+						oninput={(e) =>
+							setBackground({
+								...currentBackground,
+								mask: Number((e.currentTarget as HTMLInputElement).value)
+							})}
+					/>
+				</label>
+				<label class="mist-framing__slider">
+					<span>{copy('模糊', 'Blur')} {Math.round(currentBackground.blur)}px</span>
+					<input
+						type="range"
+						min="0"
+						max="16"
+						step="1"
+						value={currentBackground.blur}
+						oninput={(e) =>
+							setBackground({
+								...currentBackground,
+								blur: Number((e.currentTarget as HTMLInputElement).value)
+							})}
+					/>
+				</label>
+				<div class="mist-framing__actions">
+					<button
+						type="button"
+						class="mist-button mist-button--ghost"
+						onclick={() => (fullscreenFraming = false)}
+					>
+						{copy('取消', 'Cancel')}
+					</button>
+					<button
+						type="button"
+						class="mist-button mist-button--primary"
+						onclick={() => (fullscreenFraming = false)}
+					>
+						{copy('完成', 'Done')}
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 {/if}
 
 <style>

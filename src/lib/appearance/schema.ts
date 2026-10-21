@@ -1,4 +1,4 @@
-export const APPEARANCE_SCHEMA_VERSION = 3 as const;
+export const APPEARANCE_SCHEMA_VERSION = 4 as const;
 
 export const APPEARANCE_PRESET_IDS = [
 	'mist-blue',
@@ -39,12 +39,18 @@ export type ModeColors = {
 	borderStrength: number;
 };
 
+export type CropRect = { x: number; y: number; width: number; height: number };
+
 export type LocalImageBackground = {
 	kind: 'local-image';
 	assetId: string;
-	/** Normalised crop rectangle (0-1) of the source image that fills the viewport. */
-	crop: { x: number; y: number; width: number; height: number };
-	scale: number;
+	/**
+	 * Normalised crop rectangles (0-1) of the source image, remembered per
+	 * viewport orientation so portrait and landscape each fill the screen
+	 * without distortion. The crop rectangle IS the zoom: a smaller region
+	 * shows a closer view.
+	 */
+	crop: { portrait: CropRect; landscape: CropRect };
 	mask: number;
 	blur: number;
 };
@@ -140,15 +146,16 @@ const isRecord = (value: unknown): value is UnknownRecord =>
 
 export const DEFAULT_CROP = { x: 0, y: 0, width: 1, height: 1 } as const;
 
+export const DEFAULT_CROP_PAIR: { portrait: CropRect; landscape: CropRect } = {
+	portrait: { ...DEFAULT_CROP },
+	landscape: { ...DEFAULT_CROP }
+};
+
 /**
- * Normalise a crop rectangle into a clamped 0-1 box with a usable minimum size.
- * Falls back to the previous focusX/focusY + scale model when no explicit crop
- * is present (migrating pre-crop settings), and finally to the full image.
+ * Normalise a single crop rectangle into a clamped 0-1 box with a usable
+ * minimum size.
  */
-const normalizeCrop = (
-	value: unknown,
-	legacySource?: UnknownRecord
-): { x: number; y: number; width: number; height: number } => {
+const normalizeCropRect = (value: unknown): CropRect => {
 	const MIN = 0.05;
 	if (isRecord(value)) {
 		const width = clampNumber(value.width, 1, MIN, 1);
@@ -160,21 +167,51 @@ const normalizeCrop = (
 			height
 		};
 	}
-	if (legacySource && (legacySource.focusX !== undefined || legacySource.focusY !== undefined)) {
+	return { ...DEFAULT_CROP };
+};
+
+/**
+ * Normalise the per-orientation crop pair. Migrates earlier shapes:
+ * a single `crop` rectangle (v3), or the legacy focusX/focusY + scale model
+ * (pre-crop). The single/legacy rect becomes the portrait framing and the
+ * landscape starts from a centred full-frame default.
+ */
+const normalizeCrop = (
+	value: unknown,
+	legacySource?: UnknownRecord
+): { portrait: CropRect; landscape: CropRect } => {
+	if (isRecord(value) && (isRecord(value.portrait) || isRecord(value.landscape))) {
+		return {
+			portrait: normalizeCropRect(value.portrait),
+			landscape: isRecord(value.landscape)
+				? normalizeCropRect(value.landscape)
+				: { ...DEFAULT_CROP }
+		};
+	}
+	let single: CropRect | null = null;
+	if (isRecord(value) && (value.width !== undefined || value.x !== undefined)) {
+		single = normalizeCropRect(value);
+	} else if (
+		legacySource &&
+		(legacySource.focusX !== undefined || legacySource.focusY !== undefined)
+	) {
 		// Approximate the old cover+focus framing as a centred crop rectangle.
 		const scale = clampNumber(legacySource.scale, 100, 100, 300) / 100;
 		const width = Math.min(1, 1 / scale);
 		const height = Math.min(1, 1 / scale);
 		const focusX = clampNumber(legacySource.focusX, 50, 0, 100) / 100;
 		const focusY = clampNumber(legacySource.focusY, 50, 0, 100) / 100;
-		return {
+		single = {
 			x: Math.min(1 - width, Math.max(0, focusX - width / 2)),
 			y: Math.min(1 - height, Math.max(0, focusY - height / 2)),
 			width,
 			height
 		};
 	}
-	return { ...DEFAULT_CROP };
+	return {
+		portrait: single ?? { ...DEFAULT_CROP },
+		landscape: { ...DEFAULT_CROP }
+	};
 };
 
 const stringEnum = <T extends string>(
@@ -395,9 +432,8 @@ const normalizeBackground = (
 				kind: 'local-image',
 				assetId,
 				crop: normalizeCrop(source.crop, source),
-				scale: clampNumber(source.scale, 100, 100, 300),
 				mask: clampNumber(source.mask, fallback.mask, 0, 80),
-				blur: clampNumber(source.blur, fallback.blur, 0, 30)
+				blur: clampNumber(source.blur, fallback.blur, 0, 16)
 			};
 		}
 	}
@@ -419,7 +455,7 @@ const normalizeBackground = (
 			kind: 'gradient',
 			gradient: stringEnum(gradient, GRADIENT_IDS, fallbackGradient),
 			mask: clampNumber(source.mask, fallback.mask, 0, 80),
-			blur: clampNumber(source.blur, fallback.blur, 0, 30)
+			blur: clampNumber(source.blur, fallback.blur, 0, 16)
 		};
 	}
 

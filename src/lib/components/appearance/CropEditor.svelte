@@ -4,30 +4,43 @@
 	type Props = {
 		imageUrl: string;
 		crop: Crop;
+		/** Aspect ratio (width / height) the crop region must keep: the screen's. */
 		aspectRatio?: number;
 		onchange: (crop: Crop) => void;
 	};
 
-	let { imageUrl, crop, aspectRatio = 16 / 9, onchange }: Props = $props();
+	let { imageUrl, crop, aspectRatio, onchange }: Props = $props();
 
 	let frame: HTMLDivElement | null = $state(null);
 	let naturalWidth = $state(0);
 	let naturalHeight = $state(0);
 
-	// Derived displayed image scale/offset so the crop rect maps onto the frame.
-	const layout = $derived.by(() => {
-		if (!naturalWidth || !naturalHeight) return null;
-		const imageAspect = naturalWidth / naturalHeight;
-		// Fit the image inside the frame (contain) to define the base coordinate space.
-		let baseW = 100;
-		let baseH = 100;
-		if (imageAspect > aspectRatio) baseH = 100 / (imageAspect / aspectRatio);
-		else baseW = 100 * (imageAspect / aspectRatio);
-		return { baseW, baseH };
-	});
+	// The frame shows the full image (letterboxed). Crop coordinates are in
+	// image-relative 0-1 space; the frame's own box matches the image's box.
+	const frameAspect = $derived(
+		naturalWidth > 0 && naturalHeight > 0 ? naturalWidth / naturalHeight : null
+	);
 
 	function clamp(value: number, min: number, max: number) {
 		return Math.min(max, Math.max(min, value));
+	}
+
+	// Keep the crop rectangle at the screen's aspect ratio. Resizing one axis
+	// adjusts the other so the framed region always matches the screen shape.
+	function lockAspect(next: Crop, anchor: 'width' | 'height'): Crop {
+		if (!aspectRatio || !naturalWidth || !naturalHeight) return next;
+		const imageAspect = naturalWidth / naturalHeight;
+		// crop aspect in image pixels = (width * imageW) / (height * imageH)
+		// we want it to equal the screen aspectRatio.
+		let { width, height } = next;
+		if (anchor === 'width') {
+			height = clamp((width * imageAspect) / aspectRatio, 0.05, 1);
+			width = clamp((height * aspectRatio) / imageAspect, 0.05, 1);
+		} else {
+			width = clamp((height * aspectRatio) / imageAspect, 0.05, 1);
+			height = clamp((width * imageAspect) / aspectRatio, 0.05, 1);
+		}
+		return { ...next, width, height };
 	}
 
 	function commit(next: Crop) {
@@ -121,9 +134,11 @@
 				const origin = pinchStart.crop;
 				const centerX = origin.x + origin.width / 2;
 				const centerY = origin.y + origin.height / 2;
-				const width = clamp(origin.width * factor, 0.05, 1);
-				const height = clamp(origin.height * factor, 0.05, 1);
-				commit({ width, height, x: centerX - width / 2, y: centerY - height / 2 });
+				const sized = lockAspect(
+					{ ...origin, width: clamp(origin.width * factor, 0.05, 1) },
+					'width'
+				);
+				commit({ ...sized, x: centerX - sized.width / 2, y: centerY - sized.height / 2 });
 			}
 			return;
 		}
@@ -147,7 +162,8 @@
 				y = origin.y + dy;
 				height = origin.height - dy;
 			}
-			commit({ x, y, width, height });
+			const anchor = drag.corner.includes('e') || drag.corner.includes('w') ? 'width' : 'height';
+			commit(lockAspect({ x, y, width, height }, anchor));
 		}
 	}
 
@@ -162,9 +178,8 @@
 		const factor = event.deltaY > 0 ? 1.06 : 1 / 1.06;
 		const centerX = crop.x + crop.width / 2;
 		const centerY = crop.y + crop.height / 2;
-		const width = clamp(crop.width * factor, 0.05, 1);
-		const height = clamp(crop.height * factor, 0.05, 1);
-		commit({ width, height, x: centerX - width / 2, y: centerY - height / 2 });
+		const sized = lockAspect({ ...crop, width: clamp(crop.width * factor, 0.05, 1) }, 'width');
+		commit({ ...sized, x: centerX - sized.width / 2, y: centerY - sized.height / 2 });
 	}
 
 	const corners = ['nw', 'ne', 'sw', 'se'];
@@ -173,7 +188,7 @@
 <div
 	bind:this={frame}
 	class="crop-editor"
-	style:aspect-ratio={String(aspectRatio)}
+	style:aspect-ratio={frameAspect ? String(frameAspect) : undefined}
 	role="application"
 	aria-label="Crop wallpaper"
 	onpointerdown={onPointerDown}
@@ -192,7 +207,7 @@
 			naturalHeight = img.naturalHeight;
 		}}
 	/>
-	{#if layout}
+	{#if frameAspect}
 		<div
 			class="crop-editor__frame"
 			style:left={`${crop.x * 100}%`}
