@@ -8,8 +8,8 @@ import {
 	withMode
 } from './schema';
 
-describe('appearance schema v3', () => {
-	it('returns a complete v3 default', () => {
+describe('appearance schema v5', () => {
+	it('returns a complete v5 default', () => {
 		const settings = normalizeAppearance(undefined);
 		expect(settings.version).toBe(APPEARANCE_SCHEMA_VERSION);
 		expect(settings.preset).toBe('mist-blue');
@@ -44,20 +44,14 @@ describe('appearance schema v3', () => {
 			}
 		});
 
-		expect(settings.version).toBe(4);
+		expect(settings.version).toBe(5);
 		expect(settings.enabled).toBe(false);
 		const lightBackground = settings.modes.light.background;
 		expect(lightBackground.kind).toBe('local-image');
 		if (lightBackground.kind === 'local-image') {
 			expect(lightBackground.assetId).toBe('old-wallpaper');
-			// Migrated from legacy focus into a per-orientation crop pair.
-			expect(lightBackground.crop.portrait.width).toBeGreaterThan(0);
-			expect(lightBackground.crop.portrait.width).toBeLessThanOrEqual(1);
-			expect(lightBackground.crop.portrait.y).toBeGreaterThanOrEqual(0);
-			expect(
-				lightBackground.crop.portrait.y + lightBackground.crop.portrait.height
-			).toBeLessThanOrEqual(1);
-			expect(lightBackground.crop.landscape).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+			// Settings without any focus data start centred in both orientations.
+			expect(lightBackground.focus).toEqual({ portrait: 0.5, landscape: 0.5 });
 		}
 		expect(settings.modes.dark.background.kind).toBe('local-image');
 		expect(settings.components.userMessage).toEqual({
@@ -74,15 +68,17 @@ describe('appearance schema v3', () => {
 		expect(settings.layout.userMessage.alignment).toBe('right');
 	});
 
-	it('normalises and clamps an explicit crop rectangle', () => {
+	it('migrates a v4 crop pair into horizontal focus', () => {
 		const settings = normalizeAppearance({
 			modes: {
 				light: {
 					background: {
 						kind: 'local-image',
 						assetId: 'img',
-						crop: { x: 0.9, y: -0.2, width: 1.4, height: 0.5 },
-						scale: 100,
+						crop: {
+							portrait: { x: 0.2, y: 0, width: 0.4, height: 0.8 },
+							landscape: { x: 0.1, y: 0, width: 0.2, height: 0.9 }
+						},
 						mask: 22,
 						blur: 8
 					}
@@ -92,13 +88,31 @@ describe('appearance schema v3', () => {
 		const background = settings.modes.light.background;
 		expect(background.kind).toBe('local-image');
 		if (background.kind === 'local-image') {
-			expect(background.crop.portrait.width).toBeLessThanOrEqual(1);
-			expect(background.crop.portrait.height).toBe(0.5);
-			expect(background.crop.portrait.x).toBeGreaterThanOrEqual(0);
-			expect(
-				background.crop.portrait.x + background.crop.portrait.width
-			).toBeLessThanOrEqual(1);
-			expect(background.crop.portrait.y).toBe(0);
+			expect(background.focus.portrait).toBeCloseTo(0.4, 5);
+			expect(background.focus.landscape).toBeCloseTo(0.2, 5);
+		}
+	});
+
+	it('clamps explicit focus values into 0-1', () => {
+		const settings = normalizeAppearance({
+			modes: {
+				light: {
+					background: {
+						kind: 'local-image',
+						assetId: 'img',
+						focus: { portrait: -2, landscape: 3 },
+						mask: 22,
+						blur: 40
+					}
+				}
+			}
+		});
+		const background = settings.modes.light.background;
+		expect(background.kind).toBe('local-image');
+		if (background.kind === 'local-image') {
+			expect(background.focus.portrait).toBe(0);
+			expect(background.focus.landscape).toBe(1);
+			expect(background.blur).toBe(16);
 		}
 	});
 

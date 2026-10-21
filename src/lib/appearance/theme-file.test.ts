@@ -6,10 +6,7 @@ const current = structuredClone(DEFAULT_APPEARANCE);
 current.modes.light.background = {
 	kind: 'local-image',
 	assetId: 'private-wallpaper',
-	crop: {
-		portrait: { x: 0.1, y: 0.2, width: 0.7, height: 0.6 },
-		landscape: { x: 0, y: 0, width: 1, height: 1 }
-	},
+	focus: { portrait: 0.35, landscape: 0.5 },
 	mask: 41,
 	blur: 9
 };
@@ -20,7 +17,7 @@ describe('theme files', () => {
 		const text = serializeThemeFile(current);
 		const parsed = JSON.parse(text);
 		expect(parsed.format).toBe(THEME_FILE_FORMAT);
-		expect(parsed.version).toBe(4);
+		expect(parsed.version).toBe(5);
 		expect(text).not.toContain('private-wallpaper');
 		expect(text).not.toContain('assetId');
 		expect(text).not.toContain('token');

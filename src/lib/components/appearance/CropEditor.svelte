@@ -1,231 +1,149 @@
 <script lang="ts">
-	type Crop = { x: number; y: number; width: number; height: number };
-
 	type Props = {
 		imageUrl: string;
-		crop: Crop;
-		/** Aspect ratio (width / height) the crop region must keep: the screen's. */
-		aspectRatio?: number;
-		onchange: (crop: Crop) => void;
+		/** Horizontal window position across the wallpaper, 0 (left) to 1 (right). */
+		focus: number;
+		/** Screen aspect ratio (width / height) of the preview window. */
+		aspectRatio: number;
+		onchange: (focus: number) => void;
 	};
 
-	let { imageUrl, crop, aspectRatio, onchange }: Props = $props();
+	let { imageUrl, focus, aspectRatio, onchange }: Props = $props();
 
 	let frame: HTMLDivElement | null = $state(null);
+	let frameWidth = $state(0);
 	let naturalWidth = $state(0);
 	let naturalHeight = $state(0);
+	let dragging = false;
+	let dragStartX = 0;
+	let dragStartFocus = 0.5;
+	let liveFocus = $state(0.5);
 
-	// The frame shows the full image (letterboxed). Crop coordinates are in
-	// image-relative 0-1 space; the frame's own box matches the image's box.
-	const frameAspect = $derived(
-		naturalWidth > 0 && naturalHeight > 0 ? naturalWidth / naturalHeight : null
+	$effect(() => {
+		if (!dragging) liveFocus = focus;
+	});
+
+	$effect(() => {
+		naturalWidth = 0;
+		naturalHeight = 0;
+		if (!imageUrl) return;
+
+		let active = true;
+		const image = new Image();
+		image.onload = () => {
+			if (!active || image.naturalWidth <= 0 || image.naturalHeight <= 0) return;
+			naturalWidth = image.naturalWidth;
+			naturalHeight = image.naturalHeight;
+		};
+		image.onerror = () => {
+			if (!active) return;
+			naturalWidth = 0;
+			naturalHeight = 0;
+		};
+		image.src = imageUrl;
+
+		return () => {
+			active = false;
+			image.onload = null;
+			image.onerror = null;
+		};
+	});
+
+	const clamp = (value: number) => Math.min(1, Math.max(0, value));
+
+	const frameHeight = $derived(
+		frameWidth > 0 && aspectRatio > 0 ? frameWidth / aspectRatio : 0
+	);
+	const renderedWidth = $derived.by(() => {
+		if (!frameWidth || !naturalWidth || !naturalHeight) return 0;
+		const imageAspect = naturalWidth / naturalHeight;
+		// Match the app: fill the window height, grow wider than the window when
+		// the image allows it so it can be slid left/right.
+		return Math.max(frameWidth, frameHeight * imageAspect);
+	});
+	const overflowX = $derived(Math.max(0, renderedWidth - frameWidth));
+	const imageStyle = $derived(
+		[
+			`width: ${renderedWidth.toFixed(2)}px`,
+			`height: ${frameHeight.toFixed(2)}px`,
+			`left: ${(-clamp(liveFocus) * overflowX).toFixed(2)}px`
+		].join(';')
 	);
 
-	function clamp(value: number, min: number, max: number) {
-		return Math.min(max, Math.max(min, value));
-	}
-
-	// Keep the crop rectangle at the screen's aspect ratio. Resizing one axis
-	// adjusts the other so the framed region always matches the screen shape.
-	function lockAspect(next: Crop, anchor: 'width' | 'height'): Crop {
-		if (!aspectRatio || !naturalWidth || !naturalHeight) return next;
-		const imageAspect = naturalWidth / naturalHeight;
-		// crop aspect in image pixels = (width * imageW) / (height * imageH)
-		// we want it to equal the screen aspectRatio.
-		let { width, height } = next;
-		if (anchor === 'width') {
-			height = clamp((width * imageAspect) / aspectRatio, 0.05, 1);
-			width = clamp((height * aspectRatio) / imageAspect, 0.05, 1);
-		} else {
-			width = clamp((height * aspectRatio) / imageAspect, 0.05, 1);
-			height = clamp((width * imageAspect) / aspectRatio, 0.05, 1);
-		}
-		return { ...next, width, height };
-	}
-
-	function commit(next: Crop) {
-		const width = clamp(next.width, 0.05, 1);
-		const height = clamp(next.height, 0.05, 1);
-		onchange({
-			width,
-			height,
-			x: clamp(next.x, 0, 1 - width),
-			y: clamp(next.y, 0, 1 - height)
-		});
-	}
-
-	type DragState =
-		| { mode: 'move'; pointerId: number; startX: number; startY: number; origin: Crop }
-		| {
-				mode: 'resize';
-				pointerId: number;
-				corner: string;
-				startX: number;
-				startY: number;
-				origin: Crop;
-		  }
-		| null;
-
-	let drag: DragState = null;
-
-	function frameRect() {
-		return frame?.getBoundingClientRect() ?? null;
-	}
-
-	function toUnit(event: PointerEvent) {
-		const rect = frameRect();
-		if (!rect) return { x: 0, y: 0 };
-		return {
-			x: (event.clientX - rect.left) / rect.width,
-			y: (event.clientY - rect.top) / rect.height
-		};
-	}
-
-	const activePointers = new Map<number, { x: number; y: number }>();
-	let pinchStart: { dist: number; crop: Crop } | null = null;
-
 	function onPointerDown(event: PointerEvent) {
-		if (!frame) return;
+		if (!frame || overflowX <= 0) return;
 		frame.setPointerCapture(event.pointerId);
-		activePointers.set(event.pointerId, toUnit(event));
-		if (activePointers.size === 2) {
-			const points = [...activePointers.values()];
-			pinchStart = {
-				dist: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y),
-				crop: { ...crop }
-			};
-			drag = null;
-			event.preventDefault();
-			return;
-		}
-		const target = event.target as HTMLElement;
-		const corner = target.dataset.corner;
-		const point = toUnit(event);
-		if (corner) {
-			drag = {
-				mode: 'resize',
-				pointerId: event.pointerId,
-				corner,
-				startX: point.x,
-				startY: point.y,
-				origin: { ...crop }
-			};
-		} else {
-			drag = {
-				mode: 'move',
-				pointerId: event.pointerId,
-				startX: point.x,
-				startY: point.y,
-				origin: { ...crop }
-			};
-		}
+		dragging = true;
+		dragStartX = event.clientX;
+		dragStartFocus = clamp(liveFocus);
 		event.preventDefault();
 	}
 
 	function onPointerMove(event: PointerEvent) {
-		if (activePointers.has(event.pointerId)) {
-			activePointers.set(event.pointerId, toUnit(event));
-		}
-		if (pinchStart && activePointers.size === 2) {
-			const points = [...activePointers.values()];
-			const dist = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
-			if (dist > 0 && pinchStart.dist > 0) {
-				const factor = pinchStart.dist / dist;
-				const origin = pinchStart.crop;
-				const centerX = origin.x + origin.width / 2;
-				const centerY = origin.y + origin.height / 2;
-				const sized = lockAspect(
-					{ ...origin, width: clamp(origin.width * factor, 0.05, 1) },
-					'width'
-				);
-				commit({ ...sized, x: centerX - sized.width / 2, y: centerY - sized.height / 2 });
-			}
-			return;
-		}
-		if (!drag) return;
-		if (event.pointerId !== drag.pointerId) return;
-		const point = toUnit(event);
-		const dx = point.x - drag.startX;
-		const dy = point.y - drag.startY;
-		const origin = drag.origin;
-		if (drag.mode === 'move') {
-			commit({ ...origin, x: origin.x + dx, y: origin.y + dy });
-		} else {
-			let { x, y, width, height } = origin;
-			if (drag.corner.includes('e')) width = origin.width + dx;
-			if (drag.corner.includes('s')) height = origin.height + dy;
-			if (drag.corner.includes('w')) {
-				x = origin.x + dx;
-				width = origin.width - dx;
-			}
-			if (drag.corner.includes('n')) {
-				y = origin.y + dy;
-				height = origin.height - dy;
-			}
-			const anchor = drag.corner.includes('e') || drag.corner.includes('w') ? 'width' : 'height';
-			commit(lockAspect({ x, y, width, height }, anchor));
-		}
+		if (!dragging || overflowX <= 0) return;
+		const dx = event.clientX - dragStartX;
+		liveFocus = clamp(dragStartFocus - dx / overflowX);
 	}
 
 	function onPointerUp(event: PointerEvent) {
-		activePointers.delete(event.pointerId);
-		if (activePointers.size < 2) pinchStart = null;
-		if (drag && event.pointerId === drag.pointerId) drag = null;
+		if (!dragging) return;
+		dragging = false;
+		frame?.releasePointerCapture?.(event.pointerId);
+		onchange(clamp(liveFocus));
 	}
 
 	function onWheel(event: WheelEvent) {
+		if (overflowX <= 0) return;
 		event.preventDefault();
-		const factor = event.deltaY > 0 ? 1.06 : 1 / 1.06;
-		const centerX = crop.x + crop.width / 2;
-		const centerY = crop.y + crop.height / 2;
-		const sized = lockAspect({ ...crop, width: clamp(crop.width * factor, 0.05, 1) }, 'width');
-		commit({ ...sized, x: centerX - sized.width / 2, y: centerY - sized.height / 2 });
+		liveFocus = clamp(liveFocus + (event.deltaY + event.deltaX) / 400);
+		onchange(liveFocus);
 	}
 
-	const corners = ['nw', 'ne', 'sw', 'se'];
+	function onKeyDown(event: KeyboardEvent) {
+		if (overflowX <= 0) return;
+		const step = event.shiftKey ? 0.1 : 0.02;
+		if (event.key === 'ArrowLeft') {
+			liveFocus = clamp(liveFocus - step);
+		} else if (event.key === 'ArrowRight') {
+			liveFocus = clamp(liveFocus + step);
+		} else {
+			return;
+		}
+		event.preventDefault();
+		onchange(liveFocus);
+	}
 </script>
 
 <div
 	bind:this={frame}
+	bind:clientWidth={frameWidth}
 	class="crop-editor"
-	style:aspect-ratio={frameAspect ? String(frameAspect) : undefined}
-	role="application"
-	aria-label="Crop wallpaper"
+	style:aspect-ratio={String(aspectRatio)}
+	role="slider"
+	tabindex="0"
+	aria-label="Wallpaper horizontal position"
+	aria-valuemin="0"
+	aria-valuemax="100"
+	aria-valuenow={Math.round(clamp(liveFocus) * 100)}
+	data-no-bg-pan
 	onpointerdown={onPointerDown}
 	onpointermove={onPointerMove}
 	onpointerup={onPointerUp}
 	onpointercancel={onPointerUp}
 	onwheel={onWheel}
+	onkeydown={onKeyDown}
 >
-	<img
-		src={imageUrl}
-		alt=""
-		draggable="false"
-		onload={(e) => {
-			const img = e.currentTarget as HTMLImageElement;
-			naturalWidth = img.naturalWidth;
-			naturalHeight = img.naturalHeight;
-		}}
-	/>
-	{#if frameAspect}
-		<div
-			class="crop-editor__frame"
-			style:left={`${crop.x * 100}%`}
-			style:top={`${crop.y * 100}%`}
-			style:width={`${crop.width * 100}%`}
-			style:height={`${crop.height * 100}%`}
-		>
-			{#each corners as corner (corner)}
-				<button
-					type="button"
-					class="crop-editor__handle"
-					data-corner={corner}
-					aria-label="Resize"
-					onpointerdown={onPointerDown}
-				></button>
-			{/each}
-		</div>
+	{#if renderedWidth > 0}
+		<img src={imageUrl} alt="" draggable="false" style={imageStyle} />
 	{/if}
+	<div class="crop-editor__hint">
+		<span aria-hidden="true">←</span>
+		<span class="crop-editor__hint-text">左右滑动</span>
+		<span aria-hidden="true">→</span>
+	</div>
+	<div class="crop-editor__rail">
+		<div class="crop-editor__thumb" style:left={`${clamp(liveFocus) * 100}%`}></div>
+	</div>
 </div>
 
 <style>
@@ -236,41 +154,79 @@
 		border: 1px solid var(--mist-border);
 		border-radius: 12px;
 		background: rgb(7 11 20 / 0.4);
-		touch-action: none;
+		touch-action: pan-y;
 		user-select: none;
+		cursor: grab;
+	}
+
+	.crop-editor:active {
+		cursor: grabbing;
+	}
+
+	.crop-editor:focus-visible {
+		outline: 2px solid var(--mist-accent);
+		outline-offset: 2px;
 	}
 
 	.crop-editor img {
 		position: absolute;
-		inset: 0;
-		width: 100%;
-		height: 100%;
-		object-fit: contain;
-		opacity: 0.55;
+		top: 0;
+		max-width: none;
 		pointer-events: none;
 	}
 
-	.crop-editor__frame {
+	.crop-editor__hint {
 		position: absolute;
-		border: 2px solid var(--mist-accent);
-		border-radius: 6px;
-		box-shadow: 0 0 0 9999px rgb(7 11 20 / 0.28);
-		cursor: move;
+		top: 10px;
+		left: 50%;
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		padding: 4px 10px;
+		transform: translateX(-50%);
+		border-radius: 999px;
+		background: rgb(7 11 20 / 0.45);
+		color: #fff;
+		font-size: 11px;
+		pointer-events: none;
 	}
 
-	.crop-editor__handle {
+	.crop-editor__rail {
 		position: absolute;
-		width: 18px;
-		height: 18px;
+		right: 12px;
+		bottom: 10px;
+		left: 12px;
+		height: 3px;
+		border-radius: 999px;
+		background: rgb(255 255 255 / 0.35);
+		pointer-events: none;
+	}
+
+	.crop-editor__thumb {
+		position: absolute;
+		top: 50%;
+		width: 14px;
+		height: 14px;
+		transform: translate(-50%, -50%);
 		border: 2px solid #fff;
 		border-radius: 999px;
 		background: var(--mist-accent);
 		box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
-		cursor: pointer;
 	}
 
-	.crop-editor__handle[data-corner='nw'] { left: -9px; top: -9px; cursor: nwse-resize; }
-	.crop-editor__handle[data-corner='ne'] { right: -9px; top: -9px; cursor: nesw-resize; }
-	.crop-editor__handle[data-corner='sw'] { left: -9px; bottom: -9px; cursor: nesw-resize; }
-	.crop-editor__handle[data-corner='se'] { right: -9px; bottom: -9px; cursor: nwse-resize; }
+	@media (prefers-reduced-motion: no-preference) {
+		.crop-editor__hint {
+			animation: crop-hint 2.6s ease-in-out infinite;
+		}
+	}
+
+	@keyframes crop-hint {
+		0%,
+		100% {
+			opacity: 0.9;
+		}
+		50% {
+			opacity: 0.55;
+		}
+	}
 </style>
