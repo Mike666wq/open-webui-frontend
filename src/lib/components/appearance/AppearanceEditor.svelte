@@ -4,6 +4,7 @@
 	import { v4 as uuidv4 } from 'uuid';
 	import { mobile } from '$lib/stores';
 	import MistDrawer from '$lib/components/mist/MistDrawer.svelte';
+	import CropEditor from '$lib/components/appearance/CropEditor.svelte';
 	import {
 		APPEARANCE_PRESETS,
 		applyPreset,
@@ -26,6 +27,8 @@
 		systemPrefersDark,
 		themeColorTokens,
 		loadWallpaperAsset,
+		listWallpaperAssets,
+		deleteWallpaperAsset,
 		contrastRatio,
 		type AppearancePreset,
 		type AppearanceSettings,
@@ -39,10 +42,9 @@
 	type Props = {
 		open: boolean;
 		onclose: () => void;
-		onpreviewchange?: (active: boolean) => void;
 	};
 
-	let { open, onclose, onpreviewchange }: Props = $props();
+	let { open, onclose }: Props = $props();
 	const i18n = getContext<any>('i18n');
 	const zh = $derived(
 		String($i18n.language ?? '')
@@ -53,15 +55,15 @@
 
 	let draft = $state<AppearanceSettings>(structuredClone($appearanceSettings));
 	let editorMode = $state<ResolvedAppearanceTheme>('light');
-	let pagePreview = $state(false);
 	let busy = $state(false);
 	let fileInput: HTMLInputElement | null = $state(null);
 	let importInput: HTMLInputElement | null = $state(null);
 	let pendingBlobs: Record<string, Blob> = {};
-	let previewUrls: Partial<Record<ResolvedAppearanceTheme, string>> = {};
+	let previewUrls = $state<Partial<Record<ResolvedAppearanceTheme, string>>>({});
+	let library: { id: string; url: string }[] = $state([]);
 	let initializedOpen = false;
 	let previewGeneration = 0;
-	let previewComposerObserver: ResizeObserver | null = null;
+	let collapsed = $state(false);
 
 	const currentMode = $derived(draft.modes[editorMode]);
 	const currentBackground = $derived(currentMode.background);
@@ -74,7 +76,7 @@
 	$effect(() => {
 		if (open && !initializedOpen) {
 			initializedOpen = true;
-			pagePreview = false;
+			collapsed = false;
 			draft = cloneAppearance($appearanceSettings);
 			editorMode = $resolvedAppearanceTheme;
 			beginAppearancePreview(
@@ -83,9 +85,9 @@
 				draft.theme === 'system' ? null : editorMode
 			);
 			void syncWallpaperPreview(editorMode);
+			void refreshLibrary();
 		} else if (!open) {
 			initializedOpen = false;
-			pagePreview = false;
 			previewGeneration += 1;
 		}
 	});
@@ -95,42 +97,7 @@
 		updateAppearancePreview(draft);
 	});
 
-	$effect(() => {
-		if (!pagePreview) {
-			previewComposerObserver?.disconnect();
-			previewComposerObserver = null;
-			document.documentElement.style.removeProperty('--mist-preview-composer-offset');
-			return;
-		}
-
-		void tick().then(() => {
-			const composer = document.querySelector<HTMLElement>('.owui-composer-dock');
-			const syncOffset = () => {
-				const height = composer?.getBoundingClientRect().height ?? 110;
-				document.documentElement.style.setProperty(
-					'--mist-preview-composer-offset',
-					`${Math.max(122, Math.ceil(height + 12))}px`
-				);
-			};
-			syncOffset();
-			previewComposerObserver?.disconnect();
-			previewComposerObserver = null;
-			if (composer) {
-				previewComposerObserver = new ResizeObserver(syncOffset);
-				previewComposerObserver.observe(composer);
-			}
-		});
-
-		return () => {
-			previewComposerObserver?.disconnect();
-			previewComposerObserver = null;
-			document.documentElement.style.removeProperty('--mist-preview-composer-offset');
-		};
-	});
-
 	onDestroy(() => {
-		previewComposerObserver?.disconnect();
-		document.documentElement.style.removeProperty('--mist-preview-composer-offset');
 		cleanupPreviewUrls();
 		endAppearancePreview();
 	});
@@ -263,21 +230,8 @@
 		void syncWallpaperPreview(mode);
 	}
 
-	function enterPagePreview() {
-		if (pagePreview) return;
-		pagePreview = true;
-		onpreviewchange?.(true);
-	}
-
-	function leavePagePreview() {
-		if (!pagePreview) return;
-		pagePreview = false;
-		onpreviewchange?.(false);
-	}
-
 	function handleDrawerClose() {
-		if (pagePreview) leavePagePreview();
-		else cancelChanges();
+		cancelChanges();
 	}
 
 	async function chooseWallpaper(event: Event) {
@@ -288,24 +242,10 @@
 		busy = true;
 		try {
 			const blob = await processWallpaperFile(file);
-			previewGeneration += 1;
 			const assetId = uuidv4();
-			const previousUrl = previewUrls[editorMode];
-			if (previousUrl) URL.revokeObjectURL(previousUrl);
-			const objectUrl = URL.createObjectURL(blob);
-			previewUrls[editorMode] = objectUrl;
 			pendingBlobs[assetId] = blob;
-			appearancePreviewWallpaperUrl.set(objectUrl);
-			const background = currentBackground.kind === 'local-image' ? currentBackground : null;
-			setBackground({
-				kind: 'local-image',
-				assetId,
-				focusX: background?.focusX ?? 50,
-				focusY: background?.focusY ?? 50,
-				scale: background?.scale ?? 100,
-				mask: currentBackground.mask,
-				blur: currentBackground.blur
-			});
+			addToLibrary(assetId, blob);
+			activateWallpaper(assetId, blob);
 			toast.success(copy('背景图片已载入预览', 'Wallpaper loaded into the preview'));
 		} catch (error) {
 			toast.error(
@@ -316,6 +256,80 @@
 		} finally {
 			busy = false;
 		}
+	}
+
+	function addToLibrary(assetId: string, blob: Blob) {
+		const url = URL.createObjectURL(blob);
+		library = [{ id: assetId, url }, ...library.filter((item) => item.id !== assetId)];
+	}
+
+	async function refreshLibrary() {
+		try {
+			const metas = await listWallpaperAssets();
+			const items: { id: string; url: string }[] = [];
+			for (const meta of metas) {
+				const existing = library.find((item) => item.id === meta.id);
+				if (existing) {
+					items.push(existing);
+					continue;
+				}
+				const blob = pendingBlobs[meta.id] ?? (await loadWallpaperAsset(meta.id).catch(() => null));
+				if (blob) items.push({ id: meta.id, url: URL.createObjectURL(blob) });
+			}
+			for (const item of library) {
+				if (!items.some((next) => next.id === item.id)) URL.revokeObjectURL(item.url);
+			}
+			library = items;
+		} catch {
+			// Library is best-effort; the active background preview still works.
+		}
+	}
+
+	function activateWallpaper(assetId: string, blob: Blob | null) {
+		previewGeneration += 1;
+		const previousUrl = previewUrls[editorMode];
+		if (previousUrl && !library.some((item) => item.url === previousUrl)) {
+			URL.revokeObjectURL(previousUrl);
+		}
+		const libraryUrl = library.find((item) => item.id === assetId)?.url ?? null;
+		const objectUrl = libraryUrl ?? (blob ? URL.createObjectURL(blob) : null);
+		if (!objectUrl) return;
+		previewUrls[editorMode] = objectUrl;
+		appearancePreviewWallpaperUrl.set(objectUrl);
+		const background = currentBackground.kind === 'local-image' ? currentBackground : null;
+		setBackground({
+			kind: 'local-image',
+			assetId,
+			crop: background?.crop ?? { x: 0, y: 0, width: 1, height: 1 },
+			scale: background?.scale ?? 100,
+			mask: currentBackground.mask,
+			blur: currentBackground.blur
+		});
+	}
+
+	async function selectLibraryImage(assetId: string) {
+		const blob = pendingBlobs[assetId] ?? (await loadWallpaperAsset(assetId).catch(() => null));
+		if (!blob) {
+			toast.error(copy('找不到这张图片', 'The image asset is unavailable'));
+			return;
+		}
+		activateWallpaper(assetId, blob);
+	}
+
+	async function removeLibraryImage(assetId: string) {
+		const inUse = [draft.modes.light.background, draft.modes.dark.background].some(
+			(background) => background.kind === 'local-image' && background.assetId === assetId
+		);
+		if (inUse) {
+			toast.info(copy('这张图正在作为背景使用', 'This image is the active background'));
+			return;
+		}
+		await deleteWallpaperAsset(assetId).catch(() => undefined);
+		delete pendingBlobs[assetId];
+		const item = library.find((entry) => entry.id === assetId);
+		if (item) URL.revokeObjectURL(item.url);
+		library = library.filter((entry) => entry.id !== assetId);
+		toast.success(copy('已从图库删除', 'Removed from the library'));
 	}
 
 	async function useImageColors() {
@@ -361,8 +375,6 @@
 			cleanupPreviewUrls();
 			endAppearancePreview();
 			toast.success(copy('外观设置已应用', 'Appearance settings applied'));
-			if (pagePreview) onpreviewchange?.(false);
-			pagePreview = false;
 			onclose();
 		} catch (error) {
 			toast.error(
@@ -378,8 +390,6 @@
 	function cancelChanges() {
 		cleanupPreviewUrls();
 		endAppearancePreview();
-		if (pagePreview) onpreviewchange?.(false);
-		pagePreview = false;
 		onclose();
 	}
 
@@ -608,19 +618,23 @@
 	side={$mobile ? 'bottom' : 'right'}
 	title={copy('外观与阅读', 'Appearance & reading')}
 	preview={true}
-	compact={pagePreview}
-	pagePreview={pagePreview}
+	compact={collapsed}
+	hidden={collapsed}
 	onclose={handleDrawerClose}
 >
 	<div class="mist-editor-status" aria-live="polite">
 		<span class="mist-editor-status__dot"></span>
-		<span>
-			{pagePreview
-				? copy('正在预览真实页面', 'Previewing the real page')
-				: copy('实时预览中', 'Live preview')}
-		</span>
+		<span>{copy('实时预览中', 'Live preview')}</span>
 		<span class="mist-editor-status__swatch" style:background={tokens.accent}></span>
 		<span>{presetName(draft.preset, String($i18n.language ?? 'en'))}</span>
+		<button
+			type="button"
+			class="mist-editor-collapse"
+			onclick={() => (collapsed = true)}
+			aria-label={copy('收起面板', 'Collapse panel')}
+		>
+			{copy('收起', 'Hide')}
+		</button>
 	</div>
 
 	{#snippet footer()}
@@ -632,15 +646,6 @@
 		>
 			{copy('恢复全部', 'Reset all')}
 		</button>
-		{#if pagePreview}
-			<button class="mist-button mist-button--secondary" type="button" onclick={leavePagePreview}>
-				{copy('返回编辑', 'Back to editor')}
-			</button>
-		{:else}
-			<button class="mist-button mist-button--secondary" type="button" onclick={enterPagePreview}>
-				{copy('预览真实页面', 'Preview page')}
-			</button>
-		{/if}
 		<div class="mist-editor-footer-spacer"></div>
 		<button class="mist-button mist-button--ghost" type="button" onclick={cancelChanges}>
 			{copy('取消', 'Cancel')}
@@ -765,7 +770,21 @@
 					delete previewUrls[editorMode];
 					appearancePreviewWallpaperUrl.set(null);
 				} else if (value === 'local-image') {
-					fileInput?.click();
+					// Prefer re-activating the most recent library image; otherwise show the
+					// empty library (with an Add tile) so the branch actually renders.
+					const fallback = library[0];
+					if (fallback) {
+						void selectLibraryImage(fallback.id);
+					} else if (currentBackground.kind !== 'local-image') {
+						setBackground({
+							kind: 'local-image',
+							assetId: '',
+							crop: { x: 0, y: 0, width: 1, height: 1 },
+							scale: 100,
+							mask: currentBackground.mask,
+							blur: currentBackground.blur
+						});
+					}
 				}
 			}
 		)}
@@ -784,37 +803,61 @@
 				(value) => setBackground({ ...currentBackground, gradient: value as GradientId })
 			)}
 		{:else}
-			<div class="mist-editor-image-actions">
+			<div class="mist-wallpaper-library" role="list">
 				<button
 					type="button"
-					class="mist-button mist-button--secondary"
+					class="mist-wallpaper-add"
 					disabled={busy}
 					onclick={() => fileInput?.click()}
 				>
-					{copy('选择图片', 'Choose image')}
+					<span aria-hidden="true">＋</span>
+					{copy('添加图片', 'Add image')}
 				</button>
+				{#each library as item (item.id)}
+					<figure
+						class="mist-wallpaper-card"
+						data-active={currentBackground.kind === 'local-image' &&
+							currentBackground.assetId === item.id}
+						role="listitem"
+					>
+						<button
+							type="button"
+							class="mist-wallpaper-card__select"
+							onclick={() => selectLibraryImage(item.id)}
+							aria-label={copy('使用这张图', 'Use this image')}
+						>
+							<img src={item.url} alt="" draggable="false" />
+						</button>
+						<button
+							type="button"
+							class="mist-wallpaper-card__remove"
+							onclick={() => removeLibraryImage(item.id)}
+							aria-label={copy('删除', 'Delete')}
+						>
+							×
+						</button>
+					</figure>
+				{/each}
+			</div>
+			{#if currentBackground.kind === 'local-image'}
+				{@const activeUrl =
+					library.find((item) => item.id === currentBackground.assetId)?.url ??
+					previewUrls[editorMode] ??
+					null}
+				{#if activeUrl}
+					<p class="mist-editor-mode-label">{copy('拖动取景', 'Frame the region')}</p>
+					<CropEditor
+						imageUrl={activeUrl}
+						crop={currentBackground.crop}
+						onchange={(crop) => setBackground({ ...currentBackground, crop })}
+					/>
+				{/if}
+			{/if}
+			<div class="mist-editor-image-actions">
 				<button type="button" class="mist-button mist-button--ghost" onclick={useImageColors}>
 					{copy('从图片取色', 'Sample colors')}
 				</button>
 			</div>
-			{@render rangeRow(
-				copy('水平焦点', 'Focus X'),
-				Math.round(currentBackground.focusX),
-				0,
-				100,
-				1,
-				'%',
-				(value) => setBackground({ ...currentBackground, focusX: value })
-			)}
-			{@render rangeRow(
-				copy('垂直焦点', 'Focus Y'),
-				Math.round(currentBackground.focusY),
-				0,
-				100,
-				1,
-				'%',
-				(value) => setBackground({ ...currentBackground, focusY: value })
-			)}
 			{@render rangeRow(
 				copy('缩放', 'Scale'),
 				Math.round(currentBackground.scale),
@@ -1314,6 +1357,17 @@
 	</details>
 </MistDrawer>
 
+{#if open && collapsed}
+	<button
+		type="button"
+		class="mist-editor-fab"
+		onclick={() => (collapsed = false)}
+		aria-label={copy('展开外观面板', 'Expand appearance panel')}
+	>
+		<span aria-hidden="true">🎨</span>
+	</button>
+{/if}
+
 <style>
 	.mist-editor-status {
 		position: sticky;
@@ -1706,8 +1760,123 @@
 		margin: 10px 0;
 	}
 
+	.mist-editor-collapse {
+		margin-left: 6px;
+		padding: 3px 10px;
+		border: 1px solid var(--mist-border);
+		border-radius: 999px;
+		background: transparent;
+		color: var(--mist-muted);
+		font-size: 11px;
+		cursor: pointer;
+	}
+
+	.mist-editor-collapse:hover {
+		color: var(--mist-ink);
+		background: rgb(var(--mist-surface-rgb) / 0.18);
+	}
+
+	.mist-wallpaper-library {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+		gap: 8px;
+		margin: 10px 0;
+	}
+
+	.mist-wallpaper-add {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		min-height: 72px;
+		border: 1px dashed var(--mist-border);
+		border-radius: 12px;
+		background: transparent;
+		color: var(--mist-muted);
+		font-size: 11px;
+		cursor: pointer;
+	}
+
+	.mist-wallpaper-add span {
+		font-size: 20px;
+		line-height: 1;
+	}
+
+	.mist-wallpaper-add:not(:disabled):hover {
+		color: var(--mist-ink);
+		border-color: var(--mist-accent);
+	}
+
+	.mist-wallpaper-card {
+		position: relative;
+		margin: 0;
+		border-radius: 12px;
+		overflow: hidden;
+		border: 2px solid transparent;
+	}
+
+	.mist-wallpaper-card[data-active='true'] {
+		border-color: var(--mist-accent);
+	}
+
+	.mist-wallpaper-card__select {
+		display: block;
+		width: 100%;
+		padding: 0;
+		border: 0;
+		background: none;
+		cursor: pointer;
+	}
+
+	.mist-wallpaper-card__select img {
+		display: block;
+		width: 100%;
+		height: 72px;
+		object-fit: cover;
+	}
+
+	.mist-wallpaper-card__remove {
+		position: absolute;
+		top: 3px;
+		right: 3px;
+		width: 20px;
+		height: 20px;
+		border: 0;
+		border-radius: 999px;
+		background: rgb(7 11 20 / 0.6);
+		color: #fff;
+		font-size: 13px;
+		line-height: 1;
+		cursor: pointer;
+	}
+
+	.mist-wallpaper-card__remove:hover {
+		background: rgb(7 11 20 / 0.85);
+	}
+
 	.mist-editor-footer-spacer {
 		flex: 1;
+	}
+
+	.mist-editor-fab {
+		position: fixed;
+		right: 18px;
+		bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+		z-index: 60;
+		width: 52px;
+		height: 52px;
+		border: 1px solid var(--mist-border);
+		border-radius: 999px;
+		background: rgb(var(--mist-surface-rgb) / var(--mist-overlay-alpha));
+		backdrop-filter: blur(var(--mist-overlay-blur)) saturate(1.1);
+		box-shadow: 0 12px 32px var(--mist-shadow);
+		font-size: 22px;
+		cursor: pointer;
+	}
+
+	.mist-editor-fab:hover {
+		transform: translateY(-2px);
 	}
 
 	@media (max-width: 767px) {

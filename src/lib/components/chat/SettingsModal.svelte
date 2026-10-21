@@ -69,7 +69,6 @@
 	export let show: boolean | string | SettingsModalRequest = false;
 	let modalShow = false;
 	let lastShow: boolean | string | SettingsModalRequest = false;
-	let appearancePagePreview = false;
 	let appearanceEditorOpen = false;
 	let tabState: Record<string, unknown> | null = null;
 	let personalUiSettings: Record<string, any> = {};
@@ -130,18 +129,13 @@
 		}
 	}
 
-	$: if (!modalShow && show !== false && !appearancePagePreview) {
+	$: if (!modalShow && show !== false) {
 		show = false;
 		search = '';
 		lastShow = false;
 		selectedTab = 'general';
 		tabState = null;
 	}
-
-	const handleAppearancePreview = (active: boolean) => {
-		appearancePagePreview = active;
-		modalShow = !active;
-	};
 
 	const isAdminTab = (tabId: string) => tabId.startsWith('admin:');
 	const adminTabSegment = (tabId: string) => tabId.replace('admin:', '');
@@ -957,7 +951,6 @@
 
 <AppearanceEditor
 	open={appearanceEditorOpen}
-	onpreviewchange={handleAppearancePreview}
 	onclose={() => (appearanceEditorOpen = false)}
 />
 

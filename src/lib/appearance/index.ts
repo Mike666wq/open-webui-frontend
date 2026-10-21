@@ -8,7 +8,12 @@ export {
 	suggestColorsFromImage,
 	validateWallpaperFile
 } from './image';
-export { deleteWallpaperAsset, loadWallpaperAsset, saveWallpaperAsset } from './image-store';
+export {
+	deleteWallpaperAsset,
+	listWallpaperAssets,
+	loadWallpaperAsset,
+	saveWallpaperAsset
+} from './image-store';
 export {
 	branchFingerprint,
 	buildNavigatorEntries,
