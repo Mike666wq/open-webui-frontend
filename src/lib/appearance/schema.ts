@@ -1,4 +1,4 @@
-export const APPEARANCE_SCHEMA_VERSION = 5 as const;
+export const APPEARANCE_SCHEMA_VERSION = 6 as const;
 
 export const APPEARANCE_PRESET_IDS = [
 	'mist-blue',
@@ -52,6 +52,18 @@ export type LocalImageBackground = {
 	blur: number;
 };
 
+export type OfficialVideoBackground = {
+	kind: 'official-video';
+	video: 'welcome';
+	/**
+	 * The bundled welcome film uses the same horizontal window model as local
+	 * images, with an independent position for portrait and landscape screens.
+	 */
+	focus: { portrait: number; landscape: number };
+	mask: number;
+	blur: number;
+};
+
 export type GradientBackground = {
 	kind: 'gradient';
 	gradient: GradientId;
@@ -59,7 +71,10 @@ export type GradientBackground = {
 	blur: number;
 };
 
-export type BackgroundSettings = GradientBackground | LocalImageBackground;
+export type BackgroundSettings =
+	| GradientBackground
+	| LocalImageBackground
+	| OfficialVideoBackground;
 
 export type ModeAppearance = {
 	background: BackgroundSettings;
@@ -202,11 +217,8 @@ const normalizeFocus = (
 	return { ...DEFAULT_FOCUS };
 };
 
-const stringEnum = <T extends string>(
-	value: unknown,
-	allowed: readonly T[],
-	fallback: T
-): T => (typeof value === 'string' && allowed.includes(value as T) ? (value as T) : fallback);
+const stringEnum = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
+	typeof value === 'string' && allowed.includes(value as T) ? (value as T) : fallback;
 
 const numberEnum = <T extends number>(value: unknown, allowed: readonly T[], fallback: T): T => {
 	const number = typeof value === 'number' ? value : Number(value);
@@ -333,10 +345,7 @@ const defaultBackground = (
 	blur: 8
 });
 
-const defaultMode = (
-	preset: AppearancePreset,
-	mode: ResolvedAppearanceTheme
-): ModeAppearance => {
+const defaultMode = (preset: AppearancePreset, mode: ResolvedAppearanceTheme): ModeAppearance => {
 	const palette = PRESET_PALETTES[preset][mode];
 	return {
 		background: defaultBackground(preset, mode),
@@ -426,6 +435,16 @@ const normalizeBackground = (
 		}
 	}
 
+	if (source?.kind === 'official-video') {
+		return {
+			kind: 'official-video',
+			video: 'welcome',
+			focus: normalizeFocus(source.focus, source.crop, source),
+			mask: clampNumber(source.mask, fallback.mask, 0, 80),
+			blur: clampNumber(source.blur, fallback.blur, 0, 16)
+		};
+	}
+
 	if (source?.kind === 'gradient') {
 		const fallbackGradient = fallback.kind === 'gradient' ? fallback.gradient : 'mist-blue';
 		const legacyGradient = typeof source.value === 'string' ? source.value : undefined;
@@ -450,10 +469,7 @@ const normalizeBackground = (
 	return fallback;
 };
 
-const normalizeColors = (
-	value: unknown,
-	fallback: ModeColors
-): ModeColors => {
+const normalizeColors = (value: unknown, fallback: ModeColors): ModeColors => {
 	const source = isRecord(value) ? value : {};
 	return {
 		accent: normalizeHex(source.accent, fallback.accent),
@@ -463,10 +479,7 @@ const normalizeColors = (
 	};
 };
 
-const normalizeOverride = (
-	value: unknown,
-	allowTint: boolean
-): SurfaceOverride | undefined => {
+const normalizeOverride = (value: unknown, allowTint: boolean): SurfaceOverride | undefined => {
 	if (!isRecord(value)) return undefined;
 	const override: SurfaceOverride = {};
 
@@ -533,18 +546,13 @@ export function normalizeAppearance(value: unknown): AppearanceSettings {
 
 	return {
 		version: APPEARANCE_SCHEMA_VERSION,
-		enabled:
-			typeof source.enabled === 'boolean' ? source.enabled : DEFAULT_APPEARANCE.enabled,
+		enabled: typeof source.enabled === 'boolean' ? source.enabled : DEFAULT_APPEARANCE.enabled,
 		directoryEnabled:
 			typeof source.directoryEnabled === 'boolean'
 				? source.directoryEnabled
 				: DEFAULT_APPEARANCE.directoryEnabled,
 		preset,
-		theme: stringEnum(
-			source.theme,
-			['system', 'light', 'dark'] as const,
-			DEFAULT_APPEARANCE.theme
-		),
+		theme: stringEnum(source.theme, ['system', 'light', 'dark'] as const, DEFAULT_APPEARANCE.theme),
 		modes: {
 			light: {
 				background: normalizeBackground(
@@ -552,12 +560,7 @@ export function normalizeAppearance(value: unknown): AppearanceSettings {
 					lightFallback.background,
 					legacyWallpaper
 				),
-				colors: currentColorsOrPreset(
-					lightSource.colors,
-					preset,
-					'light',
-					source.accent
-				)
+				colors: currentColorsOrPreset(lightSource.colors, preset, 'light', source.accent)
 			},
 			dark: {
 				background: normalizeBackground(
@@ -565,12 +568,7 @@ export function normalizeAppearance(value: unknown): AppearanceSettings {
 					darkFallback.background,
 					legacyWallpaper
 				),
-				colors: currentColorsOrPreset(
-					darkSource.colors,
-					preset,
-					'dark',
-					source.accent
-				)
+				colors: currentColorsOrPreset(darkSource.colors, preset, 'dark', source.accent)
 			}
 		},
 		glass: {
@@ -581,12 +579,7 @@ export function normalizeAppearance(value: unknown): AppearanceSettings {
 				0,
 				30
 			),
-			radius: clampNumber(
-				legacyGlass.radius,
-				DEFAULT_APPEARANCE.glass.radius,
-				0,
-				28
-			),
+			radius: clampNumber(legacyGlass.radius, DEFAULT_APPEARANCE.glass.radius, 0, 28),
 			overlayScrim: clampNumber(
 				legacyGlass.overlayScrim ?? legacyGlass.scrim,
 				DEFAULT_APPEARANCE.glass.overlayScrim,
@@ -677,18 +670,8 @@ export function normalizeAppearance(value: unknown): AppearanceSettings {
 			}
 		},
 		reading: {
-			fontSize: clampNumber(
-				reading.fontSize,
-				DEFAULT_APPEARANCE.reading.fontSize,
-				14,
-				19
-			),
-			lineHeight: clampNumber(
-				reading.lineHeight,
-				DEFAULT_APPEARANCE.reading.lineHeight,
-				1.45,
-				1.9
-			),
+			fontSize: clampNumber(reading.fontSize, DEFAULT_APPEARANCE.reading.fontSize, 14, 19),
+			lineHeight: clampNumber(reading.lineHeight, DEFAULT_APPEARANCE.reading.lineHeight, 1.45, 1.9),
 			paragraphSpacing: clampNumber(
 				reading.paragraphSpacing,
 				DEFAULT_APPEARANCE.reading.paragraphSpacing,

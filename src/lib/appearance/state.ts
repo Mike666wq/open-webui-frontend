@@ -2,9 +2,7 @@ import { derived, writable } from 'svelte/store';
 import { resolveAppearanceTheme } from './presets';
 import { DEFAULT_APPEARANCE, type AppearanceSettings } from './schema';
 
-export const appearanceSettings = writable<AppearanceSettings>(
-	structuredClone(DEFAULT_APPEARANCE)
-);
+export const appearanceSettings = writable<AppearanceSettings>(structuredClone(DEFAULT_APPEARANCE));
 export const appearanceDraft = writable<AppearanceSettings | null>(null);
 export const appearanceWallpaperUrl = writable<string | null>(null);
 export const appearancePreviewWallpaperUrl = writable<string | null>(null);
@@ -27,11 +25,13 @@ export const resolvedAppearanceTheme = derived(
 );
 export const wallpaperVariant = derived(
 	[effectiveAppearance, systemPrefersDark],
-	([$settings, $prefersDark]): 'gradient' | 'wallpaper' =>
-		$settings.modes[resolveAppearanceTheme($settings.theme, $prefersDark)].background.kind ===
-		'local-image'
+	([$settings, $prefersDark]): 'gradient' | 'wallpaper' => {
+		const background =
+			$settings.modes[resolveAppearanceTheme($settings.theme, $prefersDark)].background;
+		return background.kind === 'local-image' || background.kind === 'official-video'
 			? 'wallpaper'
-			: 'gradient'
+			: 'gradient';
+	}
 );
 export const activeWallpaperUrl = derived(
 	[appearanceDraft, appearanceWallpaperUrl, appearancePreviewWallpaperUrl],

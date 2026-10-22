@@ -2,12 +2,8 @@
 	import { get } from 'svelte/store';
 	import { onDestroy, onMount } from 'svelte';
 	import { applyAppearanceCss } from './css-vars';
-	import { loadWallpaperAsset, pruneWallpaperAssets } from './image-store';
-	import {
-		appearanceStorageKey,
-		loadAppearance,
-		normalizeAppearanceOrigin
-	} from './storage';
+	import { loadWallpaperAsset } from './image-store';
+	import { appearanceStorageKey, loadAppearance, normalizeAppearanceOrigin } from './storage';
 	import {
 		appearanceSettings,
 		appearanceWallpaperUrl,
@@ -20,6 +16,7 @@
 
 	let wallpaperRequest = 0;
 	let objectUrl: string | null = null;
+	let objectUrlAssetId: string | null = null;
 	let mounted = false;
 	let unsubscribeAppearance: (() => void) | null = null;
 	let unsubscribeWallpaper: (() => void) | null = null;
@@ -55,20 +52,30 @@
 			const theme = get(resolvedAppearanceTheme);
 			const background = settings.modes[theme].background;
 			let nextUrl: string | null = null;
+			let nextAssetId: string | null = null;
 			if (settings.enabled && background.kind === 'local-image') {
-				try {
-					const blob = await loadWallpaperAsset(background.assetId);
-					if (blob && request === wallpaperRequest) nextUrl = URL.createObjectURL(blob);
-				} catch (error) {
-					console.error('Unable to load the selected wallpaper', error);
+				if (objectUrl && objectUrlAssetId === background.assetId) {
+					nextUrl = objectUrl;
+					nextAssetId = objectUrlAssetId;
+				} else {
+					try {
+						const blob = await loadWallpaperAsset(background.assetId);
+						if (blob && request === wallpaperRequest) {
+							nextUrl = URL.createObjectURL(blob);
+							nextAssetId = background.assetId;
+						}
+					} catch (error) {
+						console.error('Unable to load the selected wallpaper', error);
+					}
 				}
 			}
 			if (request !== wallpaperRequest) {
-				if (nextUrl) URL.revokeObjectURL(nextUrl);
+				if (nextUrl && nextUrl !== objectUrl) URL.revokeObjectURL(nextUrl);
 				return;
 			}
-			if (objectUrl) URL.revokeObjectURL(objectUrl);
+			if (objectUrl && objectUrl !== nextUrl) URL.revokeObjectURL(objectUrl);
 			objectUrl = nextUrl;
+			objectUrlAssetId = nextAssetId;
 			appearanceWallpaperUrl.set(nextUrl);
 		};
 
@@ -79,15 +86,6 @@
 		unsubscribeWallpaper = resolvedAppearanceTheme.subscribe(() => {
 			void syncWallpaper();
 		});
-
-		void pruneWallpaperAssets(
-			[appearanceSettings].flatMap(() => {
-				const settings = get(appearanceSettings);
-				return [settings.modes.light.background, settings.modes.dark.background]
-					.filter((background) => background.kind === 'local-image')
-					.map((background) => background.assetId);
-			})
-		).catch((error) => console.warn('Unable to prune unused wallpapers', error));
 
 		return () => {
 			mounted = false;
@@ -101,6 +99,7 @@
 			unsubscribeWallpaper?.();
 			if (objectUrl) URL.revokeObjectURL(objectUrl);
 			objectUrl = null;
+			objectUrlAssetId = null;
 			appearanceWallpaperUrl.set(null);
 		};
 	});

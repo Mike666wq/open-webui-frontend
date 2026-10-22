@@ -184,6 +184,26 @@ class CdpClient {
 		});
 	}
 
+	async touchSwipe(fromX, toX, y) {
+		const point = (x) => ({ x, y, radiusX: 1, radiusY: 1, force: 1 });
+		await this.send('Input.dispatchTouchEvent', {
+			type: 'touchStart',
+			touchPoints: [point(fromX)]
+		});
+		await this.send('Input.dispatchTouchEvent', {
+			type: 'touchMove',
+			touchPoints: [point((fromX + toX) / 2)]
+		});
+		await this.send('Input.dispatchTouchEvent', {
+			type: 'touchMove',
+			touchPoints: [point(toX)]
+		});
+		await this.send('Input.dispatchTouchEvent', {
+			type: 'touchEnd',
+			touchPoints: []
+		});
+	}
+
 	async screenshot(filename) {
 		await mkdir(outputDirectory, { recursive: true });
 		const capture = await this.send('Page.captureScreenshot', {
@@ -494,6 +514,83 @@ async function settingsGeometry(cdp, width, height) {
 	return { before, reachable, editor };
 }
 
+async function wallpaperPanning(cdp) {
+	const appearance = {
+		version: 6,
+		enabled: true,
+		directoryEnabled: true,
+		preset: 'mist-blue',
+		theme: 'light',
+		modes: {
+			light: {
+				background: {
+					kind: 'official-video',
+					video: 'welcome',
+					focus: { portrait: 0.5, landscape: 0.5 },
+					mask: 22,
+					blur: 8
+				}
+			},
+			dark: {
+				background: {
+					kind: 'official-video',
+					video: 'welcome',
+					focus: { portrait: 0.5, landscape: 0.5 },
+					mask: 22,
+					blur: 8
+				}
+			}
+		},
+		motion: 'gentle'
+	};
+	await cdp.evaluate(
+		`localStorage.setItem(
+			'owui-appearance:v3:' + location.origin,
+			${JSON.stringify(JSON.stringify(appearance))}
+		)`
+	);
+	await cdp.navigate(
+		chatUrl,
+		"document.readyState === 'complete' && document.querySelector('.mist-backdrop__wallpaper')"
+	);
+	await dismissUpdateDialog(cdp);
+	await cdp.waitForExpression(
+		`(() => {
+			const media = document.querySelector('.mist-backdrop__wallpaper');
+			if (!media || media.tagName !== 'VIDEO') return false;
+			const rect = media.getBoundingClientRect();
+			return rect.width > innerWidth + 8 && rect.height > 0;
+		})()`,
+		'pannable official motion wallpaper',
+		20_000
+	);
+
+	const readLeft = () =>
+		cdp.evaluate(
+			`document.querySelector('.mist-backdrop__wallpaper').getBoundingClientRect().left`
+		);
+	const swipes = [
+		{ from: 340, to: 110 },
+		{ from: 110, to: 340 },
+		{ from: 340, to: 110 }
+	];
+	const leftPositions = [await readLeft()];
+	for (const [index, swipe] of swipes.entries()) {
+		await cdp.touchSwipe(swipe.from, swipe.to, 360);
+		await sleep(180);
+		const left = await readLeft();
+		assert.ok(
+			Math.abs(left - leftPositions[index]) > 20,
+			`Wallpaper swipe ${index + 1} did not move the background: ${JSON.stringify({
+				before: leftPositions[index],
+				after: left
+			})}`
+		);
+		leftPositions.push(left);
+	}
+	return { swipes: swipes.length, leftPositions };
+}
+
 async function main() {
 	const fixture = await waitForHttp(`${origin}/__fixture_provenance`);
 	assert.equal(fixture.schema, 1);
@@ -595,6 +692,7 @@ async function main() {
 			deviceScaleFactor: 2,
 			mobile: true
 		});
+		results.wallpaperPan = await wallpaperPanning(client);
 		await openSettings(client);
 		results.settings = await settingsGeometry(client, 393, 852);
 		await client.screenshot('appearance-editor-393x852.png');
@@ -608,6 +706,7 @@ async function main() {
 				status: 'pass',
 				sourceCommit: fixture.sourceCommit,
 				viewports: viewports.map(({ name }) => name),
+				wallpaperPan: results.wallpaperPan.swipes,
 				settingsScrollable: true,
 				editorActionsReachable: true
 			})

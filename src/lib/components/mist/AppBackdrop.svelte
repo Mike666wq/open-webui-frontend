@@ -1,5 +1,11 @@
 <script lang="ts">
 	import { gradientBackgroundCss } from '$lib/appearance/presets';
+	import {
+		backgroundMediaUrl,
+		isPannableBackground,
+		OFFICIAL_WELCOME_MEDIA_ASPECT,
+		OFFICIAL_WELCOME_POSTER_URL
+	} from '$lib/appearance/media';
 	import { saveAppearance } from '$lib/appearance/storage';
 	import {
 		activeWallpaperUrl,
@@ -29,35 +35,58 @@
 	// inside the scaled interface preview.
 	let viewportW = $state(0);
 	let viewportH = $state(0);
+	let videoElement: HTMLVideoElement | null = $state(null);
+	let prefersReducedMotion = $state(false);
 	const isPortrait = $derived(viewportH >= viewportW);
 	const orientationKey = $derived(isPortrait ? 'portrait' : 'landscape');
 
 	const mode = $derived(settings.modes[$resolvedAppearanceTheme]);
-	const imageBackground = $derived(mode.background.kind === 'local-image');
+	const background = $derived(mode.background);
+	const pannable = $derived(isPannableBackground(background));
+	const videoBackground = $derived(background.kind === 'official-video');
+	const mediaUrl = $derived(backgroundMediaUrl(background, wallpaperUrl));
+	const motionAllowed = $derived(settings.motion !== 'off' && !prefersReducedMotion);
+
+	$effect(() => {
+		if (!interactive || typeof window === 'undefined') return;
+		const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+		const sync = () => {
+			prefersReducedMotion = media.matches;
+		};
+		sync();
+		media.addEventListener('change', sync);
+		return () => media.removeEventListener('change', sync);
+	});
 
 	$effect(() => {
 		if (!interactive || typeof document === 'undefined') return;
 		const root = document.documentElement;
-		if (imageBackground) {
-			root.dataset.owuiWallpaper = 'local-image';
+		if (pannable) {
+			root.dataset.owuiWallpaper = background.kind;
 		} else {
 			delete root.dataset.owuiWallpaper;
 		}
 		return () => {
-			if (root.dataset.owuiWallpaper === 'local-image') {
+			if (
+				root.dataset.owuiWallpaper === 'local-image' ||
+				root.dataset.owuiWallpaper === 'official-video'
+			) {
 				delete root.dataset.owuiWallpaper;
 			}
 		};
 	});
 
-	let imageAspect = $state(0);
+	let mediaAspect = $state(0);
 	$effect(() => {
-		imageAspect = 0;
-		if (!wallpaperUrl) return;
+		// A video cannot report its dimensions until it has mounted, while the
+		// geometry below decides whether it can mount. Seed the known bundled
+		// aspect so the video can load, then replace it from metadata.
+		mediaAspect = background.kind === 'official-video' ? OFFICIAL_WELCOME_MEDIA_ASPECT : 0;
+		if (background.kind !== 'local-image' || !wallpaperUrl) return;
 		const image = new Image();
 		image.onload = () => {
 			if (image.naturalWidth > 0 && image.naturalHeight > 0) {
-				imageAspect = image.naturalWidth / image.naturalHeight;
+				mediaAspect = image.naturalWidth / image.naturalHeight;
 			}
 		};
 		image.src = wallpaperUrl;
@@ -66,9 +95,28 @@
 		};
 	});
 
+	$effect(() => {
+		if (!videoElement || !videoBackground) return;
+		if (motionAllowed) {
+			void videoElement.play().catch(() => {
+				// The poster remains visible until a later user interaction can
+				// grant autoplay permission.
+			});
+		} else {
+			videoElement.pause();
+		}
+	});
+
+	function handleVideoMetadata() {
+		if (!videoElement) return;
+		if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+			mediaAspect = videoElement.videoWidth / videoElement.videoHeight;
+		}
+	}
+
 	const savedFocus = $derived(
-		mode.background.kind === 'local-image'
-			? (mode.background.focus[orientationKey] ?? 0.5)
+		background.kind === 'local-image' || background.kind === 'official-video'
+			? (background.focus[orientationKey] ?? 0.5)
 			: 0.5
 	);
 	// Live focus while the user drags, committed to storage on release.
@@ -79,16 +127,16 @@
 	});
 
 	const geometry = $derived.by(() => {
-		if (!imageBackground || !wallpaperUrl || !imageAspect || !viewportW || !viewportH) {
+		if (!pannable || !mediaUrl || !mediaAspect || !viewportW || !viewportH) {
 			return null;
 		}
-		// Fill the screen height; widen the image beyond the viewport when its
+		// Fill the screen height; widen the media beyond the viewport when its
 		// aspect ratio allows it, so the window can slide left/right over it.
 		let height = viewportH;
-		let width = height * imageAspect;
+		let width = height * mediaAspect;
 		if (width < viewportW) {
 			width = viewportW;
-			height = width / imageAspect;
+			height = width / mediaAspect;
 		}
 		return { width, height, overflowX: Math.max(0, width - viewportW) };
 	});
@@ -105,14 +153,12 @@
 		].join(';');
 	});
 
-	const blur = $derived(
-		mode.background.blur > 0 ? `blur(${mode.background.blur}px) saturate(1.04)` : 'none'
-	);
+	const blur = $derived(background.blur > 0 ? `blur(${background.blur}px) saturate(1.04)` : 'none');
 
 	const gradientStyle = $derived(
 		`background-image: ${gradientBackgroundCss(
-			mode.background.kind === 'gradient'
-				? mode.background.gradient
+			background.kind === 'gradient'
+				? background.gradient
 				: settings.modes[$resolvedAppearanceTheme].colors.canvas === '#000000'
 					? 'midnight'
 					: settings.preset,
@@ -130,38 +176,52 @@
 		) {
 			return true;
 		}
-		// Let horizontally scrollable content (code, tables, carousels) win.
-		for (let node = element as HTMLElement | null; node && node !== document.body; node = node.parentElement) {
+		// Only a genuinely horizontally scrollable local surface should win the
+		// gesture. Looking at every ancestor was brittle because app shells often
+		// report an auto overflow axis even when the gesture began on open space.
+		for (
+			let node = element as HTMLElement | null;
+			node && node !== document.body;
+			node = node.parentElement
+		) {
+			if (node.scrollWidth <= node.clientWidth + 4) continue;
 			const style = getComputedStyle(node);
-			if (
-				(style.overflowX === 'auto' || style.overflowX === 'scroll') &&
-				style.overflowY !== 'auto' &&
-				style.overflowY !== 'scroll' &&
-				node.scrollWidth > node.clientWidth + 4 &&
-				node.clientWidth > 0
-			) {
-				return true;
-			}
+			const canScroll = style.overflowX === 'auto' || style.overflowX === 'scroll';
+			const intentionallyHorizontal =
+				node.hasAttribute('data-horizontal-scroll') ||
+				node.classList.contains('overflow-x-auto') ||
+				node.classList.contains('overflow-x-scroll') ||
+				node.classList.contains('snap-x');
+			if (canScroll && intentionallyHorizontal) return true;
 		}
 		return false;
 	}
 
 	function commitFocus(value: number) {
-		if (!interactive || $appearanceDraft) return;
-		if (!imageBackground || mode.background.kind !== 'local-image') return;
+		if (
+			!interactive ||
+			$appearanceDraft ||
+			(background.kind !== 'local-image' && background.kind !== 'official-video')
+		) {
+			return;
+		}
+		const nextBackground = {
+			...background,
+			focus: { ...background.focus, [orientationKey]: value }
+		};
 		const next: AppearanceSettings = {
 			...$appearanceSettings,
 			modes: {
 				...$appearanceSettings.modes,
 				[$resolvedAppearanceTheme]: {
 					...$appearanceSettings.modes[$resolvedAppearanceTheme],
-					background: {
-						...mode.background,
-						focus: { ...mode.background.focus, [orientationKey]: value }
-					}
+					background: nextBackground
 				}
 			}
 		};
+		// Set the live value immediately so the backdrop does not snap back while
+		// the provider applies the persisted focus.
+		liveFocus = value;
 		try {
 			appearanceSettings.set(saveAppearance(window.location.origin, next));
 		} catch {
@@ -177,56 +237,48 @@
 		let active = false;
 		let horizontal = false;
 
-		const onDown = (event: PointerEvent) => {
-			const coarse = Boolean(window.matchMedia?.('(pointer: coarse)').matches);
-			const blocked = isPanBlocked(event.target);
-			if (!geometry || geometry.overflowX < 8 || event.button !== 0) return;
-			// Touch only: a mouse drag must stay available for text selection.
-			if (!coarse) return;
-			if (blocked || $appearanceDraft) return;
-			startX = event.clientX;
-			startY = event.clientY;
+		const onTouchStart = (event: TouchEvent) => {
+			if (!geometry || geometry.overflowX < 8 || event.touches.length !== 1) return;
+			if ($appearanceDraft || isPanBlocked(event.target)) return;
+			const touch = event.touches[0];
+			startX = touch.clientX;
+			startY = touch.clientY;
 			startFocus = savedFocus;
 			active = true;
 			horizontal = false;
 		};
-		const onMove = (event: PointerEvent) => {
-			if (!active || !geometry) return;
-			const dx = event.clientX - startX;
-			const dy = event.clientY - startY;
+		const onTouchMove = (event: TouchEvent) => {
+			if (!active || !geometry || event.touches.length !== 1) return;
+			const touch = event.touches[0];
+			const dx = touch.clientX - startX;
+			const dy = touch.clientY - startY;
 			if (!horizontal) {
 				if (Math.abs(dx) < 8) return;
-				if (Math.abs(dy) > Math.abs(dx)) {
+				if (Math.abs(dy) > Math.abs(dx) * 1.1) {
 					active = false;
 					return;
 				}
 				horizontal = true;
 				dragging = true;
 			}
-			// The app root opts into vertical panning while a wallpaper is
-			// interactive. Once the gesture proves horizontal, keep it on the
-			// wallpaper instead of allowing Android's page-level navigation.
 			if (event.cancelable) event.preventDefault();
 			liveFocus = Math.min(1, Math.max(0, startFocus - dx / geometry.overflowX));
 		};
-		const onUp = () => {
-			if (active && horizontal) {
-				dragging = false;
-				commitFocus(liveFocus);
-			}
+		const onTouchEnd = () => {
+			if (active && horizontal) commitFocus(liveFocus);
 			active = false;
 			horizontal = false;
 			dragging = false;
 		};
-		window.addEventListener('pointerdown', onDown, { passive: false });
-		window.addEventListener('pointermove', onMove, { passive: false });
-		window.addEventListener('pointerup', onUp, { passive: true });
-		window.addEventListener('pointercancel', onUp, { passive: true });
+		window.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
+		window.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
+		window.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
+		window.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: true });
 		return () => {
-			window.removeEventListener('pointerdown', onDown);
-			window.removeEventListener('pointermove', onMove);
-			window.removeEventListener('pointerup', onUp);
-			window.removeEventListener('pointercancel', onUp);
+			window.removeEventListener('touchstart', onTouchStart, { capture: true });
+			window.removeEventListener('touchmove', onTouchMove, { capture: true });
+			window.removeEventListener('touchend', onTouchEnd, { capture: true });
+			window.removeEventListener('touchcancel', onTouchEnd, { capture: true });
 		};
 	});
 </script>
@@ -234,25 +286,42 @@
 <div
 	bind:clientWidth={viewportW}
 	bind:clientHeight={viewportH}
-	class={`mist-backdrop mist-backdrop--${imageBackground && wallpaperUrl ? 'wallpaper' : variant}`}
+	class={`mist-backdrop mist-backdrop--${pannable && mediaUrl ? 'wallpaper' : variant}`}
 	aria-hidden="true"
 >
-	{#if imageBackground && wallpaperUrl && geometry}
+	{#if pannable && mediaUrl && geometry}
 		<div class="mist-backdrop__layer mist-backdrop__layer--wallpaper" style={gradientStyle}>
-			<img
-				class="mist-backdrop__wallpaper"
-				src={wallpaperUrl}
-				alt=""
-				draggable="false"
-				style={wallpaperStyle}
-				style:filter={blur}
-			/>
+			{#if videoBackground}
+				<video
+					bind:this={videoElement}
+					class="mist-backdrop__wallpaper mist-backdrop__video"
+					src={mediaUrl}
+					poster={OFFICIAL_WELCOME_POSTER_URL}
+					autoplay
+					muted
+					loop
+					playsinline
+					preload="metadata"
+					style={wallpaperStyle}
+					style:filter={blur}
+					onloadedmetadata={handleVideoMetadata}
+				></video>
+			{:else}
+				<img
+					class="mist-backdrop__wallpaper"
+					src={mediaUrl}
+					alt=""
+					draggable="false"
+					style={wallpaperStyle}
+					style:filter={blur}
+				/>
+			{/if}
 		</div>
 	{:else}
 		<div class="mist-backdrop__layer" style={gradientStyle}></div>
 	{/if}
 	<div
 		class="mist-backdrop__scrim"
-		style:background-color={`rgb(7 11 20 / ${mode.background.mask / 100})`}
+		style:background-color={`rgb(7 11 20 / ${background.mask / 100})`}
 	></div>
 </div>
