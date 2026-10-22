@@ -8,13 +8,17 @@
 	import {
 		createProviderConnection,
 		cancelChatGPTLogin,
+		cancelKimiLogin,
 		disconnectChatGPTConnection,
+		disconnectKimiConnection,
 		deleteProviderConnection,
 		getChatGPTLoginStatus,
+		getKimiLoginStatus,
 		getProviderCatalog,
 		getProviderConnections,
 		refreshProviderModels,
 		startChatGPTLogin,
+		startKimiLogin,
 		updateProviderConnection,
 		verifyProviderConnection,
 		verifyProviderDraft
@@ -46,7 +50,7 @@
 	let workingId = '';
 	let error = '';
 	let wizard = false;
-	let step: 'setup' | 'models' | 'chatgpt' = 'setup';
+	let step: 'setup' | 'models' | 'oauth' = 'setup';
 	let providerId = '';
 	let authType = 'api_key';
 	let name = '';
@@ -59,7 +63,7 @@
 	let accessGrants: any[] = [];
 	let verifiedModels: Model[] = [];
 	let selectedModelIds: string[] = [];
-	let chatAttempt: any = null;
+	let oauthAttempt: any = null;
 	let pollTimer: ReturnType<typeof setInterval> | undefined;
 	let pollGeneration = 0;
 	let editingId = '';
@@ -80,6 +84,8 @@
 
 	$: provider = providers.find((item) => item.id === providerId);
 	$: chatGPT = providerId === 'chatgpt';
+	$: kimi = providerId === 'kimi';
+	$: oauthProvider = chatGPT || kimi;
 	$: customProvider = providerId === 'custom';
 	$: isAdmin = mode === 'admin';
 	$: authOptions = provider?.auth_types?.length ? provider.auth_types : ['api_key'];
@@ -87,8 +93,8 @@
 		connection.visibility === 'shared'
 			? $user?.role === 'admin'
 			: connection.owner_id === $user?.id;
-	$: isChatGPTConnection = (connection: Connection) =>
-		connection.provider_id === 'chatgpt' && connection.auth_type === 'oauth';
+	$: isOAuthConnection = (connection: Connection) =>
+		['chatgpt', 'kimi'].includes(connection.provider_id) && connection.auth_type === 'oauth';
 	$: statusLabel = (connection: Connection) =>
 		connection.status === 'connected'
 			? $i18n.t('Connected')
@@ -141,8 +147,12 @@
 
 	const clearWizard = () => {
 		stopPolling();
-		if (chatAttempt?.attempt_id) cancelChatGPTLogin(chatAttempt.attempt_id).catch(() => {});
-		chatAttempt = null;
+		if (oauthAttempt?.attempt_id)
+			(oauthAttempt.provider_id === 'chatgpt'
+				? cancelChatGPTLogin(oauthAttempt.attempt_id)
+				: cancelKimiLogin(oauthAttempt.attempt_id)
+			).catch(() => {});
+		oauthAttempt = null;
 		wizard = false;
 		step = 'setup';
 		providerId = '';
@@ -179,7 +189,7 @@
 		baseUrl = id === 'bailian' ? '' : (item?.default_base_url ?? '');
 		region = id === 'bailian' ? 'cn-beijing' : '';
 		authType = item?.auth_types?.[0] ?? 'api_key';
-		if (id === 'chatgpt') authType = 'oauth';
+		if (id === 'chatgpt' || id === 'kimi') authType = 'oauth';
 	};
 
 	const configPayload = () => ({
@@ -196,7 +206,7 @@
 	});
 
 	$: draftCredentialsReady =
-		(chatGPT || authType !== 'api_key' || Boolean(apiKey.trim())) &&
+		(oauthProvider || authType !== 'api_key' || Boolean(apiKey.trim())) &&
 		(!customProvider || Boolean(baseUrl.trim())) &&
 		(providerId !== 'bailian' || !bailianNeedsWorkspace(region) || Boolean(workspaceId.trim()));
 
@@ -301,14 +311,18 @@
 		if (!confirm($i18n.t('Remove {{name}}?', { name: connection.name }))) return;
 		workingId = connection.id;
 		try {
-			if (connection.provider_id === 'chatgpt' && connection.auth_type === 'oauth') {
-				const result = await disconnectChatGPTConnection(connection.id);
+			if (isOAuthConnection(connection)) {
+				const result =
+					connection.provider_id === 'kimi'
+						? await disconnectKimiConnection(connection.id)
+						: await disconnectChatGPTConnection(connection.id);
 				connections = connections.filter((row) => row.id !== connection.id);
 				await refreshGlobalModels();
 				if (!result?.revocation_confirmed) {
 					toast.warning(
 						$i18n.t(
-							'ChatGPT was disconnected here, but token revocation was not confirmed. Review connected apps in your ChatGPT settings.'
+							'{{provider}} was disconnected here, but remote token revocation was not confirmed.',
+							{ provider: connection.provider_id }
 						)
 					);
 				} else {
@@ -344,7 +358,7 @@
 
 	const saveEdit = async (connection: Connection) => {
 		if (
-			!isChatGPTConnection(connection) &&
+			!isOAuthConnection(connection) &&
 			editModelOptions.length > 0 &&
 			editModelIds.length === 0
 		) {
@@ -354,7 +368,7 @@
 		workingId = connection.id;
 		try {
 			const payload: Record<string, unknown> = { name: editName.trim() };
-			if (!isChatGPTConnection(connection)) {
+			if (!isOAuthConnection(connection)) {
 				const nextConfig = {
 					...(editBaseUrl.trim() ? { base_url: editBaseUrl.trim() } : {}),
 					...(editRegion.trim() ? { region: editRegion.trim() } : {}),
@@ -378,7 +392,7 @@
 				if (editApiKey.trim()) payload.api_key = editApiKey.trim();
 				if (configChanged || editApiKey.trim()) payload.config = nextConfig;
 			}
-			if (isAdmin && !isChatGPTConnection(connection)) {
+			if (isAdmin && !isOAuthConnection(connection)) {
 				payload.visibility = editVisibility;
 				if (editVisibility === 'shared') payload.access_control = editGrants;
 			}
@@ -395,49 +409,73 @@
 		}
 	};
 
-	const beginChatGPT = async (connectionId?: string) => {
+	const beginOAuth = async (connectionId?: string) => {
 		if (saving) return;
 		saving = true;
 		error = '';
 		stopPolling();
 		const generation = pollGeneration;
+		const signingProvider = providerId;
 		try {
-			const attempt = await startChatGPTLogin(connectionId);
+			const attempt =
+				signingProvider === 'kimi'
+					? await startKimiLogin(connectionId)
+					: await startChatGPTLogin(connectionId);
 			if (generation !== pollGeneration) {
-				cancelChatGPTLogin(attempt.attempt_id).catch(() => {});
+				(signingProvider === 'kimi'
+					? cancelKimiLogin(attempt.attempt_id)
+					: cancelChatGPTLogin(attempt.attempt_id)
+				).catch(() => {});
 				return;
 			}
-			chatAttempt = attempt;
+			oauthAttempt = { ...attempt, provider_id: signingProvider };
 			wizard = true;
-			step = 'chatgpt';
+			step = 'oauth';
 			let polling = false;
-			pollTimer = setInterval(async () => {
-				if (polling) return;
-				polling = true;
-				try {
-					const state = await getChatGPTLoginStatus(attempt.attempt_id);
-					if (generation !== pollGeneration) return;
-					if (state.status === 'complete') {
-						stopPolling();
-						chatAttempt = null;
-						await load();
-						await refreshGlobalModels();
-						clearWizard();
-						toast.success($i18n.t('ChatGPT account connected'));
-					} else if (['failed', 'expired', 'error'].includes(state.status)) {
-						stopPolling();
-						error =
-							state.message || $i18n.t('ChatGPT sign-in {{status}}', { status: state.status });
+			pollTimer = setInterval(
+				async () => {
+					if (polling) return;
+					polling = true;
+					try {
+						const state =
+							signingProvider === 'kimi'
+								? await getKimiLoginStatus(attempt.attempt_id)
+								: await getChatGPTLoginStatus(attempt.attempt_id);
+						if (generation !== pollGeneration) return;
+						if (state.status === 'complete') {
+							stopPolling();
+							oauthAttempt = null;
+							await load();
+							await refreshGlobalModels();
+							clearWizard();
+							toast.success(
+								$i18n.t('{{provider}} account connected', {
+									provider: signingProvider === 'kimi' ? 'Kimi Code' : 'ChatGPT'
+								})
+							);
+						} else if (['failed', 'expired', 'error'].includes(state.status)) {
+							stopPolling();
+							error =
+								state.message ||
+								$i18n.t('{{provider}} sign-in {{status}}', {
+									provider: signingProvider === 'kimi' ? 'Kimi Code' : 'ChatGPT',
+									status: state.status
+								});
+						} else if (state.status === 'denied') {
+							stopPolling();
+							error = $i18n.t('Kimi Code authorization was denied.');
+						}
+					} catch (err) {
+						if (generation === pollGeneration) {
+							stopPolling();
+							error = readableError(err);
+						}
+					} finally {
+						polling = false;
 					}
-				} catch (err) {
-					if (generation === pollGeneration) {
-						stopPolling();
-						error = readableError(err);
-					}
-				} finally {
-					polling = false;
-				}
-			}, 2000);
+				},
+				Math.max(2, attempt.interval ?? 2) * 1000
+			);
 		} catch (err) {
 			if (generation === pollGeneration) error = readableError(err);
 		} finally {
@@ -519,7 +557,7 @@
 				{$i18n.t('No provider accounts connected yet')}
 			</p>
 			<p class="mt-1 text-xs text-gray-400">
-				{$i18n.t('Add OpenAI, DeepSeek, Bailian, ChatGPT, or a custom endpoint.')}
+				{$i18n.t('Add OpenAI, DeepSeek, Bailian, ChatGPT, Kimi Code, or a custom endpoint.')}
 			</p>
 		</div>
 	{:else}
@@ -536,7 +574,7 @@
 									maxlength="80"
 								/>
 							</label>
-							{#if !isChatGPTConnection(connection)}
+							{#if !isOAuthConnection(connection)}
 								<label class="block text-xs text-gray-600 dark:text-gray-300">
 									{$i18n.t('Replace API key (optional)')}
 									<input
@@ -613,7 +651,7 @@
 									</div>
 								{/if}
 							{/if}
-							{#if isAdmin && !isChatGPTConnection(connection)}
+							{#if isAdmin && !isOAuthConnection(connection)}
 								<label class="block text-xs text-gray-600 dark:text-gray-300"
 									>{$i18n.t('Who can use this account?')}
 									<select
@@ -641,7 +679,7 @@
 										type="button"
 										class="rounded-lg bg-gray-900 px-3 py-1.5 text-xs text-white dark:bg-gray-100 dark:text-gray-900"
 										disabled={workingId === connection.id ||
-											(!isChatGPTConnection(connection) &&
+											(!isOAuthConnection(connection) &&
 												editModelOptions.length > 0 &&
 												editModelIds.length === 0)}
 										on:click={() => saveEdit(connection)}>{$i18n.t('Save')}</button
@@ -693,14 +731,14 @@
 									disabled={workingId === connection.id}
 									on:click={() => verifySaved(connection)}>{$i18n.t('Verify')}</button
 								>
-								{#if canManageConnection(connection) && connection.provider_id === 'chatgpt' && connection.auth_type === 'oauth'}
+								{#if canManageConnection(connection) && isOAuthConnection(connection)}
 									<button
 										type="button"
 										class="rounded-md px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 disabled:opacity-50"
 										disabled={workingId === connection.id}
 										on:click={() => {
-											providerId = 'chatgpt';
-											beginChatGPT(connection.id);
+											providerId = connection.provider_id;
+											beginOAuth(connection.id);
 										}}>{$i18n.t('Reconnect')}</button
 									>
 								{/if}
@@ -753,8 +791,10 @@
 					>
 						{step === 'models'
 							? $i18n.t('Choose models')
-							: step === 'chatgpt'
-								? $i18n.t('Connect ChatGPT')
+							: step === 'oauth'
+								? chatGPT
+									? $i18n.t('Connect ChatGPT')
+									: $i18n.t('Connect Kimi Code')
 								: $i18n.t('Add a provider account')}
 					</h3>
 				</div>
@@ -793,7 +833,19 @@
 								maxlength="80"
 							/>
 						</label>
-						{#if !chatGPT}
+						{#if oauthProvider}
+							<p class="text-xs text-gray-500">
+								{$i18n.t(
+									'Account sign-in is private. Image generation, speech and transcription require a separate API key.'
+								)}
+							</p>
+							{#if kimi}<p class="text-xs text-gray-500">
+									{$i18n.t(
+										'Kimi Code sign-in is an experimental compatibility integration for personal interactive coding. Provider access may vary.'
+									)}
+								</p>{/if}
+						{/if}
+						{#if !oauthProvider}
 							<label class="block text-xs font-medium text-gray-600 dark:text-gray-300"
 								>{$i18n.t('Authentication')}
 								<select
@@ -828,7 +880,7 @@
 								</label>
 							{/if}
 						{/if}
-						{#if customProvider || providerId === 'openai' || providerId === 'deepseek' || providerId === 'bailian'}
+						{#if customProvider || ['openai', 'deepseek', 'bailian'].includes(providerId)}
 							<details
 								class="rounded-lg border border-gray-100 px-3 py-2.5 dark:border-gray-800"
 								open={customProvider}
@@ -880,7 +932,7 @@
 								</div>
 							</details>
 						{/if}
-						{#if isAdmin && !chatGPT}
+						{#if isAdmin && !oauthProvider}
 							<label class="block text-xs font-medium text-gray-600 dark:text-gray-300"
 								>{$i18n.t('Account access')}
 								<select
@@ -918,14 +970,16 @@
 							class="rounded-lg bg-gray-900 px-4 py-2 text-xs font-medium text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
 							disabled={saving || !draftCredentialsReady}
 							data-testid="provider-verify"
-							on:click={() => (chatGPT ? beginChatGPT() : verifyDraft())}
+							on:click={() => (oauthProvider ? beginOAuth() : verifyDraft())}
 							>{saving
 								? $i18n.t('Checking…')
-								: chatGPT
-									? $i18n.t('Start secure sign-in')
+								: oauthProvider
+									? kimi
+										? $i18n.t('Start device sign-in')
+										: $i18n.t('Start secure sign-in')
 									: $i18n.t('Verify and continue')}</button
 						>{/if}
-					{#if provider && !chatGPT}<button
+					{#if provider && !oauthProvider}<button
 							type="button"
 							class="rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
 							disabled={!draftCredentialsReady}
@@ -939,66 +993,86 @@
 							}}>{$i18n.t('Enter model IDs manually')}</button
 						>{/if}
 				</div>
-			{:else if step === 'chatgpt'}
+			{:else if step === 'oauth'}
 				<div class="mt-5 space-y-4">
-					<p class="text-sm text-gray-600 dark:text-gray-300">
-						{$i18n.t(
-							'Finish sign-in in the local helper. This account will be stored securely when the helper confirms completion.'
-						)}
-					</p>
-					{#if chatAttempt}
+					{#if kimi}
+						<p class="text-sm text-gray-600 dark:text-gray-300">
+							{$i18n.t(
+								'Open the Kimi verification page on any device, sign in, and enter this one-time code.'
+							)}
+						</p>
+					{:else}
+						<p class="text-sm text-gray-600 dark:text-gray-300">
+							{$i18n.t(
+								'Finish sign-in in the local helper. This account will be stored securely when the helper confirms completion.'
+							)}
+						</p>
+					{/if}
+					{#if oauthAttempt}
 						<div class="rounded-xl bg-gray-50 p-4 text-center dark:bg-gray-800/70">
 							<p class="text-[10px] uppercase tracking-widest text-gray-400">
-								{$i18n.t('PAIRING CODE')}
+								{kimi ? $i18n.t('DEVICE CODE') : $i18n.t('PAIRING CODE')}
 							</p>
 							<p
 								class="mt-2 font-mono text-3xl font-semibold tracking-[0.22em] text-gray-900 dark:text-white"
 							>
-								{chatAttempt.pairing_code}
+								{kimi ? oauthAttempt.user_code : oauthAttempt.pairing_code}
 							</p>
 							<button
 								type="button"
 								class="mt-2 text-xs text-blue-600 hover:underline"
-								on:click={() => copyText(chatAttempt.pairing_code)}>{$i18n.t('Copy code')}</button
+								on:click={() => copyText(kimi ? oauthAttempt.user_code : oauthAttempt.pairing_code)}
+								>{$i18n.t('Copy code')}</button
 							>
 						</div>
-						<div
-							class="space-y-2 rounded-xl border border-gray-100 p-3 text-xs dark:border-gray-800"
-						>
-							<p class="font-medium text-gray-700 dark:text-gray-200">
-								{$i18n.t('On this computer')}
-							</p>
-							<p class="text-gray-500">
-								{$i18n.t(
-									'Run this command in a terminal on the computer where you want to sign in. It downloads and starts the local helper.'
-								)}
-							</p>
-							<p class="text-gray-500">
-								<a
-									class="text-blue-600 hover:underline"
-									href={chatAttempt.helper_url}
-									target="_blank"
-									rel="noreferrer">{$i18n.t('Download helper script')}</a
+						{#if kimi}
+							<a
+								class="block rounded-lg border border-blue-200 px-3 py-2 text-center text-xs text-blue-600 hover:bg-blue-50 dark:border-blue-900 dark:hover:bg-blue-950/40"
+								href={oauthAttempt.verification_uri_complete}
+								target="_blank"
+								rel="noreferrer">{$i18n.t('Open Kimi verification page')}</a
+							>
+						{:else}
+							<div
+								class="space-y-2 rounded-xl border border-gray-100 p-3 text-xs dark:border-gray-800"
+							>
+								<p class="font-medium text-gray-700 dark:text-gray-200">
+									{$i18n.t('On this computer')}
+								</p>
+								<p class="text-gray-500">
+									{$i18n.t(
+										'Run this command in a terminal on the computer where you want to sign in. It downloads and starts the local helper.'
+									)}
+								</p>
+								<p class="text-gray-500">
+									<a
+										class="text-blue-600 hover:underline"
+										href={oauthAttempt.helper_url}
+										target="_blank"
+										rel="noreferrer">{$i18n.t('Download helper script')}</a
+									>
+								</p>
+								<p class="text-gray-500">
+									{$i18n.t('Enter the pairing code when the local helper asks for it.')}
+								</p>
+								<pre
+									class="overflow-x-auto rounded-lg bg-gray-900 p-3 text-[11px] text-gray-100">{oauthAttempt.command}</pre>
+								<button
+									type="button"
+									class="rounded-md border border-gray-200 px-2.5 py-1.5 text-[11px] dark:border-gray-700"
+									on:click={() => copyText(oauthAttempt.command)}>{$i18n.t('Copy command')}</button
 								>
-							</p>
-							<p class="text-gray-500">
-								{$i18n.t('Enter the pairing code when the local helper asks for it.')}
-							</p>
-							<pre
-								class="overflow-x-auto rounded-lg bg-gray-900 p-3 text-[11px] text-gray-100">{chatAttempt.command}</pre>
-							<button
-								type="button"
-								class="rounded-md border border-gray-200 px-2.5 py-1.5 text-[11px] dark:border-gray-700"
-								on:click={() => copyText(chatAttempt.command)}>{$i18n.t('Copy command')}</button
-							>
-							<p class="text-[11px] text-gray-400">
-								{$i18n.t('Code expires at {{time}}', {
-									time: formatExpiry(chatAttempt.expires_at)
-								})}
-							</p>
-						</div>
+							</div>
+						{/if}
+						<p class="text-center text-[11px] text-gray-400">
+							{$i18n.t('Code expires at {{time}}', {
+								time: formatExpiry(oauthAttempt.expires_at)
+							})}
+						</p>
 						{#if !error}<p class="animate-pulse text-center text-xs text-gray-500">
-								{$i18n.t('Waiting for the local helper…')}
+								{kimi
+									? $i18n.t('Waiting for Kimi authorization…')
+									: $i18n.t('Waiting for the local helper…')}
 							</p>{/if}
 					{/if}
 				</div>
@@ -1007,12 +1081,15 @@
 						type="button"
 						class="rounded-lg px-3 py-2 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
 						on:click={() => {
-							if (chatAttempt?.attempt_id) {
-								cancelChatGPTLogin(chatAttempt.attempt_id).catch(() => {});
+							if (oauthAttempt?.attempt_id) {
+								(kimi
+									? cancelKimiLogin(oauthAttempt.attempt_id)
+									: cancelChatGPTLogin(oauthAttempt.attempt_id)
+								).catch(() => {});
 							}
 							stopPolling();
 							step = 'setup';
-							chatAttempt = null;
+							oauthAttempt = null;
 						}}>{$i18n.t('Back')}</button
 					>
 				</div>
@@ -1081,7 +1158,7 @@
 							>
 						</div>
 					{/if}
-					{#if isAdmin && visibility === 'shared' && !chatGPT}<p
+					{#if isAdmin && visibility === 'shared' && !oauthProvider}<p
 							class="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:bg-blue-950/30 dark:text-blue-300"
 						>
 							{$i18n.t('People with access can use this account. The API key stays hidden.')}

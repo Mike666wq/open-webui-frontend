@@ -435,6 +435,66 @@ async function providerSettings(cdp) {
 	const saved = provenance.events.find((event) => event.kind === 'provider-saved');
 	assert.deepEqual(saved?.model_ids, ['deepseek-fixture']);
 	assert.equal(saved?.visibility, 'private');
+	const startKimi = async () => {
+		await cdp.click(`document.querySelector('[data-testid="provider-add"]')`, 'add Kimi provider');
+		await cdp.waitForExpression(
+			`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] select'))`,
+			'Kimi provider select'
+		);
+		await choose('kimi');
+		await cdp.waitForExpression(
+			`document.querySelector('[data-testid="provider-verify"]')?.disabled === false`,
+			'Kimi sign-in enabled without key'
+		);
+		assert.equal(
+			await cdp.evaluate(
+				`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="password"]'))`
+			),
+			false
+		);
+		await cdp.click(
+			`document.querySelector('[data-testid="provider-verify"]')`,
+			'start Kimi device sign-in'
+		);
+		await cdp.waitForExpression(
+			`Boolean(document.querySelector('a[href^="https://www.kimi.com/device"]'))`,
+			'Kimi verification link'
+		);
+		assert.match(
+			await cdp.evaluate(
+				`document.querySelector('[aria-labelledby="provider-wizard-title"]').textContent`
+			),
+			/TEST-1234/
+		);
+	};
+	await startKimi();
+	await cdp.click(
+		`document.querySelector('[aria-labelledby="provider-wizard-title"] button[aria-label]')`,
+		'cancel Kimi authorization'
+	);
+	await waitForValue(
+		async () =>
+			(await (await fetch(`${origin}/__fixture_provenance`)).json()).events.some(
+				(event) => event.kind === 'kimi-cancelled'
+			),
+		Boolean,
+		'Kimi cancel request'
+	);
+	await startKimi();
+	await cdp.waitForExpression(
+		`/Kimi Code (authorization was denied|授权已被拒绝)/.test(document.querySelector('[aria-labelledby="provider-wizard-title"]')?.textContent ?? '')`,
+		'denied Kimi authorization'
+	);
+	await cdp.click(
+		`document.querySelector('[aria-labelledby="provider-wizard-title"] button[aria-label]')`,
+		'close denied Kimi authorization'
+	);
+	await startKimi();
+	await cdp.waitForExpression(
+		`!document.querySelector('[aria-labelledby="provider-wizard-title"]') && document.querySelector('#tab-connections')?.textContent.includes('Kimi Code')`,
+		'connected Kimi account'
+	);
+
 	await cdp.screenshot('provider-accounts-393x852.png');
 	await cdp.click(
 		`document.querySelector('button[aria-controls="tab-appearance"]')`,
@@ -448,7 +508,10 @@ async function providerSettings(cdp) {
 		independentOfDirectConnections: true,
 		keyClearedOnProviderChange: true,
 		upstreamModelIds: true,
-		privateConnectionSaved: true
+		privateConnectionSaved: true,
+		kimiDeviceCode: true,
+		kimiCancelAndDenied: true,
+		kimiConnected: true
 	};
 }
 

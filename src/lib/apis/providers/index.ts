@@ -60,3 +60,15 @@ export const cancelChatGPTLogin = (attemptId: string) =>
 	request(`/auth/chatgpt/${encodeURIComponent(attemptId)}`, { method: 'DELETE' });
 export const disconnectChatGPTConnection = (connectionId: string) =>
 	request(`/auth/chatgpt/connection/${encodeURIComponent(connectionId)}`, { method: 'DELETE' });
+
+export const startKimiLogin = (connectionId?: string) =>
+	request('/auth/kimi/start', {
+		method: 'POST',
+		body: JSON.stringify(connectionId ? { connection_id: connectionId } : {})
+	});
+export const getKimiLoginStatus = (attemptId: string) =>
+	request(`/auth/kimi/${encodeURIComponent(attemptId)}`);
+export const cancelKimiLogin = (attemptId: string) =>
+	request(`/auth/kimi/${encodeURIComponent(attemptId)}`, { method: 'DELETE' });
+export const disconnectKimiConnection = (connectionId: string) =>
+	request(`/auth/kimi/connection/${encodeURIComponent(connectionId)}`, { method: 'DELETE' });

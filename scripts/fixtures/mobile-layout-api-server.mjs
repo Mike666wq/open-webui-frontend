@@ -18,6 +18,8 @@ const startedAt = Date.now();
 const events = [];
 const upgradedSockets = new Set();
 let providerConnection = null;
+let kimiConnection = null;
+const kimiAttempts = [];
 
 if (!root || !statSync(root).isDirectory()) {
 	console.error('Usage: node frontend-api-server.mjs <verified-frontend-directory>');
@@ -219,10 +221,11 @@ function api(pathname) {
 				name: 'OpenAI',
 				auth_types: ['api_key'],
 				default_base_url: 'https://api.openai.com/v1'
-			}
+			},
+			{ id: 'kimi', name: 'Kimi Code', auth_types: ['oauth'], default_base_url: '' }
 		];
 	if (pathname === '/api/v1/providers/connections')
-		return providerConnection ? [providerConnection] : [];
+		return [providerConnection, kimiConnection].filter(Boolean);
 	if (pathname === '/api/config') return config;
 	if (pathname === '/api/version') return { version: '0.12.2', deployment_id: 'fixture' };
 	if (pathname === '/api/v1/auths/') return user;
@@ -283,6 +286,52 @@ function isPage(pathname) {
 const server = createServer(async (request, response) => {
 	const url = new URL(request.url || '/', origin);
 	try {
+		if (url.pathname === '/api/v1/providers/auth/kimi/start' && request.method === 'POST') {
+			const attempt = {
+				attempt_id: 'kimi-fixture-' + (kimiAttempts.length + 1),
+				status: 'pending',
+				user_code: 'TEST-1234',
+				verification_uri_complete: 'https://www.kimi.com/device?code=TEST-1234',
+				expires_at: now + 600,
+				interval: 1
+			};
+			kimiAttempts.push(attempt);
+			event('kimi-started', { attempt_id: attempt.attempt_id });
+			send(response, 200, attempt);
+			return;
+		}
+		if (url.pathname.startsWith('/api/v1/providers/auth/kimi/kimi-fixture-')) {
+			const attempt = kimiAttempts.find((item) => url.pathname.endsWith('/' + item.attempt_id));
+			if (!attempt) {
+				send(response, 404, {});
+				return;
+			}
+			if (request.method === 'DELETE') {
+				attempt.status = 'cancelled';
+				event('kimi-cancelled', { attempt_id: attempt.attempt_id });
+			} else if (attempt === kimiAttempts[1]) {
+				attempt.status = 'denied';
+			} else if (attempt === kimiAttempts[2]) {
+				attempt.status = 'complete';
+				attempt.connection_id = 'fixture-kimi-connection';
+				kimiConnection = {
+					id: attempt.connection_id,
+					provider_id: 'kimi',
+					name: 'Kimi Code',
+					auth_type: 'oauth',
+					visibility: 'private',
+					owner_id: userId,
+					config: {},
+					status: 'connected',
+					models: [],
+					configured: true
+				};
+				event('kimi-completed', { attempt_id: attempt.attempt_id });
+			}
+			send(response, 200, attempt);
+			return;
+		}
+
 		if (
 			request.method === 'POST' &&
 			['/api/v1/providers/connections/verify', '/api/v1/providers/connections'].includes(

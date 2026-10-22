@@ -4,6 +4,7 @@
 	const dispatch = createEventDispatcher();
 
 	import { getBackendConfig } from '$lib/apis';
+	import { getProviderConnections } from '$lib/apis/providers';
 	import {
 		getAudioConfig,
 		updateAudioConfig,
@@ -54,6 +55,7 @@
 	// Audio
 	let TTS_OPENAI_API_BASE_URL = '';
 	let TTS_OPENAI_API_KEY = '';
+	let TTS_PROVIDER_CONNECTION_ID = '';
 	let TTS_API_KEY = '';
 	let TTS_ENGINE = '';
 	let TTS_MODEL = '';
@@ -69,6 +71,7 @@
 
 	let STT_OPENAI_API_BASE_URL = '';
 	let STT_OPENAI_API_KEY = '';
+	let STT_PROVIDER_CONNECTION_ID = '';
 	let STT_OPENAI_API_REQUEST_FORMAT = 'multipart';
 	let STT_ENGINE = '';
 	let STT_MODEL = '';
@@ -99,6 +102,12 @@
 	let voices: SpeechSynthesisVoice[] = [];
 	let providerVoices: Voice[] = [];
 	let models: Awaited<ReturnType<typeof _getModels>>['models'] = [];
+	let providerConnections: Array<{
+		id: string;
+		name: string;
+		provider_id: string;
+		auth_type: string;
+	}> = [];
 	const inputClass =
 		'w-full h-7 rounded-lg border border-gray-100/50 bg-gray-50/40 px-2 text-xs text-gray-700 outline-hidden transition-colors placeholder:text-gray-300 focus:border-blue-400 dark:border-white/[0.04] dark:bg-white/[0.03] dark:text-gray-300 dark:placeholder:text-gray-700 dark:focus:border-blue-500';
 	const textareaClass =
@@ -152,6 +161,14 @@
 	};
 
 	const updateConfigHandler = async () => {
+		if (TTS_ENGINE === 'provider' && !TTS_PROVIDER_CONNECTION_ID) {
+			toast.error($i18n.t('Select an API-key provider connection for text to speech.'));
+			return;
+		}
+		if (STT_ENGINE === 'provider' && !STT_PROVIDER_CONNECTION_ID) {
+			toast.error($i18n.t('Select an API-key provider connection for transcription.'));
+			return;
+		}
 		let openaiParams = {};
 		let realtimeInputParams: Record<string, unknown> | null = null;
 		try {
@@ -184,6 +201,7 @@
 			tts: {
 				OPENAI_API_BASE_URL: TTS_OPENAI_API_BASE_URL,
 				OPENAI_API_KEY: TTS_OPENAI_API_KEY,
+				PROVIDER_CONNECTION_ID: TTS_PROVIDER_CONNECTION_ID,
 				OPENAI_PARAMS: openaiParams,
 				API_KEY: TTS_API_KEY,
 				ENGINE: TTS_ENGINE,
@@ -200,6 +218,7 @@
 			stt: {
 				OPENAI_API_BASE_URL: STT_OPENAI_API_BASE_URL,
 				OPENAI_API_KEY: STT_OPENAI_API_KEY,
+				PROVIDER_CONNECTION_ID: STT_PROVIDER_CONNECTION_ID,
 				OPENAI_API_REQUEST_FORMAT: STT_OPENAI_API_REQUEST_FORMAT,
 				ENGINE: STT_ENGINE,
 				MODEL: STT_MODEL,
@@ -230,12 +249,20 @@
 	};
 
 	onMount(async () => {
+		getProviderConnections()
+			.then((rows) => {
+				providerConnections = (Array.isArray(rows) ? rows : (rows?.connections ?? [])).filter(
+					(connection: { auth_type: string }) => connection.auth_type === 'api_key'
+				);
+			})
+			.catch(() => {});
 		const res = await getAudioConfig(localStorage.token);
 
 		if (res) {
 			console.log(res);
 			TTS_OPENAI_API_BASE_URL = res.tts.OPENAI_API_BASE_URL;
 			TTS_OPENAI_API_KEY = res.tts.OPENAI_API_KEY;
+			TTS_PROVIDER_CONNECTION_ID = res.tts.PROVIDER_CONNECTION_ID ?? '';
 			TTS_OPENAI_PARAMS = JSON.stringify(res?.tts?.OPENAI_PARAMS ?? '', null, 2);
 			TTS_API_KEY = res.tts.API_KEY;
 
@@ -262,6 +289,7 @@
 				: '';
 			STT_OPENAI_API_BASE_URL = res.stt.OPENAI_API_BASE_URL;
 			STT_OPENAI_API_KEY = res.stt.OPENAI_API_KEY;
+			STT_PROVIDER_CONNECTION_ID = res.stt.PROVIDER_CONNECTION_ID ?? '';
 			STT_OPENAI_API_REQUEST_FORMAT = res.stt.OPENAI_API_REQUEST_FORMAT || 'multipart';
 
 			STT_ENGINE = res.stt.ENGINE;
@@ -418,6 +446,9 @@
 					<option value="deepgram">{$i18n.t('Deepgram')}</option>
 					<option value="azure">{$i18n.t('Azure AI Speech')}</option>
 					<option value="mistral">{$i18n.t('MistralAI')}</option>
+					{#if $config?.features?.enable_provider_media_connections}<option value="provider"
+							>{$i18n.t('Saved provider connection')}</option
+						>{/if}
 				</SettingsSelect>
 			</AdminSettingRow>
 
@@ -434,7 +465,33 @@
 				</AdminSettingField>
 			{/if}
 
-			{#if STT_ENGINE === 'openai'}
+			{#if STT_ENGINE === 'provider'}
+				<AdminSettingField
+					label={$i18n.t('API-key provider connection')}
+					description={$i18n.t(
+						'Uses a server-saved API key. ChatGPT and Kimi account sign-in does not cover transcription.'
+					)}
+				>
+					<p class="mb-2 text-[11px] text-gray-500">
+						{$i18n.t(
+							'Only users with access to this connection can use this media feature. Share it in Connections for other users.'
+						)}
+					</p>
+					<SettingsSelect bind:value={STT_PROVIDER_CONNECTION_ID}>
+						<option value="">{$i18n.t('Select a provider connection')}</option>
+						{#each providerConnections as connection}
+							<option value={connection.id}>{connection.name} · {connection.provider_id}</option>
+						{/each}
+					</SettingsSelect>
+				</AdminSettingField>
+				<AdminSettingField label={$i18n.t('settings.admin.audio.sttModel.label')}>
+					<input
+						class={inputClass}
+						bind:value={STT_MODEL}
+						placeholder={$i18n.t('Transcription model ID')}
+					/>
+				</AdminSettingField>
+			{:else if STT_ENGINE === 'openai'}
 				<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 					<AdminSettingField label={$i18n.t('settings.admin.audio.sttOpenaiApiBaseUrl.label')}>
 						<input
@@ -640,7 +697,7 @@
 					on:change={async (e) => {
 						const value = (e.currentTarget as HTMLSelectElement).value;
 
-						if (value === 'openai') {
+						if (value === 'openai' || value === 'provider') {
 							TTS_VOICE = 'alloy';
 							TTS_MODEL = 'tts-1';
 						} else if (value === 'openai-realtime') {
@@ -654,6 +711,7 @@
 							TTS_MODEL = '';
 						}
 
+						if (value === 'provider' && !TTS_PROVIDER_CONNECTION_ID) return;
 						await updateConfigHandler();
 						await getVoices();
 						await getModels();
@@ -668,10 +726,27 @@
 					<option value="elevenlabs">{$i18n.t('ElevenLabs')}</option>
 					<option value="azure">{$i18n.t('Azure AI Speech')}</option>
 					<option value="mistral">{$i18n.t('MistralAI')}</option>
+					{#if $config?.features?.enable_provider_media_connections}<option value="provider"
+							>{$i18n.t('Saved provider connection')}</option
+						>{/if}
 				</SettingsSelect>
 			</AdminSettingRow>
 
-			{#if TTS_ENGINE === 'openai' || TTS_ENGINE === 'openai-realtime'}
+			{#if TTS_ENGINE === 'provider'}
+				<AdminSettingField
+					label={$i18n.t('API-key provider connection')}
+					description={$i18n.t(
+						'Uses a server-saved API key and the OpenAI-compatible /audio/speech endpoint.'
+					)}
+				>
+					<SettingsSelect bind:value={TTS_PROVIDER_CONNECTION_ID}>
+						<option value="">{$i18n.t('Select a provider connection')}</option>
+						{#each providerConnections as connection}
+							<option value={connection.id}>{connection.name} · {connection.provider_id}</option>
+						{/each}
+					</SettingsSelect>
+				</AdminSettingField>
+			{:else if TTS_ENGINE === 'openai' || TTS_ENGINE === 'openai-realtime'}
 				<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 					<AdminSettingField label={$i18n.t('settings.admin.audio.ttsOpenaiApiBaseUrl.label')}>
 						<input
@@ -785,7 +860,7 @@
 						</a>
 					</div>
 				</AdminSettingField>
-			{:else if TTS_ENGINE === 'openai' || TTS_ENGINE === 'openai-realtime'}
+			{:else if ['openai', 'openai-realtime', 'provider'].includes(TTS_ENGINE)}
 				<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 					<AdminSettingField label={$i18n.t('settings.admin.audio.ttsVoice.label')}>
 						<TTSVoiceInput
