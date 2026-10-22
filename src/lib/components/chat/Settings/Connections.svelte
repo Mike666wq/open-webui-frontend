@@ -3,12 +3,13 @@
 
 	const i18n = getContext('i18n');
 
-	import { settings } from '$lib/stores';
+	import { config as backendConfig, settings, user } from '$lib/stores';
 
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
 	import Connection from './Connections/Connection.svelte';
+	import ProviderConnections from '$lib/components/ProviderConnections.svelte';
 
 	import AddConnectionModal from '$lib/components/AddConnectionModal.svelte';
 
@@ -63,109 +64,118 @@
 	});
 </script>
 
-<AddConnectionModal direct bind:show={showConnectionModal} onSubmit={addConnectionHandler} />
+<div id="tab-connections">
+	<ProviderConnections mode="personal" />
 
-<form
-	id="tab-connections"
-	class="flex flex-col h-full justify-between text-sm"
-	on:submit|preventDefault={() => {
-		updateHandler();
-	}}
->
-	<h2 class="text-sm font-medium text-gray-900 dark:text-white mb-4">
-		{$i18n.t('settings.personal.connections.title')}
-	</h2>
+	{#if $backendConfig?.features?.enable_direct_connections || $user?.role === 'admin'}
+		<AddConnectionModal direct bind:show={showConnectionModal} onSubmit={addConnectionHandler} />
 
-	<div class="flex flex-1 min-h-0 flex-col overflow-y-auto scrollbar-hover pr-1.5">
-		{#if config !== null}
-			<section class="space-y-3" aria-labelledby="direct-connections-heading">
-				<div class="flex items-start justify-between gap-3">
-					<div class="min-w-0">
-						<h3 id="direct-connections-heading" class="text-xs text-gray-600 dark:text-gray-400">
-							{$i18n.t('settings.personal.connections.sections.directConnections.title')}
-						</h3>
-						<p class="mt-1 text-[0.6875rem] leading-relaxed text-gray-400 dark:text-gray-600">
-							{$i18n.t('settings.personal.connections.addConnection.description')}
-						</p>
-					</div>
+		<form
+			class="flex flex-col h-full justify-between text-sm"
+			on:submit|preventDefault={() => {
+				updateHandler();
+			}}
+		>
+			<h2 class="text-sm font-medium text-gray-900 dark:text-white mb-4">
+				{$i18n.t('settings.personal.connections.title')}
+			</h2>
 
-					<Tooltip content={$i18n.t('settings.personal.connections.addConnection.label')}>
-						<button
-							class="flex size-7 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-900 dark:text-gray-600 dark:hover:bg-white/5 dark:hover:text-white"
-							aria-label={$i18n.t('settings.personal.connections.addConnection.label')}
-							on:click={() => {
-								showConnectionModal = true;
-							}}
-							type="button"
+			<div class="flex flex-1 min-h-0 flex-col overflow-y-auto scrollbar-hover pr-1.5">
+				{#if config !== null}
+					<section class="space-y-3" aria-labelledby="direct-connections-heading">
+						<div class="flex items-start justify-between gap-3">
+							<div class="min-w-0">
+								<h3
+									id="direct-connections-heading"
+									class="text-xs text-gray-600 dark:text-gray-400"
+								>
+									{$i18n.t('settings.personal.connections.sections.directConnections.title')}
+								</h3>
+								<p class="mt-1 text-[0.6875rem] leading-relaxed text-gray-400 dark:text-gray-600">
+									{$i18n.t('settings.personal.connections.addConnection.description')}
+								</p>
+							</div>
+
+							<Tooltip content={$i18n.t('settings.personal.connections.addConnection.label')}>
+								<button
+									class="flex size-7 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-900 dark:text-gray-600 dark:hover:bg-white/5 dark:hover:text-white"
+									aria-label={$i18n.t('settings.personal.connections.addConnection.label')}
+									on:click={() => {
+										showConnectionModal = true;
+									}}
+									type="button"
+								>
+									<Plus />
+								</button>
+							</Tooltip>
+						</div>
+
+						<div class="flex flex-col gap-2">
+							{#each config?.OPENAI_API_BASE_URLS ?? [] as url, idx}
+								<Connection
+									bind:url
+									bind:key={config.OPENAI_API_KEYS[idx]}
+									bind:config={config.OPENAI_API_CONFIGS[idx]}
+									onSubmit={() => {
+										updateHandler();
+									}}
+									onDelete={() => {
+										config.OPENAI_API_BASE_URLS = config.OPENAI_API_BASE_URLS.filter(
+											(url, urlIdx) => idx !== urlIdx
+										);
+										config.OPENAI_API_KEYS = config.OPENAI_API_KEYS.filter(
+											(key, keyIdx) => idx !== keyIdx
+										);
+
+										let newConfig = {};
+										config.OPENAI_API_BASE_URLS.forEach((url, newIdx) => {
+											newConfig[newIdx] =
+												config.OPENAI_API_CONFIGS[newIdx < idx ? newIdx : newIdx + 1];
+										});
+										config.OPENAI_API_CONFIGS = newConfig;
+										updateHandler();
+									}}
+								/>
+							{/each}
+						</div>
+					</section>
+
+					<div class="mt-6">
+						<div
+							class="space-y-3 border-t border-gray-100/50 pt-4 text-[0.6875rem] leading-relaxed text-gray-400 dark:border-white/[0.04] dark:text-gray-600"
 						>
-							<Plus />
-						</button>
-					</Tooltip>
-				</div>
-
-				<div class="flex flex-col gap-2">
-					{#each config?.OPENAI_API_BASE_URLS ?? [] as url, idx}
-						<Connection
-							bind:url
-							bind:key={config.OPENAI_API_KEYS[idx]}
-							bind:config={config.OPENAI_API_CONFIGS[idx]}
-							onSubmit={() => {
-								updateHandler();
-							}}
-							onDelete={() => {
-								config.OPENAI_API_BASE_URLS = config.OPENAI_API_BASE_URLS.filter(
-									(url, urlIdx) => idx !== urlIdx
-								);
-								config.OPENAI_API_KEYS = config.OPENAI_API_KEYS.filter(
-									(key, keyIdx) => idx !== keyIdx
-								);
-
-								let newConfig = {};
-								config.OPENAI_API_BASE_URLS.forEach((url, newIdx) => {
-									newConfig[newIdx] = config.OPENAI_API_CONFIGS[newIdx < idx ? newIdx : newIdx + 1];
-								});
-								config.OPENAI_API_CONFIGS = newConfig;
-								updateHandler();
-							}}
-						/>
-					{/each}
-				</div>
-			</section>
-
-			<div class="mt-6">
-				<div
-					class="space-y-3 border-t border-gray-100/50 pt-4 text-[0.6875rem] leading-relaxed text-gray-400 dark:border-white/[0.04] dark:text-gray-600"
-				>
-					<p>
-						{$i18n.t(
-							'Connections managed through the Admin Panel are recommended for everyday use. Direct connections provide convenient access to your own endpoints, but rely on your browser session to keep requests running, making them better suited to testing and temporary use.'
-						)}
-					</p>
-					<p>
-						<!-- LICENSE covers this Open WebUI wordmark.
+							<p>
+								{$i18n.t(
+									'Connections managed through the Admin Panel are recommended for everyday use. Direct connections provide convenient access to your own endpoints, but rely on your browser session to keep requests running, making them better suited to testing and temporary use.'
+								)}
+							</p>
+							<p>
+								<!-- LICENSE covers this Open WebUI wordmark.
 						Do not alter, remove, obscure, or replace it except as LICENSE permits:
 						https://docs.openwebui.com/license. -->
-						{$i18n.t(
-							'CORS must be properly configured by the provider to allow requests from Open WebUI.'
-						)}
-					</p>
-				</div>
+								{$i18n.t(
+									'CORS must be properly configured by the provider to allow requests from Open WebUI.'
+								)}
+							</p>
+						</div>
+					</div>
+				{:else}
+					<div class="flex h-full justify-center">
+						<div class="my-auto">
+							<Spinner className="size-6" />
+						</div>
+					</div>
+				{/if}
 			</div>
-		{:else}
-			<div class="flex h-full justify-center">
-				<div class="my-auto">
-					<Spinner className="size-6" />
-				</div>
-			</div>
-		{/if}
-	</div>
 
-	<div class="shrink-0 flex justify-end pt-3 text-sm font-normal">
-		<button
-			class="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-2.5 text-xs font-normal text-white transition hover:bg-black disabled:opacity-60 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
-			type="submit"
-		>
-			{$i18n.t('Save')}
-		</button>
-	</div>
-</form>
+			<div class="shrink-0 flex justify-end pt-3 text-sm font-normal">
+				<button
+					class="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-2.5 text-xs font-normal text-white transition hover:bg-black disabled:opacity-60 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+					type="submit"
+				>
+					{$i18n.t('Save')}
+				</button>
+			</div>
+		</form>
+	{/if}
+</div>

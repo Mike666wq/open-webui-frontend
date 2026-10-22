@@ -661,7 +661,7 @@
 							<span>{$i18n.t('settings.personal.shortcuts.title')}</span>
 						</button>
 					{:else if tabId === 'connections'}
-						{#if $user?.role === 'admin' || ($user?.role === 'user' && $config?.features?.enable_direct_connections)}
+						{#if $user?.id}
 							<button
 								role="tab"
 								aria-controls="tab-connections"
