@@ -1,4 +1,4 @@
-> 云端开发和前端 → 后端镜像 / APK 串联构建，见 [云端开发说明](docs/CLOUD_DEVELOPMENT.md)。
+> 三仓库共同进度见 [当前进度](docs/PROJECT_STATUS.md)，操作方式见 [GitHub 构建与人工验收](docs/CLOUD_DEVELOPMENT.md)。Codespaces 当前暂停使用，尚未验收可用。
 
 # Open WebUI Frontend
 
@@ -11,10 +11,14 @@ remain recorded in `frontend.upstream.json` for compatibility checks.
 Open WebUI branding, `LICENSE`, `LICENSE_HISTORY` and third-party notices are
 retained.
 
-Develop the real Svelte UI in a local browser with hot updates, then package the
-same static frontend for Android. Your existing Open WebUI backend continues to
-manage accounts, models and conversations. No new website deployment, backend
-image, Docker build or APK job is included here.
+This repository maintains the DIY Svelte UI and publishes verified static bundles.
+Both the backend image and Android APK consume that same pinned bundle. Backend
+accounts, models and conversations remain managed by the backend repository.
+
+Daily development can stay in a local editor with Git; GitHub Actions installs
+dependencies, tests and builds. Local hot reload below is optional when resources
+permit. Manual acceptance uses an isolated test service and physical devices.
+Codespaces is paused after real initialization failures and is not a release gate.
 
 ## Local development
 
@@ -106,7 +110,8 @@ asset must not fall back to another version's server asset.
 
 ## GitHub process
 
-Only the frontend workflow is enabled. A PR runs Node 22, npm cache, locked
+This repository's workflow builds the frontend; downstream repositories synchronize
+its successful main Release before building their own artifacts. A PR runs Node 22, npm cache, locked
 dependency installation, packaging tests, the upstream frontend unit tests and
 the official production frontend build. Merging to `main` builds the same
 frontend bundle and automatically publishes:
@@ -119,7 +124,10 @@ Release assets are the ZIP, metadata and `SHA256SUMS`. A retry accepts an alread
 published matching bundle and never replaces mismatching public assets. Each
 run/attempt's intermediate artifact is retained for 14 days.
 
-Android downloads a **fixed release** during its build. PR quick checks in the
+Backend and Android consumers download a **fixed release** during their builds.
+Their `frontend.lock.json` files must agree on source SHA and asset hashes.
+Synchronization runs on consumer main pushes, approximately every 15 minutes,
+and manually through `Sync verified frontend and build`. PR quick checks in the
 Android repository do not need to download the whole frontend. This repository
 does not build or publish a backend image, deploy a site, run an Android emulator
 or generate an APK.
@@ -127,8 +135,9 @@ or generate an APK.
 ## Upstream and license
 
 This is an independently maintained derivative, not an official Open WebUI
-release. The first delivery preserves the imported official UI while providing
-a clean starting point for local UI customization. Only frontend source and the
+release. The imported official UI is the compatibility baseline; this fork now includes
+DIY appearance/wallpaper/navigation and resource-management UI changes. Source
+implementation and automated checks do not imply every page has passed manual acceptance. Only frontend source and the
 files needed to build it are maintained here; no backend runtime is launched by
 the frontend workflow.
 
