@@ -58,10 +58,10 @@ jobs:
           export ANDROID_KEYSTORE_BASE64="$(base64 -w 0 "$smoke_dir/openwebui-client.p12")"
           node scripts/validate-android-keystore.mjs
           echo "Temporary Android keystore generation, alias and password validation passed."
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          components: rustfmt
+      - name: Install pinned Rust formatting tools
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component rustfmt
+          rustup default "$RUST_VERSION"
       - name: Check Rust formatting
         run: |
           cargo fmt --manifest-path src-tauri/Cargo.toml --all --check

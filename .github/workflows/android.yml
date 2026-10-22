@@ -186,26 +186,26 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
-        with:
-          cache-provider: basic
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: platform-tools
+      - name: Use the runner Android SDK
+        run: |
+          test -d "$ANDROID_HOME/cmdline-tools/latest/bin"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
       - name: Install Android SDK components
         run: |
           sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
           echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install the pinned Rust Android toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component rustfmt --target aarch64-linux-android
+          rustup default "$RUST_VERSION"
+      - uses: actions/cache@v4
         with:
-          toolchain: ${{ env.RUST_VERSION }}
-          components: rustfmt
-          targets: aarch64-linux-android
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/client/src-tauri -> target
-          cache-on-failure: true
-          key: android-arm64
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/client/src-tauri/target
+          key: android-arm64-${{ runner.os }}-${{ env.RUST_VERSION }}-${{ hashFiles('apps/client/src-tauri/Cargo.lock') }}
+          restore-keys: android-arm64-${{ runner.os }}-${{ env.RUST_VERSION }}-
       - name: Install frontend dependencies
         run: npm ci
       - uses: actions/download-artifact@v4
