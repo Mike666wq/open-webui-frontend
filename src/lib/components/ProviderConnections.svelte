@@ -195,10 +195,14 @@
 			: selectedModelIds
 	});
 
-	const draftCredentialsReady = () =>
+	$: draftCredentialsReady =
 		(chatGPT || authType !== 'api_key' || Boolean(apiKey.trim())) &&
 		(!customProvider || Boolean(baseUrl.trim())) &&
 		(providerId !== 'bailian' || !bailianNeedsWorkspace(region) || Boolean(workspaceId.trim()));
+
+	$: hasSelectedModels = manualMode
+		? manualModelInput.split(/[\n,]/).some((id) => Boolean(id.trim()))
+		: selectedModelIds.length > 0;
 
 	const verifyDraft = async () => {
 		error = '';
@@ -912,7 +916,7 @@
 					{#if provider}<button
 							type="button"
 							class="rounded-lg bg-gray-900 px-4 py-2 text-xs font-medium text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
-							disabled={saving || !draftCredentialsReady()}
+							disabled={saving || !draftCredentialsReady}
 							data-testid="provider-verify"
 							on:click={() => (chatGPT ? beginChatGPT() : verifyDraft())}
 							>{saving
@@ -924,7 +928,7 @@
 					{#if provider && !chatGPT}<button
 							type="button"
 							class="rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-							disabled={!draftCredentialsReady()}
+							disabled={!draftCredentialsReady}
 							on:click={() => {
 								manualMode = true;
 								draftStatus = 'manual';
@@ -1091,7 +1095,7 @@
 					><button
 						type="button"
 						class="rounded-lg bg-gray-900 px-4 py-2 text-xs font-medium text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
-						disabled={saving || !configPayload().model_ids.length}
+						disabled={saving || !hasSelectedModels}
 						data-testid="provider-save"
 						on:click={saveConnection}
 						>{saving ? $i18n.t('Saving…') : $i18n.t('Save account')}</button

@@ -410,6 +410,22 @@ async function providerSettings(cdp) {
 		`Boolean(document.querySelector('[data-testid="provider-save"]'))`,
 		'provider model choice'
 	);
+	await cdp.click(
+		`document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="checkbox"]')`,
+		'unselect provider model'
+	);
+	await cdp.waitForExpression(
+		`document.querySelector('[data-testid="provider-save"]')?.disabled === true`,
+		'save disabled without selected models'
+	);
+	await cdp.click(
+		`document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="checkbox"]')`,
+		'select provider model'
+	);
+	await cdp.waitForExpression(
+		`document.querySelector('[data-testid="provider-save"]')?.disabled === false`,
+		'save re-enabled after model selection'
+	);
 	await cdp.click(`document.querySelector('[data-testid="provider-save"]')`, 'save provider');
 	await cdp.waitForExpression(
 		`!document.querySelector('[aria-labelledby="provider-wizard-title"]') && document.querySelector('#tab-connections')?.textContent.includes('DeepSeek')`,
