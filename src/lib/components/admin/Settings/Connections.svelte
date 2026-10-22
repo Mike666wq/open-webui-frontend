@@ -240,8 +240,10 @@
 
 	<div class="flex-1 min-h-0 overflow-y-auto scrollbar-hover pr-1.5">
 		{#if ENABLE_OPENAI_API !== null && ENABLE_OLLAMA_API !== null && connectionsConfig !== null}
-			<ProviderConnections mode="admin" />
-			<div class="mt-5"></div>
+			{#if $config?.features?.enable_provider_connections}
+				<ProviderConnections mode="admin" />
+				<div class="mt-5"></div>
+			{/if}
 			<AdminSettingSection first>
 				<AdminSettingRow label={$i18n.t('settings.admin.connections.openaiApi.label')} let:labelId>
 					<Switch

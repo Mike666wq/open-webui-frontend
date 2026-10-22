@@ -65,7 +65,9 @@
 </script>
 
 <div id="tab-connections">
-	<ProviderConnections mode="personal" />
+	{#if $backendConfig?.features?.enable_provider_connections}
+		<ProviderConnections mode="personal" />
+	{/if}
 
 	{#if $backendConfig?.features?.enable_direct_connections || $user?.role === 'admin'}
 		<AddConnectionModal direct bind:show={showConnectionModal} onSubmit={addConnectionHandler} />

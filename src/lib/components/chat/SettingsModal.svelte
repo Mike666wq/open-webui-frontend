@@ -406,7 +406,10 @@
 	const getAvailableSettings = (personalTabs: SettingsTab[], administratorTabs: SettingsTab[]) => {
 		const personalSettings = personalTabs.filter((tab) => {
 			if (tab.id === 'connections') {
-				return $config?.features?.enable_direct_connections;
+				return (
+					$config?.features?.enable_provider_connections === true ||
+					$config?.features?.enable_direct_connections === true
+				);
 			}
 
 			if (tab.id === 'tools') {
