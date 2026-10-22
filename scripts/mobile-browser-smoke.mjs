@@ -131,8 +131,7 @@ class CdpClient {
 		if (response.exceptionDetails) {
 			throw new Error(
 				`Page evaluation failed: ${
-					response.exceptionDetails.exception?.description ||
-					response.exceptionDetails.text
+					response.exceptionDetails.exception?.description || response.exceptionDetails.text
 				}`
 			);
 		}
@@ -357,6 +356,84 @@ async function openSettings(cdp) {
 		`Boolean(document.querySelector('#open-mist-appearance-editor'))`,
 		'appearance editor entry'
 	);
+}
+
+async function providerSettings(cdp) {
+	// The fixture intentionally disables browser direct connections. This catches
+	// regressions where the server-managed account tab inherits that switch.
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('button[aria-controls="tab-connections"]'))`,
+		'server provider settings tab'
+	);
+	await cdp.click(
+		`document.querySelector('button[aria-controls="tab-connections"]')`,
+		'provider settings tab'
+	);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[data-testid="provider-add"]'))`,
+		'provider account entry'
+	);
+	await cdp.click(`document.querySelector('[data-testid="provider-add"]')`, 'add provider');
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] select'))`,
+		'provider wizard'
+	);
+	const choose = async (id) => {
+		await cdp.evaluate(
+			`(() => { const select=document.querySelector('[aria-labelledby="provider-wizard-title"] select'); select.value=${JSON.stringify(id)}; select.dispatchEvent(new Event('change',{bubbles:true})); })()`
+		);
+	};
+	const enterKey = async () => {
+		await cdp.evaluate(
+			`(() => { const input=document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="password"]'); input.value='synthetic-fixture-key'; input.dispatchEvent(new Event('input',{bubbles:true})); })()`
+		);
+	};
+	await choose('deepseek');
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="password"]'))`,
+		'provider key input'
+	);
+	await enterKey();
+	await choose('openai');
+	await cdp.waitForExpression(
+		`document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="password"]')?.value === ''`,
+		'key cleared after provider change'
+	);
+	await choose('deepseek');
+	await enterKey();
+	await cdp.waitForExpression(
+		`document.querySelector('[data-testid="provider-verify"]')?.disabled === false`,
+		'verify enabled'
+	);
+	await cdp.click(`document.querySelector('[data-testid="provider-verify"]')`, 'verify provider');
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[data-testid="provider-save"]'))`,
+		'provider model choice'
+	);
+	await cdp.click(`document.querySelector('[data-testid="provider-save"]')`, 'save provider');
+	await cdp.waitForExpression(
+		`!document.querySelector('[aria-labelledby="provider-wizard-title"]') && document.querySelector('#tab-connections')?.textContent.includes('DeepSeek')`,
+		'saved provider account'
+	);
+	const provenance = await (await fetch(`${origin}/__fixture_provenance`)).json();
+	const saved = provenance.events.find((event) => event.kind === 'provider-saved');
+	assert.deepEqual(saved?.model_ids, ['deepseek-fixture']);
+	assert.equal(saved?.visibility, 'private');
+	await cdp.screenshot('provider-accounts-393x852.png');
+	await cdp.click(
+		`document.querySelector('button[aria-controls="tab-appearance"]')`,
+		'restore appearance tab'
+	);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('#open-mist-appearance-editor'))`,
+		'restored appearance settings'
+	);
+	return {
+		independentOfDirectConnections: true,
+		keyClearedOnProviderChange: true,
+		upstreamModelIds: true,
+		privateConnectionSaved: true
+	};
 }
 
 async function dismissUpdateDialog(cdp) {
@@ -694,6 +771,7 @@ async function main() {
 		});
 		results.wallpaperPan = await wallpaperPanning(client);
 		await openSettings(client);
+		results.providers = await providerSettings(client);
 		results.settings = await settingsGeometry(client, 393, 852);
 		await client.screenshot('appearance-editor-393x852.png');
 
@@ -772,7 +850,9 @@ async function main() {
 		}
 		if (removeError) {
 			// A leftover temp profile must never fail a run whose checks passed.
-			console.warn(`Could not remove Chromium profile ${userDataDirectory}: ${removeError.message}`);
+			console.warn(
+				`Could not remove Chromium profile ${userDataDirectory}: ${removeError.message}`
+			);
 		}
 	}
 }

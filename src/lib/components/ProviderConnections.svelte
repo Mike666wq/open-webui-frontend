@@ -485,6 +485,7 @@
 		</div>
 		<button
 			type="button"
+			data-testid="provider-add"
 			class="rounded-lg bg-gray-900 px-3 py-2 text-xs text-white hover:bg-black dark:bg-gray-100 dark:text-gray-900"
 			on:click={() => {
 				wizard = true;
@@ -912,6 +913,7 @@
 							type="button"
 							class="rounded-lg bg-gray-900 px-4 py-2 text-xs font-medium text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
 							disabled={saving || !draftCredentialsReady()}
+							data-testid="provider-verify"
 							on:click={() => (chatGPT ? beginChatGPT() : verifyDraft())}
 							>{saving
 								? $i18n.t('Checking…')
@@ -1090,6 +1092,7 @@
 						type="button"
 						class="rounded-lg bg-gray-900 px-4 py-2 text-xs font-medium text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
 						disabled={saving || !configPayload().model_ids.length}
+						data-testid="provider-save"
 						on:click={saveConnection}
 						>{saving ? $i18n.t('Saving…') : $i18n.t('Save account')}</button
 					>
