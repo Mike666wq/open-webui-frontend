@@ -110,35 +110,28 @@ asset must not fall back to another version's server asset.
 
 ## GitHub process
 
-This repository's workflow builds the frontend; downstream repositories synchronize
-its successful main Release before building their own artifacts. A PR runs Node 22, npm cache, locked
-dependency installation, packaging tests, the upstream frontend unit tests and
-the official production frontend build. Merging to `main` builds the same
-frontend bundle and automatically publishes:
+This repository owns both the web frontend and the Android client at `apps/client/`.
+Backend source and container publishing remain in [open-webui-backend](https://github.com/Mike666wq/open-webui-backend).
+See [two-repository migration and signing](docs/TWO_REPOSITORY_PIPELINE.md).
 
-```text
-frontend-<first 12 characters of the main source commit>
-```
+The `frontend` workflow selects jobs from changed paths. Documentation and Codespaces changes do not publish products.
+Web changes run package/unit/browser checks, build once and publish immutable `frontend-<SHA12>` assets.
+The Android reusable workflow runs after the web release, reuses the exact same verified bundle, retains the
+original application/signing identity, and publishes the signed ARM64 APK here. Native-only changes reuse
+the client's checked-in frontend lock without rebuilding the web UI. APK and backend image builds can run in parallel.
+Client and web npm packages retain independent versions and lockfiles.
 
-Release assets are the ZIP, metadata and `SHA256SUMS`. A retry accepts an already
-published matching bundle and never replaces mismatching public assets. Each
-run/attempt's intermediate artifact is retained for 14 days.
-
-Backend and Android consumers download a **fixed release** during their builds.
-Their `frontend.lock.json` files must agree on source SHA and asset hashes.
-Synchronization runs on consumer main pushes, approximately every 15 minutes,
-and manually through `Sync verified frontend and build`. PR quick checks in the
-Android repository do not need to download the whole frontend. This repository
-does not build or publish a backend image, deploy a site, run an Android emulator
-or generate an APK.
+Backend polling resolves the latest **published frontend product in main history**, ignoring APK releases and
+subsequent documentation/native-only commits. Its own lock pins source and hashes; image smoke/Compose checks gate promotion.
+Polling is scheduled approximately every 15 minutes; GitHub may delay it. Manual backend sync remains available.
+Public assets are immutable; failed checks cannot publish an APK or promote a backend image.
 
 ## Upstream and license
 
 This is an independently maintained derivative, not an official Open WebUI
 release. The imported official UI is the compatibility baseline; this fork now includes
 DIY appearance/wallpaper/navigation and resource-management UI changes. Source
-implementation and automated checks do not imply every page has passed manual acceptance. Only frontend source and the
-files needed to build it are maintained here; no backend runtime is launched by
+implementation and automated checks do not imply every page has passed manual acceptance. Frontend and client source are maintained here; no backend runtime is launched by
 the frontend workflow.
 
 Read [LICENSE](LICENSE), [LICENSE_HISTORY](LICENSE_HISTORY) and the applicable

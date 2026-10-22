@@ -15,7 +15,22 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      web: ${{ steps.select.outputs.web }}
+      android: ${{ steps.select.outputs.android }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: python3 -m unittest discover -s scripts -p test_pipeline_changes.py -v
+      - id: select
+        run: python3 scripts/pipeline-changes.py
+
   checks:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     outputs:
@@ -139,3 +154,25 @@ jobs:
             --notes-file RELEASE_NOTES.md \
             --latest \
             open-webui-frontend.zip frontend-manifest.json SHA256SUMS
+
+  client-checks:
+    needs: changes
+    if: needs.changes.outputs.android == 'true' && github.event_name == 'pull_request'
+    uses: ./.github/workflows/client-quality.yml
+    with:
+      source_sha: ${{ github.sha }}
+
+  android:
+    needs: [changes, checks, release]
+    if: >-
+      always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
+      needs.changes.result == 'success' && needs.changes.outputs.android == 'true' &&
+      (needs.release.result == 'success' || (needs.changes.outputs.web == 'false' && needs.release.result == 'skipped'))
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/android.yml
+    with:
+      frontend_source: ${{ needs.changes.outputs.web == 'true' && github.sha || '' }}
+      frontend_artifact: ${{ needs.checks.outputs.artifact-name }}
+    secrets: inherit

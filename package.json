@@ -22,7 +22,7 @@
 		"format:backend": "ruff format . --exclude .venv --exclude venv",
 		"i18n:parse": "i18next --config i18next-parser.config.ts && prettier --write \"src/lib/i18n/**/*.{js,json}\"",
 		"cy:open": "cypress open",
-		"test:frontend": "vitest --passWithNoTests",
+		"test:frontend": "vitest --passWithNoTests --exclude 'apps/**'",
 		"pyodide:fetch": "node scripts/prepare-pyodide.js"
 	},
 	"devDependencies": {

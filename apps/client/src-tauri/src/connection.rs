@@ -1,0 +1,1206 @@
+use std::{
+    collections::HashSet,
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    thread,
+    time::Duration,
+};
+
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Manager, Runtime, State, Url, Webview, ipc::CapabilityBuilder};
+use tauri_plugin_opener::OpenerExt;
+use uuid::Uuid;
+
+const CONNECTION_TIMEOUT: Duration = Duration::from_secs(30);
+const CONNECTION_FILE: &str = "connection.json";
+const CONNECTION_HISTORY_LIMIT: usize = 5;
+
+#[derive(Clone)]
+pub struct ConnectionManager(Arc<Mutex<ConnectionRuntime>>);
+
+#[derive(Debug)]
+struct ConnectionRuntime {
+    candidate: Option<Url>,
+    last_success: Option<Url>,
+    recent_urls: Vec<Url>,
+    generation: u64,
+    ready_nonce: Option<String>,
+    session_token: Option<String>,
+    ready: bool,
+    error: Option<String>,
+    startup_pending: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Attempt {
+    generation: u64,
+    nonce: String,
+    session_token: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionStatus {
+    candidate_url: Option<String>,
+    last_success_url: Option<String>,
+    startup_url: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+struct PersistedConnection {
+    #[serde(default)]
+    last_success_url: String,
+    #[serde(default)]
+    recent_urls: Vec<String>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum PageLoadAction {
+    Handshake {
+        generation: u64,
+        nonce: String,
+        expected_origin: String,
+    },
+    RestoreSession {
+        generation: u64,
+        token: String,
+        expected_origin: String,
+    },
+}
+
+impl ConnectionManager {
+    pub fn load(app: &AppHandle) -> Self {
+        let (last_success, recent_urls) = load_connection_history(app);
+        Self(Arc::new(Mutex::new(ConnectionRuntime::with_recent(
+            last_success,
+            recent_urls,
+        ))))
+    }
+
+    /// Read-only: unlike status(), never consumes startup auto-connect.
+    #[cfg(any(target_os = "android", test))]
+    pub(crate) fn native_snapshot(
+        &self,
+    ) -> (u64, String, Option<String>, Option<String>, Option<String>) {
+        let state = self.0.lock().expect("connection state poisoned");
+        let phase = if state.ready {
+            "connected"
+        } else if state.ready_nonce.is_some() {
+            "connecting"
+        } else if state.error.is_some() {
+            "failed"
+        } else {
+            "settings"
+        };
+        (
+            state.generation,
+            phase.into(),
+            state.candidate.as_ref().map(origin_string),
+            state.last_success.as_ref().map(origin_string),
+            state.error.as_ref().map(|_| "connectionFailed".into()),
+        )
+    }
+
+    #[cfg(any(target_os = "android", test))]
+    pub(crate) fn native_recent_urls(&self) -> Vec<String> {
+        self.0
+            .lock()
+            .expect("connection state poisoned")
+            .recent_urls
+            .iter()
+            .map(origin_string)
+            .collect()
+    }
+
+    pub(crate) fn fail_attempt(&self, generation: u64, error: String) {
+        if let Ok(mut state) = self.0.lock() {
+            if state.generation == generation && !state.ready {
+                state.error = Some(error);
+                state.ready_nonce = None;
+                state.session_token = None;
+            }
+        }
+    }
+
+    #[cfg(target_os = "android")]
+    pub(crate) fn cancel_attempt(&self, generation: u64) -> bool {
+        let Ok(mut state) = self.0.lock() else {
+            return false;
+        };
+        if state.generation != generation || state.ready || state.ready_nonce.is_none() {
+            return false;
+        }
+        state.return_to_settings(true);
+        state.error = None;
+        true
+    }
+
+    fn begin(&self, url: Url) -> Attempt {
+        self.0.lock().expect("connection state poisoned").begin(url)
+    }
+
+    fn complete_ready<F>(
+        &self,
+        generation: u64,
+        nonce: &str,
+        current_origin: &str,
+        persist: F,
+    ) -> Result<String, String>
+    where
+        F: FnOnce(&Url, &[Url]) -> Result<(), String>,
+    {
+        let mut state = self
+            .0
+            .lock()
+            .map_err(|_| "Connection state is unavailable.")?;
+        let candidate = state.validate_ready(generation, nonce, current_origin)?;
+        let recent_urls = remember_recent_url(&state.recent_urls, &candidate);
+        if let Err(error) = persist(&candidate, &recent_urls) {
+            state.error = Some(error.clone());
+            state.ready_nonce = None;
+            state.session_token = None;
+            return Err(error);
+        }
+        state.last_success = Some(candidate);
+        state.recent_urls = recent_urls;
+        state.ready_nonce = None;
+        state.ready = true;
+        state.error = None;
+        state
+            .session_token
+            .clone()
+            .ok_or_else(|| "The connection session has expired.".to_string())
+    }
+
+    fn is_current_session(&self, generation: u64, origin: &str, token: &str) -> bool {
+        self.0
+            .lock()
+            .map(|state| state.authorizes(generation, origin, token))
+            .unwrap_or(false)
+    }
+
+    fn invalidate_for_settings(&self, manual: bool) {
+        if let Ok(mut state) = self.0.lock() {
+            state.observe_settings_page(manual);
+        }
+    }
+
+    fn timeout(&self, generation: u64) -> bool {
+        self.0
+            .lock()
+            .map(|mut state| state.timeout(generation))
+            .unwrap_or(false)
+    }
+
+    fn should_return_after_ready_error(&self, generation: u64, origin: &str) -> bool {
+        self.0
+            .lock()
+            .map(|state| {
+                state.generation == generation
+                    && !state.ready
+                    && state.error.is_some()
+                    && state
+                        .candidate
+                        .as_ref()
+                        .is_some_and(|candidate| candidate.origin().ascii_serialization() == origin)
+            })
+            .unwrap_or(false)
+    }
+
+    fn status(&self) -> ConnectionStatus {
+        let mut state = self.0.lock().expect("connection state poisoned");
+        let startup_url = state.consume_startup_url();
+        ConnectionStatus {
+            candidate_url: state.candidate.as_ref().map(origin_string),
+            last_success_url: state.last_success.as_ref().map(origin_string),
+            startup_url: startup_url.as_ref().map(origin_string),
+            error: state.error.clone(),
+        }
+    }
+}
+
+pub fn return_to_settings(app: &AppHandle, manager: &ConnectionManager) {
+    manager.invalidate_for_settings(true);
+    crate::save::invalidate_transfers(app);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.navigate(settings_url());
+    }
+}
+
+impl ConnectionRuntime {
+    fn new(last_success: Option<Url>) -> Self {
+        let recent_urls = last_success.iter().cloned().collect();
+        Self::with_recent(last_success, recent_urls)
+    }
+
+    fn with_recent(last_success: Option<Url>, recent_urls: Vec<Url>) -> Self {
+        Self {
+            candidate: None,
+            recent_urls: remember_recent_urls(&recent_urls, last_success.as_ref()),
+            last_success,
+            generation: 0,
+            ready_nonce: None,
+            session_token: None,
+            ready: false,
+            error: None,
+            startup_pending: true,
+        }
+    }
+
+    fn begin(&mut self, url: Url) -> Attempt {
+        self.generation = self.generation.wrapping_add(1);
+        let attempt = Attempt {
+            generation: self.generation,
+            nonce: Uuid::new_v4().to_string(),
+            session_token: Uuid::new_v4().to_string(),
+        };
+        self.candidate = Some(url);
+        self.ready_nonce = Some(attempt.nonce.clone());
+        self.session_token = Some(attempt.session_token.clone());
+        self.ready = false;
+        self.error = None;
+        self.startup_pending = false;
+        attempt
+    }
+
+    fn consume_startup_url(&mut self) -> Option<Url> {
+        if !self.startup_pending {
+            return None;
+        }
+        self.startup_pending = false;
+        self.last_success.clone()
+    }
+
+    fn validate_ready(
+        &self,
+        generation: u64,
+        nonce: &str,
+        current_origin: &str,
+    ) -> Result<Url, String> {
+        if self.ready || generation != self.generation || self.ready_nonce.as_deref() != Some(nonce)
+        {
+            return Err("This connection attempt is no longer active.".into());
+        }
+        let candidate = self
+            .candidate
+            .as_ref()
+            .ok_or_else(|| "There is no active connection attempt.".to_string())?;
+        if candidate.origin().ascii_serialization() != current_origin {
+            return Err("The readiness response came from an unexpected server.".into());
+        }
+        Ok(candidate.clone())
+    }
+
+    fn authorizes(&self, generation: u64, origin: &str, token: &str) -> bool {
+        self.ready
+            && generation == self.generation
+            && self.session_token.as_deref() == Some(token)
+            && self
+                .candidate
+                .as_ref()
+                .is_some_and(|candidate| candidate.origin().ascii_serialization() == origin)
+    }
+
+    fn page_load_action(&self, loaded_url: &Url) -> Option<PageLoadAction> {
+        let candidate = self.candidate.as_ref()?;
+        if candidate.origin() != loaded_url.origin() {
+            return None;
+        }
+        let expected_origin = origin_string(candidate);
+        if self.ready {
+            let token = self.session_token.clone()?;
+            Some(PageLoadAction::RestoreSession {
+                generation: self.generation,
+                token,
+                expected_origin,
+            })
+        } else {
+            let nonce = self.ready_nonce.clone()?;
+            Some(PageLoadAction::Handshake {
+                generation: self.generation,
+                nonce,
+                expected_origin,
+            })
+        }
+    }
+
+    fn allows_service_navigation(&self, target: &Url) -> bool {
+        // Navigation callbacks run on Android's WebView main looper, so their policy
+        // must use the active candidate instead of synchronously asking the WebView
+        // for its current URL. Only the main window receives this capability.
+        self.candidate.as_ref().is_some_and(|candidate| {
+            (self.ready || self.ready_nonce.is_some()) && candidate.origin() == target.origin()
+        })
+    }
+
+    fn has_active_service_session(&self) -> bool {
+        self.ready && self.candidate.is_some()
+    }
+
+    fn return_to_settings(&mut self, manual: bool) {
+        if manual || self.candidate.is_some() || self.session_token.is_some() {
+            self.startup_pending = false;
+        }
+        self.generation = self.generation.wrapping_add(1);
+        self.ready_nonce = None;
+        self.session_token = None;
+        self.ready = false;
+        if self.candidate.is_none() {
+            self.candidate = self.last_success.clone();
+        }
+    }
+
+    fn observe_settings_page(&mut self, manual: bool) {
+        if manual || self.ready || self.ready_nonce.is_some() || self.session_token.is_some() {
+            self.return_to_settings(manual);
+        }
+    }
+
+    fn timeout(&mut self, generation: u64) -> bool {
+        if self.generation != generation
+            || self.ready
+            || self.candidate.is_none()
+            || self.ready_nonce.is_none()
+        {
+            return false;
+        }
+        self.error
+            .get_or_insert_with(|| "The server did not finish loading within 30 seconds.".into());
+        self.ready_nonce = None;
+        self.session_token = None;
+        true
+    }
+}
+
+pub fn validate_service_url(value: &str) -> Result<Url, String> {
+    let address = value.trim();
+    let invalid_address = || "Enter a valid HTTP or HTTPS address.".to_string();
+    let Some((scheme, remainder)) = address.split_once("://") else {
+        return Err(invalid_address());
+    };
+    let authority_end = remainder.find(['/', '?', '#']).unwrap_or(remainder.len());
+    if !(scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https"))
+        || authority_end == 0
+        || address.contains('\\')
+    {
+        return Err(invalid_address());
+    }
+    let url = Url::parse(address).map_err(|_| invalid_address())?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none_or(str::is_empty)
+        || url.host_str() == Some("tauri.localhost")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(
+            "Use an HTTP or HTTPS address without a path, query, credentials, or fragment.".into(),
+        );
+    }
+    Ok(url)
+}
+
+fn origin_string(url: &Url) -> String {
+    url.origin().ascii_serialization()
+}
+
+fn connection_path(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|dir| dir.join(CONNECTION_FILE))
+        .map_err(|error| format!("Could not locate app settings: {error}"))
+}
+
+fn load_connection_history(app: &AppHandle) -> (Option<Url>, Vec<Url>) {
+    let file = match connection_path(app) {
+        Ok(file) => file,
+        Err(_) => return (None, Vec::new()),
+    };
+    let saved = match fs::read(file)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<PersistedConnection>(&bytes).ok())
+    {
+        Some(saved) => saved,
+        None => return (None, Vec::new()),
+    };
+    history_from_persisted(saved)
+}
+
+fn history_from_persisted(saved: PersistedConnection) -> (Option<Url>, Vec<Url>) {
+    let mut candidates = saved
+        .recent_urls
+        .into_iter()
+        .filter_map(|value| validate_service_url(&value).ok())
+        .collect::<Vec<_>>();
+    let last_success = validate_service_url(&saved.last_success_url).ok();
+    if let Some(current) = last_success.as_ref() {
+        candidates.push(current.clone());
+    }
+    let recent_urls = remember_recent_urls(&candidates, last_success.as_ref());
+    let last_success = last_success.or_else(|| recent_urls.first().cloned());
+    (last_success, recent_urls)
+}
+
+fn remember_recent_url(current: &[Url], candidate: &Url) -> Vec<Url> {
+    let mut candidates = Vec::with_capacity(current.len() + 1);
+    candidates.push(candidate.clone());
+    candidates.extend(current.iter().cloned());
+    remember_recent_urls(&candidates, Some(candidate))
+}
+
+fn remember_recent_urls(current: &[Url], preferred: Option<&Url>) -> Vec<Url> {
+    let mut seen = HashSet::new();
+    let mut result = Vec::with_capacity(CONNECTION_HISTORY_LIMIT);
+    for url in preferred.into_iter().chain(current.iter()) {
+        let origin = origin_string(url);
+        if seen.insert(origin) {
+            result.push(url.clone());
+            if result.len() == CONNECTION_HISTORY_LIMIT {
+                break;
+            }
+        }
+    }
+    result
+}
+
+fn persist_connection_history(
+    app: &AppHandle,
+    url: &Url,
+    recent_urls: &[Url],
+) -> Result<(), String> {
+    let file = connection_path(app)?;
+    let parent = file
+        .parent()
+        .ok_or_else(|| "Could not locate app settings folder.".to_string())?;
+    fs::create_dir_all(parent).map_err(|error| format!("Could not save connection: {error}"))?;
+    let temp = parent.join(format!(".connection-{}.tmp", Uuid::new_v4()));
+    let contents = serde_json::to_vec(&PersistedConnection {
+        last_success_url: origin_string(url),
+        recent_urls: recent_urls.iter().map(origin_string).collect(),
+    })
+    .map_err(|error| format!("Could not save connection: {error}"))?;
+    let write_result = (|| {
+        let mut output = File::create(&temp).map_err(|error| error.to_string())?;
+        output
+            .write_all(&contents)
+            .map_err(|error| error.to_string())?;
+        output.sync_all().map_err(|error| error.to_string())?;
+        replace_file(&temp, &file).map_err(|error| error.to_string())
+    })();
+    if write_result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    write_result.map_err(|error| format!("Could not save connection: {error}"))
+}
+
+#[cfg(windows)]
+pub(crate) fn replace_file(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+    let from: Vec<u16> = from.as_os_str().encode_wide().chain(Some(0)).collect();
+    let to: Vec<u16> = to.as_os_str().encode_wide().chain(Some(0)).collect();
+    let success = unsafe {
+        MoveFileExW(
+            from.as_ptr(),
+            to.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if success == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+pub(crate) fn replace_file(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    fs::rename(from, to)
+}
+
+#[tauri::command(rename = "get-connection-state")]
+pub async fn get_connection_state(
+    webview: Webview,
+    manager: State<'_, ConnectionManager>,
+) -> Result<ConnectionStatus, String> {
+    ensure_local_webview(&webview)?;
+    let local_origin = is_local_entry(&webview.url().map_err(|error| error.to_string())?);
+    if local_origin {
+        manager.invalidate_for_settings(false);
+        crate::save::invalidate_transfers(webview.app_handle());
+    }
+    Ok(manager.status())
+}
+
+#[tauri::command(rename = "connect-service", rename_all = "camelCase")]
+pub async fn connect_service(
+    app: AppHandle,
+    webview: Webview,
+    manager: State<'_, ConnectionManager>,
+    address: String,
+) -> Result<(), String> {
+    ensure_local_webview(&webview)?;
+    start_connection(app, webview, manager.inner().clone(), address).await
+}
+
+pub(crate) fn publish_native_state(app: &AppHandle) {
+    #[cfg(target_os = "android")]
+    crate::android_client::publish(app);
+    #[cfg(not(target_os = "android"))]
+    let _ = app;
+}
+
+pub(crate) async fn start_connection(
+    app: AppHandle,
+    webview: Webview,
+    manager: ConnectionManager,
+    address: String,
+) -> Result<(), String> {
+    let url = validate_service_url(&address)?;
+    let attempt = manager.begin(url.clone());
+    crate::save::invalidate_transfers(&app);
+    #[cfg(target_os = "android")]
+    {
+        let bridge = app
+            .state::<tauri_plugin_connection_controls::ConnectionControlsBridge<tauri::Wry>>()
+            .inner()
+            .clone();
+        if let Err(error) = bridge
+            .prepare_bundled_frontend(origin_string(&url), attempt.generation)
+            .await
+        {
+            manager.fail_attempt(attempt.generation, error.clone());
+            publish_native_state(&app);
+            return Err(error);
+        }
+    }
+    let origin_pattern = format!("{}/*", origin_string(&url));
+    let capability = CapabilityBuilder::new(format!("remote-session-{}", attempt.generation))
+        .window("main")
+        .local(false)
+        .remote(origin_pattern)
+        .permission("allow-connection-ready")
+        .permission("allow-open-external")
+        .permission("allow-save-begin")
+        .permission("allow-save-write-chunk")
+        .permission("allow-save-finish")
+        .permission("allow-save-cancel");
+    let navigation = app
+        .add_capability(capability)
+        .map_err(|error| format!("Could not authorize this server session: {error}"))
+        .and_then(|()| {
+            webview
+                .navigate(url)
+                .map_err(|error| format!("Could not open the server: {error}"))
+        });
+    if let Err(error) = navigation {
+        manager.fail_attempt(attempt.generation, error.clone());
+        publish_native_state(&app);
+        return Err(error);
+    }
+    publish_native_state(&app);
+
+    let app_for_timeout = app.clone();
+    let manager_for_timeout = manager.clone();
+    let generation = attempt.generation;
+    thread::spawn(move || {
+        thread::sleep(CONNECTION_TIMEOUT);
+        if manager_for_timeout.timeout(generation) {
+            crate::save::invalidate_transfers(&app_for_timeout);
+            publish_native_state(&app_for_timeout);
+            if let Some(window) = app_for_timeout.get_webview_window("main") {
+                let _ = window.navigate(settings_url());
+            }
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command(rename = "connection-ready", rename_all = "camelCase")]
+pub async fn connection_ready(
+    app: AppHandle,
+    webview: Webview,
+    manager: State<'_, ConnectionManager>,
+    generation: u64,
+    nonce: String,
+) -> Result<(), String> {
+    if webview.label() != "main" {
+        return Err("This connection is not available in this webview.".into());
+    }
+    let current = webview.url().map_err(|error| error.to_string())?;
+    let current_origin = current.origin().ascii_serialization();
+    let token =
+        match manager.complete_ready(generation, &nonce, &current_origin, |url, recent_urls| {
+            persist_connection_history(&app, url, recent_urls)
+        }) {
+            Ok(token) => token,
+            Err(error) => {
+                publish_native_state(&app);
+                if manager.should_return_after_ready_error(generation, &current_origin) {
+                    let _ = webview.navigate(settings_url());
+                }
+                return Err(error);
+            }
+        };
+    publish_native_state(&app);
+    let injection = format!(
+        "window.__OWC_SESSION__={{generation:{generation},token:{}}};",
+        serde_json::to_string(&token).map_err(|error| error.to_string())?
+    );
+    webview.eval(&injection).map_err(|error| error.to_string())
+}
+
+#[tauri::command(rename = "open-external", rename_all = "camelCase")]
+pub async fn open_external(
+    app: AppHandle,
+    webview: Webview,
+    manager: State<'_, ConnectionManager>,
+    url: String,
+    generation: u64,
+    session_token: String,
+) -> Result<(), String> {
+    require_current_session(&webview, &manager, generation, &session_token)?;
+    let parsed = parse_external_url(&url)?;
+    app.opener()
+        .open_url(parsed.as_str(), None::<&str>)
+        .map_err(|error| format!("Could not open link: {error}"))
+}
+
+/// Reusable guard for any remote-only native bridge, including future download commands.
+/// Call it again after every asynchronous user interaction before committing side effects.
+pub(crate) fn require_current_session(
+    webview: &Webview,
+    manager: &ConnectionManager,
+    generation: u64,
+    session_token: &str,
+) -> Result<Url, String> {
+    if webview.label() != "main" {
+        return Err("This connection is not available in this webview.".into());
+    }
+    let current = webview.url().map_err(|error| error.to_string())?;
+    let current_origin = current.origin().ascii_serialization();
+    if !manager.is_current_session(generation, &current_origin, session_token) {
+        return Err("This server session is no longer active.".into());
+    }
+    Ok(current)
+}
+
+/// Validate a remote session and run a short synchronous state transition while the
+/// connection generation is still locked. Use this when accepting a save operation so
+/// invalidation cannot slip between the session check and transfer-state transition.
+pub(crate) fn with_current_session<T>(
+    webview: &Webview,
+    manager: &ConnectionManager,
+    generation: u64,
+    session_token: &str,
+    action: impl FnOnce(&Url) -> Result<T, String>,
+) -> Result<T, String> {
+    if webview.label() != "main" {
+        return Err("This connection is not available in this webview.".into());
+    }
+    let current = webview.url().map_err(|error| error.to_string())?;
+    let current_origin = current.origin().ascii_serialization();
+    let state = manager
+        .0
+        .lock()
+        .map_err(|_| "Connection state is unavailable.")?;
+    if !state.authorizes(generation, &current_origin, session_token) {
+        return Err("This server session is no longer active.".into());
+    }
+    action(&current)
+}
+
+pub fn on_page_load<R: Runtime>(webview: &Webview<R>, url: &Url) {
+    // Wry invokes this callback from Android's WebView main looper. Its synchronous
+    // `url()` call waits on that same looper and can time out before the queued reply.
+    if webview.label() != "main" {
+        return;
+    }
+    let Some(manager) = webview.try_state::<ConnectionManager>() else {
+        return;
+    };
+    let action = {
+        let Ok(state) = manager.0.lock() else {
+            return;
+        };
+        let Some(action) = state.page_load_action(url) else {
+            return;
+        };
+        action
+    };
+    let script = match action {
+        PageLoadAction::Handshake {
+            generation,
+            nonce,
+            expected_origin,
+        } => {
+            let origin = serde_json::to_string(&expected_origin).expect("origin string serializes");
+            let nonce = serde_json::to_string(&nonce).expect("nonce serializes");
+            format!(
+                "(async()=>{{if(location.origin!=={origin})return;const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));let core;for(let attempt=0;attempt<60;attempt++){{core=window.__TAURI__?.core;if(typeof core?.invoke==='function')break;await sleep(250);}}if(typeof core?.invoke!=='function'){{console.warn('OWC connection bridge unavailable');return;}}try{{const r=await fetch('/api/config',{{credentials:'omit',cache:'no-store',redirect:'error'}});if(!r.ok){{console.warn('OWC readiness check rejected',r.status);return;}}const d=await r.json();if(!d||d.status!==true){{console.warn('OWC readiness check failed');return;}}await core.invoke('connection-ready',{{generation:{generation},nonce:{nonce}}});}}catch(error){{console.warn('OWC connection readiness failed',error);}}}})();"
+            )
+        }
+        PageLoadAction::RestoreSession {
+            generation,
+            token,
+            expected_origin,
+        } => {
+            let origin = serde_json::to_string(&expected_origin).expect("origin string serializes");
+            let token = serde_json::to_string(&token).expect("session token serializes");
+            format!(
+                "if(location.origin==={origin}){{const s=window.__OWC_SESSION__;if(!s||s.generation<={generation})window.__OWC_SESSION__={{generation:{generation},token:{token}}};}}"
+            )
+        }
+    };
+    let _ = webview.eval(&script);
+}
+
+pub fn on_local_navigation<R: Runtime>(webview: &Webview<R>, url: &Url) {
+    if is_local_entry(url) {
+        if let Some(manager) = webview.try_state::<ConnectionManager>() {
+            manager.invalidate_for_settings(false);
+        }
+        crate::save::invalidate_transfers(webview.app_handle());
+    }
+}
+
+pub fn settings_url() -> Url {
+    Url::parse(LOCAL_ENTRY_URL).expect("local settings URL is valid")
+}
+
+#[cfg(any(target_os = "windows", target_os = "android"))]
+const LOCAL_ENTRY_URL: &str = "http://tauri.localhost/";
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+const LOCAL_ENTRY_URL: &str = "tauri://localhost/";
+
+pub fn is_local_entry(url: &Url) -> bool {
+    let entry = settings_url();
+    url.origin() == entry.origin() && url.username().is_empty() && url.password().is_none()
+}
+
+fn ensure_local_webview(webview: &Webview) -> Result<(), String> {
+    if webview.label() != "main" {
+        return Err("This command is not available in this webview.".into());
+    }
+    let url = webview.url().map_err(|error| error.to_string())?;
+    if is_local_entry(&url) || is_dev_entry(&url) {
+        Ok(())
+    } else {
+        Err("This command is available only from connection settings.".into())
+    }
+}
+
+pub fn is_dev_entry(url: &Url) -> bool {
+    cfg!(dev)
+        && url.scheme() == "http"
+        && url.host_str() == Some("127.0.0.1")
+        && url.port() == Some(1420)
+        && url.username().is_empty()
+        && url.password().is_none()
+}
+
+pub fn is_current_service_origin<R: Runtime>(webview: &Webview<R>, target: &Url) -> bool {
+    if webview.label() != "main" {
+        return false;
+    }
+    let Some(manager) = webview.try_state::<ConnectionManager>() else {
+        return false;
+    };
+    manager
+        .0
+        .lock()
+        .map(|state| state.allows_service_navigation(target))
+        .unwrap_or(false)
+}
+
+pub fn has_active_service_session<R: Runtime>(webview: &Webview<R>) -> bool {
+    if webview.label() != "main" {
+        return false;
+    }
+    let Some(manager) = webview.try_state::<ConnectionManager>() else {
+        return false;
+    };
+    manager
+        .0
+        .lock()
+        .map(|state| state.has_active_service_session())
+        .unwrap_or(false)
+}
+
+pub fn parse_external_url(value: &str) -> Result<Url, String> {
+    if value.len() > 4096 {
+        return Err("The link is too long.".into());
+    }
+    let url = Url::parse(value).map_err(|_| "The link is not a valid URL.".to_string())?;
+    match url.scheme() {
+        "http" | "https" if !url.host_str().unwrap_or_default().is_empty() => {
+            if !url.username().is_empty() || url.password().is_some() {
+                return Err("Links containing credentials cannot be opened.".into());
+            }
+        }
+        "mailto" | "tel" => {}
+        _ => return Err("Only web, email, and telephone links can be opened.".into()),
+    }
+    Ok(url)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn url(value: &str) -> Url {
+        validate_service_url(value).unwrap()
+    }
+
+    #[test]
+    fn native_snapshot_never_consumes_startup_or_invalidates_the_session() {
+        let runtime = ConnectionRuntime::new(Some(url("https://old.example.org")));
+        let manager = ConnectionManager(Arc::new(Mutex::new(runtime)));
+        assert_eq!(
+            manager.native_snapshot().3.as_deref(),
+            Some("https://old.example.org")
+        );
+        assert_eq!(manager.native_snapshot().1, "settings");
+        assert!(manager.0.lock().unwrap().startup_pending);
+        let attempt = manager.begin(url("https://new.example.org"));
+        assert_eq!(manager.native_snapshot().1, "connecting");
+        assert_eq!(manager.native_snapshot().0, attempt.generation);
+        manager.fail_attempt(attempt.generation, "failure".into());
+        assert_eq!(manager.native_snapshot().1, "failed");
+        assert_eq!(
+            manager.native_snapshot().3.as_deref(),
+            Some("https://old.example.org")
+        );
+        assert!(!manager.timeout(attempt.generation));
+    }
+
+    #[test]
+    fn native_actions_are_typed_and_fail_closed() {
+        use tauri_plugin_connection_controls::NativeClientAction;
+        let request = r#"{"type":"connect","requestId":"a","address":"http://localhost:3000"}"#;
+        assert!(serde_json::from_str::<NativeClientAction>(request).is_ok());
+        for request in [
+            r#"{"type":"connect","requestId":"a"}"#,
+            r#"{"type":"configure","requestId":"a"}"#,
+            r#"{"type":"reload","requestId":"a","generation":1,"address":"https://other.example"}"#,
+        ] {
+            assert!(serde_json::from_str::<NativeClientAction>(request).is_err());
+        }
+    }
+
+    #[test]
+    fn accepts_http_https_hosts_and_ports_but_only_root_origins() {
+        assert_eq!(
+            origin_string(&url("http://192.168.31.60:3000")),
+            "http://192.168.31.60:3000"
+        );
+        assert_eq!(
+            origin_string(&url("https://chat.example.org:8443/")),
+            "https://chat.example.org:8443"
+        );
+        for invalid in [
+            "file:///tmp",
+            "javascript:alert(1)",
+            "ftp://example.org",
+            "http:///path",
+            "http:/example.org",
+            r"http:\\example.org",
+            r"http://\example.org",
+            r"http://example.org\path",
+            "http://?q=1",
+            "http://user:pass@example.org",
+            "http://tauri.localhost",
+            "http://example.org/path",
+            "http://example.org/?q=1",
+            "http://example.org/#fragment",
+        ] {
+            assert!(validate_service_url(invalid).is_err(), "accepted {invalid}");
+        }
+        assert_eq!(
+            origin_string(&url("http://localhost:3000")),
+            "http://localhost:3000"
+        );
+    }
+
+    #[test]
+    fn page_load_action_uses_payload_origin_and_current_generation() {
+        let mut state = ConnectionRuntime::new(None);
+        let first_url = url("http://first.example.org");
+        let first = state.begin(first_url.clone());
+        assert_eq!(
+            state.page_load_action(&first_url),
+            Some(PageLoadAction::Handshake {
+                generation: first.generation,
+                nonce: first.nonce.clone(),
+                expected_origin: "http://first.example.org".into(),
+            })
+        );
+
+        let next_url = url("https://next.example.org");
+        let next = state.begin(next_url.clone());
+        assert_eq!(state.page_load_action(&first_url), None);
+        assert_eq!(
+            state.page_load_action(&next_url),
+            Some(PageLoadAction::Handshake {
+                generation: next.generation,
+                nonce: next.nonce.clone(),
+                expected_origin: "https://next.example.org".into(),
+            })
+        );
+        assert!(
+            state
+                .validate_ready(first.generation, &first.nonce, "http://first.example.org")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn navigation_callbacks_use_only_the_active_candidate_and_session_state() {
+        let mut state = ConnectionRuntime::new(None);
+        let candidate = url("https://chat.example.org");
+        let attempt = state.begin(candidate.clone());
+
+        assert!(state.allows_service_navigation(&candidate));
+        assert!(!state.allows_service_navigation(&url("https://other.example.org")));
+        assert!(!state.has_active_service_session());
+
+        state.ready_nonce = None;
+        state.ready = true;
+        assert!(state.allows_service_navigation(&candidate));
+        assert!(state.has_active_service_session());
+
+        state.return_to_settings(true);
+        assert!(!state.allows_service_navigation(&candidate));
+        assert!(!state.has_active_service_session());
+        assert_ne!(state.generation, attempt.generation);
+    }
+
+    #[test]
+    fn only_current_generation_and_one_time_nonce_can_become_ready_and_persist() {
+        let manager = ConnectionManager(Arc::new(Mutex::new(ConnectionRuntime::new(None))));
+        let first = manager.begin(url("http://example.org:3000"));
+        let second = manager.begin(url("https://chat.example.org"));
+        let mut writes = 0;
+        assert!(
+            manager
+                .complete_ready(
+                    first.generation,
+                    &first.nonce,
+                    "http://example.org:3000",
+                    |_, _| {
+                        writes += 1;
+                        Ok(())
+                    }
+                )
+                .is_err()
+        );
+        assert!(
+            !manager.should_return_after_ready_error(first.generation, "http://example.org:3000")
+        );
+        assert!(
+            manager
+                .complete_ready(
+                    second.generation,
+                    &first.nonce,
+                    "https://chat.example.org",
+                    |_, _| {
+                        writes += 1;
+                        Ok(())
+                    }
+                )
+                .is_err()
+        );
+        assert_eq!(writes, 0);
+        assert!(
+            manager
+                .complete_ready(
+                    second.generation,
+                    &second.nonce,
+                    "https://chat.example.org",
+                    |saved, recent| {
+                        assert_eq!(origin_string(saved), "https://chat.example.org");
+                        assert_eq!(
+                            recent.iter().map(origin_string).collect::<Vec<_>>(),
+                            vec!["https://chat.example.org"]
+                        );
+                        writes += 1;
+                        Ok(())
+                    }
+                )
+                .is_ok()
+        );
+        assert_eq!(writes, 1);
+        assert!(
+            manager
+                .complete_ready(
+                    second.generation,
+                    &second.nonce,
+                    "https://chat.example.org",
+                    |_, _| Ok(())
+                )
+                .is_err()
+        );
+        assert!(!manager.is_current_session(
+            second.generation,
+            "https://chat.example.org",
+            &first.session_token
+        ));
+        assert!(manager.is_current_session(
+            second.generation,
+            "https://chat.example.org",
+            &second.session_token
+        ));
+    }
+
+    #[test]
+    fn failed_persistence_does_not_replace_last_success_or_mark_ready() {
+        let original = url("https://saved.example.org");
+        let manager = ConnectionManager(Arc::new(Mutex::new(ConnectionRuntime::new(Some(
+            original.clone(),
+        )))));
+        let attempt = manager.begin(url("http://new.example.org:8080"));
+        let persistence = manager.complete_ready(
+            attempt.generation,
+            &attempt.nonce,
+            "http://new.example.org:8080",
+            |_, _| Err("disk full".into()),
+        );
+        assert!(persistence.is_err());
+        assert!(
+            manager
+                .should_return_after_ready_error(attempt.generation, "http://new.example.org:8080")
+        );
+        let state = manager.0.lock().unwrap();
+        assert_eq!(state.last_success, Some(original));
+        assert!(!state.ready);
+        assert!(state.ready_nonce.is_none());
+        assert!(state.session_token.is_none());
+        assert!(
+            state
+                .validate_ready(
+                    attempt.generation,
+                    &attempt.nonce,
+                    "http://new.example.org:8080"
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn connection_history_is_bounded_deduplicated_and_migrates_legacy_files() {
+        let legacy = PersistedConnection {
+            last_success_url: "https://chat.example.org".into(),
+            recent_urls: Vec::new(),
+        };
+        let (last_success, recent_urls) = history_from_persisted(legacy);
+        assert_eq!(
+            last_success.as_ref().map(origin_string).as_deref(),
+            Some("https://chat.example.org")
+        );
+        assert_eq!(
+            recent_urls.iter().map(origin_string).collect::<Vec<_>>(),
+            vec!["https://chat.example.org"]
+        );
+        let partially_missing: PersistedConnection =
+            serde_json::from_str(r#"{"recent_urls":["https://recovered.example.org"]}"#).unwrap();
+        let (last_success, recent_urls) = history_from_persisted(partially_missing);
+        assert_eq!(
+            last_success.as_ref().map(origin_string).as_deref(),
+            Some("https://recovered.example.org")
+        );
+        assert_eq!(
+            recent_urls.iter().map(origin_string).collect::<Vec<_>>(),
+            vec!["https://recovered.example.org"]
+        );
+        let mixed = PersistedConnection {
+            last_success_url: "not a service origin".into(),
+            recent_urls: vec![
+                "https://valid.example.org".into(),
+                "https://user:secret@invalid.example.org".into(),
+                "https://valid.example.org".into(),
+            ],
+        };
+        let (last_success, recent_urls) = history_from_persisted(mixed);
+        assert_eq!(
+            last_success.as_ref().map(origin_string).as_deref(),
+            Some("https://valid.example.org")
+        );
+        assert_eq!(recent_urls.len(), 1);
+
+        let values = (1..=7)
+            .map(|index| format!("https://{index}.example.org"))
+            .collect::<Vec<_>>();
+        let mut recent_urls = values[..5]
+            .iter()
+            .filter_map(|value| validate_service_url(value).ok())
+            .collect::<Vec<_>>();
+        recent_urls.insert(2, url("https://2.example.org"));
+        let normalized = remember_recent_urls(&recent_urls, Some(&url("https://5.example.org")));
+        assert_eq!(normalized.len(), CONNECTION_HISTORY_LIMIT);
+        assert_eq!(
+            normalized.iter().map(origin_string).collect::<Vec<_>>(),
+            vec![
+                "https://5.example.org",
+                "https://1.example.org",
+                "https://2.example.org",
+                "https://3.example.org",
+                "https://4.example.org"
+            ]
+        );
+    }
+
+    #[test]
+    fn return_to_settings_and_timeout_invalidate_old_handshakes_and_startup_autoconnect() {
+        let saved = url("https://saved.example.org");
+        let mut state = ConnectionRuntime::new(Some(saved));
+        let attempt = state.begin(url("http://192.168.31.60:3000"));
+        state.return_to_settings(true);
+        assert!(!state.startup_pending);
+        assert!(state.ready_nonce.is_none());
+        assert!(
+            state
+                .validate_ready(
+                    attempt.generation,
+                    &attempt.nonce,
+                    "http://192.168.31.60:3000"
+                )
+                .is_err()
+        );
+        assert!(!state.authorizes(
+            attempt.generation,
+            "http://192.168.31.60:3000",
+            &attempt.session_token
+        ));
+        assert!(!state.timeout(attempt.generation));
+
+        let next = state.begin(url("https://next.example.org"));
+        assert!(state.timeout(next.generation));
+        assert!(state.error.is_some());
+        assert!(state.ready_nonce.is_none());
+        assert!(!state.authorizes(
+            next.generation,
+            "https://next.example.org",
+            &next.session_token
+        ));
+    }
+
+    #[test]
+    fn initial_local_navigation_preserves_one_time_startup_autoconnect() {
+        let saved = url("https://saved.example.org");
+        let mut state = ConnectionRuntime::new(Some(saved.clone()));
+        state.observe_settings_page(false); // First local page navigation / settings query.
+        assert!(state.startup_pending);
+        assert_eq!(state.last_success, Some(saved.clone()));
+        assert_eq!(state.consume_startup_url(), Some(saved));
+        state.observe_settings_page(false); // A later local query cannot re-arm it.
+        assert!(!state.startup_pending);
+        assert_eq!(state.consume_startup_url(), None);
+    }
+}
