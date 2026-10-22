@@ -1,3 +1,5 @@
+> 云端开发和前端 → 后端镜像 / APK 串联构建，见 [云端开发说明](docs/CLOUD_DEVELOPMENT.md)。
+
 # Open WebUI Frontend
 
 Independent frontend source for the Android Open WebUI Client. The initial

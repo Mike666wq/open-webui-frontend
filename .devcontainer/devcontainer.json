@@ -1,0 +1,23 @@
+{
+  "name": "Open WebUI cloud development",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "forwardPorts": [
+    5173,
+    8080
+  ],
+  "portsAttributes": {
+    "8080": {
+      "label": "Isolated Open WebUI test backend",
+      "onAutoForward": "notify"
+    },
+    "5173": {
+      "label": "Frontend hot reload",
+      "onAutoForward": "notify"
+    }
+  },
+  "remoteUser": "codespace",
+  "postCreateCommand": "CYPRESS_INSTALL_BINARY=0 npm ci --no-audit --no-fund"
+}
