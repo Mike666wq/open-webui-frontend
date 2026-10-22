@@ -15,6 +15,14 @@ export {
 	saveWallpaperAsset
 } from './image-store';
 export {
+	backgroundMediaUrl,
+	isPannableBackground,
+	OFFICIAL_WELCOME_MEDIA_ASPECT,
+	OFFICIAL_WELCOME_POSTER_URL,
+	OFFICIAL_WELCOME_VIDEO_URL,
+	type PannableBackground
+} from './media';
+export {
 	branchFingerprint,
 	buildNavigatorEntries,
 	filterNavigatorEntries,
@@ -49,6 +57,7 @@ export {
 	type ModeAppearance,
 	type ModeColors,
 	type MotionLevel,
+	type OfficialVideoBackground,
 	type ResolvedAppearanceTheme,
 	type SurfaceOverride,
 	type SurfaceSlot

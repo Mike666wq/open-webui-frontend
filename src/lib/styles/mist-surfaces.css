@@ -141,8 +141,7 @@
 	min-height: 0 !important;
 	max-height: none !important;
 	align-self: flex-end;
-	margin:
-		auto 12px calc(var(--mist-preview-composer-offset, 122px) + env(safe-area-inset-bottom))
+	margin: auto 12px calc(var(--mist-preview-composer-offset, 122px) + env(safe-area-inset-bottom))
 		auto !important;
 	border-radius: 16px;
 }
@@ -793,11 +792,15 @@ html[data-owui-navigation-current='both'] .mist-nav-item[data-current='true'] {
 .mist-backdrop__wallpaper {
 	position: absolute;
 	max-width: none;
+	display: block;
+	object-fit: cover;
 	user-select: none;
 	pointer-events: none;
-	will-change: left, transform;
-	transform: scale(1.04);
-	transform-origin: center;
+	will-change: left;
+}
+
+.mist-backdrop__video {
+	background: #0b1320;
 }
 
 /*
@@ -809,7 +812,10 @@ html[data-owui-navigation-current='both'] .mist-nav-item[data-current='true'] {
 @media (pointer: coarse) {
 	html[data-owui-wallpaper='local-image'] body,
 	html[data-owui-wallpaper='local-image'] #chat-pane,
-	html[data-owui-wallpaper='local-image'] #messages-container {
+	html[data-owui-wallpaper='local-image'] #messages-container,
+	html[data-owui-wallpaper='official-video'] body,
+	html[data-owui-wallpaper='official-video'] #chat-pane,
+	html[data-owui-wallpaper='official-video'] #messages-container {
 		touch-action: pan-y;
 	}
 }

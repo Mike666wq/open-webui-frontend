@@ -1,6 +1,7 @@
 <script lang="ts">
 	type Props = {
-		imageUrl: string;
+		sourceUrl: string;
+		mediaKind?: 'image' | 'video';
 		/** Horizontal window position across the wallpaper, 0 (left) to 1 (right). */
 		focus: number;
 		/** Screen aspect ratio (width / height) of the preview window. */
@@ -8,7 +9,7 @@
 		onchange: (focus: number) => void;
 	};
 
-	let { imageUrl, focus, aspectRatio, onchange }: Props = $props();
+	let { sourceUrl, mediaKind = 'image', focus, aspectRatio, onchange }: Props = $props();
 
 	let frame: HTMLDivElement | null = $state(null);
 	let frameWidth = $state(0);
@@ -26,7 +27,16 @@
 	$effect(() => {
 		naturalWidth = 0;
 		naturalHeight = 0;
-		if (!imageUrl) return;
+		if (!sourceUrl) return;
+
+		// Videos only expose their dimensions after mounting, but renderedWidth
+		// gates that mount. Start with the bundled film's aspect and update it
+		// from loadedmetadata once the element exists.
+		if (mediaKind === 'video') {
+			naturalWidth = 16;
+			naturalHeight = 9;
+			return;
+		}
 
 		let active = true;
 		const image = new Image();
@@ -40,7 +50,7 @@
 			naturalWidth = 0;
 			naturalHeight = 0;
 		};
-		image.src = imageUrl;
+		image.src = sourceUrl;
 
 		return () => {
 			active = false;
@@ -49,20 +59,28 @@
 		};
 	});
 
+	function onVideoMetadata(event: Event) {
+		const video = event.currentTarget as HTMLVideoElement;
+		if (video.videoWidth <= 0 || video.videoHeight <= 0) return;
+		naturalWidth = video.videoWidth;
+		naturalHeight = video.videoHeight;
+		void video.play().catch(() => {
+			// The first frame/poster remains visible if autoplay is blocked.
+		});
+	}
+
 	const clamp = (value: number) => Math.min(1, Math.max(0, value));
 
-	const frameHeight = $derived(
-		frameWidth > 0 && aspectRatio > 0 ? frameWidth / aspectRatio : 0
-	);
+	const frameHeight = $derived(frameWidth > 0 && aspectRatio > 0 ? frameWidth / aspectRatio : 0);
 	const renderedWidth = $derived.by(() => {
 		if (!frameWidth || !naturalWidth || !naturalHeight) return 0;
 		const imageAspect = naturalWidth / naturalHeight;
 		// Match the app: fill the window height, grow wider than the window when
-		// the image allows it so it can be slid left/right.
+		// the media allows it so it can be slid left/right.
 		return Math.max(frameWidth, frameHeight * imageAspect);
 	});
 	const overflowX = $derived(Math.max(0, renderedWidth - frameWidth));
-	const imageStyle = $derived(
+	const mediaStyle = $derived(
 		[
 			`width: ${renderedWidth.toFixed(2)}px`,
 			`height: ${frameHeight.toFixed(2)}px`,
@@ -134,7 +152,20 @@
 	onkeydown={onKeyDown}
 >
 	{#if renderedWidth > 0}
-		<img src={imageUrl} alt="" draggable="false" style={imageStyle} />
+		{#if mediaKind === 'video'}
+			<video
+				src={sourceUrl}
+				muted
+				loop
+				autoplay
+				playsinline
+				preload="metadata"
+				style={mediaStyle}
+				onloadedmetadata={onVideoMetadata}
+			></video>
+		{:else}
+			<img src={sourceUrl} alt="" draggable="false" style={mediaStyle} />
+		{/if}
 	{/if}
 	<div class="crop-editor__hint">
 		<span aria-hidden="true">←</span>
@@ -168,10 +199,11 @@
 		outline-offset: 2px;
 	}
 
-	.crop-editor img {
+	.crop-editor :is(img, video) {
 		position: absolute;
 		top: 0;
 		max-width: none;
+		object-fit: cover;
 		pointer-events: none;
 	}
 

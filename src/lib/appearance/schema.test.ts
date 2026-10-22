@@ -8,8 +8,8 @@ import {
 	withMode
 } from './schema';
 
-describe('appearance schema v5', () => {
-	it('returns a complete v5 default', () => {
+describe('appearance schema v6', () => {
+	it('returns a complete v6 default', () => {
 		const settings = normalizeAppearance(undefined);
 		expect(settings.version).toBe(APPEARANCE_SCHEMA_VERSION);
 		expect(settings.preset).toBe('mist-blue');
@@ -44,7 +44,7 @@ describe('appearance schema v5', () => {
 			}
 		});
 
-		expect(settings.version).toBe(5);
+		expect(settings.version).toBe(APPEARANCE_SCHEMA_VERSION);
 		expect(settings.enabled).toBe(false);
 		const lightBackground = settings.modes.light.background;
 		expect(lightBackground.kind).toBe('local-image');
@@ -116,6 +116,29 @@ describe('appearance schema v5', () => {
 		}
 	});
 
+	it('normalizes the bundled official video as a pannable background', () => {
+		const settings = normalizeAppearance({
+			modes: {
+				light: {
+					background: {
+						kind: 'official-video',
+						video: 'welcome',
+						focus: { portrait: 0.35, landscape: 0.7 },
+						mask: 22,
+						blur: 8
+					}
+				}
+			}
+		});
+		expect(settings.modes.light.background).toEqual({
+			kind: 'official-video',
+			video: 'welcome',
+			focus: { portrait: 0.35, landscape: 0.7 },
+			mask: 22,
+			blur: 8
+		});
+	});
+
 	it('clamps values at every numeric boundary', () => {
 		const settings = normalizeAppearance({
 			preset: 'midnight',
@@ -168,9 +191,7 @@ describe('appearance schema v5', () => {
 			colors: { ...mode.colors, accent: '#ffcc00' }
 		}));
 		expect(result.modes.dark.colors.accent).toBe('#ffcc00');
-		expect(result.modes.light.colors.accent).toBe(
-			DEFAULT_APPEARANCE.modes.light.colors.accent
-		);
+		expect(result.modes.light.colors.accent).toBe(DEFAULT_APPEARANCE.modes.light.colors.accent);
 	});
 });
 

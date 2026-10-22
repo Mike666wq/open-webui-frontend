@@ -17,7 +17,7 @@ describe('theme files', () => {
 		const text = serializeThemeFile(current);
 		const parsed = JSON.parse(text);
 		expect(parsed.format).toBe(THEME_FILE_FORMAT);
-		expect(parsed.version).toBe(5);
+		expect(parsed.version).toBe(6);
 		expect(text).not.toContain('private-wallpaper');
 		expect(text).not.toContain('assetId');
 		expect(text).not.toContain('token');
@@ -35,10 +35,7 @@ describe('theme files', () => {
 	it('rejects malformed JSON and wrong file versions', () => {
 		expect(() => parseThemeFile('{', current)).toThrow(/valid JSON/);
 		expect(() =>
-			parseThemeFile(
-				JSON.stringify({ format: THEME_FILE_FORMAT, version: 2, theme: {} }),
-				current
-			)
+			parseThemeFile(JSON.stringify({ format: THEME_FILE_FORMAT, version: 2, theme: {} }), current)
 		).toThrow(/version/);
 	});
 
@@ -51,9 +48,7 @@ describe('theme files', () => {
 		expect(() => parseThemeFile(JSON.stringify(withCss), current)).toThrow(/hex colour/);
 		const unsupported = JSON.parse(serializeThemeFile(current));
 		unsupported.theme.components.overlay = { css: 'body{display:none}' };
-		expect(() => parseThemeFile(JSON.stringify(unsupported), current)).toThrow(
-			/not supported/
-		);
+		expect(() => parseThemeFile(JSON.stringify(unsupported), current)).toThrow(/not supported/);
 		const unknownSlot = JSON.parse(serializeThemeFile(current));
 		unknownSlot.theme.components.unknownSurface = { opacity: 75 };
 		expect(() => parseThemeFile(JSON.stringify(unknownSlot), current)).toThrow(

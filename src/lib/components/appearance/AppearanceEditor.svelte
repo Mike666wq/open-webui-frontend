@@ -32,6 +32,7 @@
 		listWallpaperAssets,
 		deleteWallpaperAsset,
 		contrastRatio,
+		OFFICIAL_WELCOME_VIDEO_URL,
 		type AppearancePreset,
 		type AppearanceSettings,
 		type AppearanceTheme,
@@ -94,21 +95,21 @@
 			window.removeEventListener('orientationchange', update);
 		};
 	});
-	const screenAspect = $derived(
-		viewportW > 0 && viewportH > 0 ? viewportW / viewportH : 9 / 19.5
-	);
+	const screenAspect = $derived(viewportW > 0 && viewportH > 0 ? viewportW / viewportH : 9 / 19.5);
 	const isPortraitViewport = $derived(viewportH >= viewportW);
 
 	const currentMode = $derived(draft.modes[editorMode]);
 	const currentBackground = $derived(currentMode.background);
 	const orientationKey = $derived(isPortraitViewport ? 'portrait' : 'landscape');
 	const activeFocus = $derived(
-		currentBackground.kind === 'local-image'
+		currentBackground.kind === 'local-image' || currentBackground.kind === 'official-video'
 			? (currentBackground.focus[orientationKey] ?? 0.5)
 			: 0.5
 	);
 	function setActiveFocus(focus: number) {
-		if (currentBackground.kind !== 'local-image') return;
+		if (currentBackground.kind !== 'local-image' && currentBackground.kind !== 'official-video') {
+			return;
+		}
 		setBackground({
 			...currentBackground,
 			focus: { ...currentBackground.focus, [orientationKey]: focus }
@@ -120,6 +121,12 @@
 					previewUrls[editorMode] ??
 					null)
 			: null
+	);
+	const framingMediaUrl = $derived(
+		currentBackground.kind === 'official-video' ? OFFICIAL_WELCOME_VIDEO_URL : previewWallpaperUrl
+	);
+	const framingMediaKind = $derived(
+		currentBackground.kind === 'official-video' ? 'video' : 'image'
 	);
 	const tokens = $derived(themeColorTokens(currentMode.colors));
 	const contrastReadable = (foreground: string, background: string) =>
@@ -138,8 +145,10 @@
 				previewUrls[editorMode] ?? null,
 				draft.theme === 'system' ? null : editorMode
 			);
-			void syncWallpaperPreview(editorMode);
-			void refreshLibrary();
+			void (async () => {
+				await refreshLibrary();
+				await syncWallpaperPreview(editorMode);
+			})();
 		} else if (!open) {
 			initializedOpen = false;
 			previewGeneration += 1;
@@ -164,9 +173,8 @@
 
 	function cleanupPreviewUrls() {
 		previewGeneration += 1;
-		for (const url of Object.values(previewUrls)) {
-			if (url) URL.revokeObjectURL(url);
-		}
+		// Preview URLs are borrowed from the live wallpaper library. Revoking them
+		// here also broke the library thumbnails when the editor was reopened.
 		previewUrls = {};
 		pendingBlobs = {};
 	}
@@ -175,32 +183,30 @@
 		const generation = ++previewGeneration;
 		const background = draft.modes[mode].background;
 		if (background.kind !== 'local-image') {
-			const previousUrl = previewUrls[mode];
-			if (previousUrl) URL.revokeObjectURL(previousUrl);
 			delete previewUrls[mode];
 			if (editorMode === mode) appearancePreviewWallpaperUrl.set(null);
 			return;
 		}
 
-		let blob: Blob | null = pendingBlobs[background.assetId] ?? null;
-		if (!blob) {
-			blob = await loadWallpaperAsset(background.assetId).catch(() => null);
+		let item = library.find((entry) => entry.id === background.assetId);
+		if (!item) {
+			const blob =
+				pendingBlobs[background.assetId] ??
+				(await loadWallpaperAsset(background.assetId).catch(() => null));
+			if (blob) item = addToLibrary(background.assetId, blob);
 		}
 		const latestBackground = draft.modes[mode].background;
 		if (
 			generation !== previewGeneration ||
-			!blob ||
+			!item ||
 			latestBackground.kind !== 'local-image' ||
 			latestBackground.assetId !== background.assetId
 		) {
 			return;
 		}
 
-		const previousUrl = previewUrls[mode];
-		if (previousUrl) URL.revokeObjectURL(previousUrl);
-		const objectUrl = URL.createObjectURL(blob);
-		previewUrls[mode] = objectUrl;
-		if (editorMode === mode) appearancePreviewWallpaperUrl.set(objectUrl);
+		previewUrls[mode] = item.url;
+		if (editorMode === mode) appearancePreviewWallpaperUrl.set(item.url);
 	}
 
 	function updateDraft(next: AppearanceSettings) {
@@ -239,7 +245,7 @@
 		});
 	}
 
-	function setBackgroundKind(value: 'gradient' | 'local-image') {
+	function setBackgroundKind(value: 'gradient' | 'local-image' | 'official-video') {
 		if (value === 'gradient') {
 			setBackground({
 				kind: 'gradient',
@@ -250,8 +256,6 @@
 				mask: currentBackground.mask,
 				blur: currentBackground.blur
 			});
-			const previewUrl = previewUrls[editorMode];
-			if (previewUrl) URL.revokeObjectURL(previewUrl);
 			delete previewUrls[editorMode];
 			appearancePreviewWallpaperUrl.set(null);
 		} else if (value === 'local-image') {
@@ -269,6 +273,19 @@
 					blur: currentBackground.blur
 				});
 			}
+		} else {
+			delete previewUrls[editorMode];
+			appearancePreviewWallpaperUrl.set(null);
+			setBackground({
+				kind: 'official-video',
+				video: 'welcome',
+				focus:
+					currentBackground.kind === 'official-video'
+						? currentBackground.focus
+						: { portrait: 0.5, landscape: 0.5 },
+				mask: currentBackground.mask,
+				blur: currentBackground.blur
+			});
 		}
 	}
 
@@ -338,7 +355,7 @@
 			const assetId = uuidv4();
 			pendingBlobs[assetId] = blob;
 			addToLibrary(assetId, blob);
-			activateWallpaper(assetId, blob);
+			activateWallpaper(assetId);
 			toast.success(copy('背景图片已载入预览', 'Wallpaper loaded into the preview'));
 		} catch (error) {
 			toast.error(
@@ -353,7 +370,9 @@
 
 	function addToLibrary(assetId: string, blob: Blob) {
 		const url = URL.createObjectURL(blob);
-		library = [{ id: assetId, url }, ...library.filter((item) => item.id !== assetId)];
+		const item = { id: assetId, url };
+		library = [item, ...library.filter((entry) => entry.id !== assetId)];
+		return item;
 	}
 
 	async function refreshLibrary() {
@@ -378,16 +397,12 @@
 		}
 	}
 
-	function activateWallpaper(assetId: string, blob: Blob | null) {
+	function activateWallpaper(assetId: string) {
 		previewGeneration += 1;
-		const previousUrl = previewUrls[editorMode];
-		if (previousUrl) URL.revokeObjectURL(previousUrl);
-		// The editor preview owns its URL. Library cards must remain valid after
-		// Apply/Cancel releases that preview and the editor is opened again.
-		const objectUrl = blob ? URL.createObjectURL(blob) : null;
-		if (!objectUrl) return;
-		previewUrls[editorMode] = objectUrl;
-		appearancePreviewWallpaperUrl.set(objectUrl);
+		const libraryUrl = library.find((item) => item.id === assetId)?.url ?? null;
+		if (!libraryUrl) return;
+		previewUrls[editorMode] = libraryUrl;
+		appearancePreviewWallpaperUrl.set(libraryUrl);
 		const background = currentBackground.kind === 'local-image' ? currentBackground : null;
 		setBackground({
 			kind: 'local-image',
@@ -399,12 +414,11 @@
 	}
 
 	async function selectLibraryImage(assetId: string) {
-		const blob = pendingBlobs[assetId] ?? (await loadWallpaperAsset(assetId).catch(() => null));
-		if (!blob) {
+		if (!library.some((item) => item.id === assetId)) {
 			toast.error(copy('找不到这张图片', 'The image asset is unavailable'));
 			return;
 		}
-		activateWallpaper(assetId, blob);
+		activateWallpaper(assetId);
 	}
 
 	async function removeLibraryImage(assetId: string) {
@@ -488,11 +502,8 @@
 		const defaults = normalizeAppearance({ preset: draft.preset });
 		if (group === 'background') {
 			setBackground(defaults.modes[editorMode].background);
-			if (previewUrls[editorMode]) {
-				URL.revokeObjectURL(previewUrls[editorMode]!);
-				delete previewUrls[editorMode];
-				appearancePreviewWallpaperUrl.set(null);
-			}
+			delete previewUrls[editorMode];
+			appearancePreviewWallpaperUrl.set(null);
 			return;
 		}
 		if (group === 'colors') {
@@ -635,7 +646,11 @@
 	{#if options.length <= 3}
 		<div class="mist-editor-field mist-editor-field--segmented">
 			<span id="mist-seg-label-{label}">{label}</span>
-			<div class="mist-editor-segmented mist-editor-segmented--inline" role="radiogroup" aria-labelledby="mist-seg-label-{label}">
+			<div
+				class="mist-editor-segmented mist-editor-segmented--inline"
+				role="radiogroup"
+				aria-labelledby="mist-seg-label-{label}"
+			>
 				{#each selectOptions as option}
 					<button
 						type="button"
@@ -863,14 +878,40 @@
 				</button>
 			{/each}
 		</div>
-		<div class="mist-background-types" role="group" aria-label={copy('背景类型', 'Background type')}>
-			{#each ['gradient', 'local-image'] as const as kind}
-				<button type="button" aria-pressed={currentBackground.kind === kind}
-					data-active={currentBackground.kind === kind} onclick={() => setBackgroundKind(kind)}>
-					<span class="mist-background-types__icon" aria-hidden="true">{kind === 'gradient' ? '◐' : '▧'}</span>
-					<span><strong>{kind === 'gradient' ? copy('渐变背景', 'Gradient') : copy('本地图片', 'Local image')}</strong>
-					<small>{kind === 'gradient' ? copy('柔和配色，无需图片', 'Soft color, no image needed') : copy('从图库选择或添加图片', 'Choose or add a wallpaper')}</small></span>
-					<span class="mist-background-types__check" aria-hidden="true">{currentBackground.kind === kind ? '✓' : ''}</span>
+		<div
+			class="mist-background-types"
+			role="group"
+			aria-label={copy('背景类型', 'Background type')}
+		>
+			{#each ['gradient', 'local-image', 'official-video'] as const as kind}
+				<button
+					type="button"
+					aria-pressed={currentBackground.kind === kind}
+					data-active={currentBackground.kind === kind}
+					onclick={() => setBackgroundKind(kind)}
+				>
+					<span class="mist-background-types__icon" aria-hidden="true"
+						>{kind === 'gradient' ? '◐' : kind === 'local-image' ? '▧' : '▶'}</span
+					>
+					<span
+						><strong
+							>{kind === 'gradient'
+								? copy('渐变背景', 'Gradient')
+								: kind === 'local-image'
+									? copy('本地图片', 'Local image')
+									: copy('官方动态', 'Official motion')}</strong
+						>
+						<small
+							>{kind === 'gradient'
+								? copy('柔和配色，无需图片', 'Soft color, no image needed')
+								: kind === 'local-image'
+									? copy('从图库选择或添加图片', 'Choose or add a wallpaper')
+									: copy('内置云野动态影像', 'Bundled cloud film')}</small
+						></span
+					>
+					<span class="mist-background-types__check" aria-hidden="true"
+						>{currentBackground.kind === kind ? '✓' : ''}</span
+					>
 				</button>
 			{/each}
 		</div>
@@ -890,7 +931,7 @@
 				GRADIENT_IDS.map((id) => ({ value: id, label: gradientLabel(id) })),
 				(value) => setBackground({ ...currentBackground, gradient: value as GradientId })
 			)}
-		{:else}
+		{:else if currentBackground.kind === 'local-image'}
 			<div class="mist-wallpaper-library" role="list">
 				<button
 					type="button"
@@ -927,36 +968,52 @@
 					</figure>
 				{/each}
 			</div>
-			{#if currentBackground.kind === 'local-image'}
-				{@const activeUrl =
-					library.find((item) => item.id === currentBackground.assetId)?.url ??
-					previewUrls[editorMode] ??
-					null}
-				{#if activeUrl}
-					<p class="mist-editor-mode-label">
-						{copy('左右滑动取景（随当前屏幕比例）', 'Slide left/right (matches your screen)')}
+		{:else}
+			<div class="mist-official-video-card">
+				<video
+					src={OFFICIAL_WELCOME_VIDEO_URL}
+					poster="/assets/welcome.webp"
+					muted
+					loop
+					autoplay
+					playsinline
+					aria-hidden="true"
+				></video>
+				<div>
+					<strong>{copy('云野 · 官方动态', 'Cloud country · Official motion')}</strong>
+					<p>
+						{copy(
+							'复用 Open WebUI 的欢迎影像，并跟随当前屏幕比例横向取景。',
+							'Reuses the Open WebUI welcome film and frames it to the current screen.'
+						)}
 					</p>
-					<CropEditor
-						imageUrl={activeUrl}
-						focus={activeFocus}
-						aspectRatio={screenAspect}
-						onchange={setActiveFocus}
-					/>
-					<div class="mist-editor-image-actions">
-						<button
-							type="button"
-							class="mist-button mist-button--primary"
-							onclick={() => (fullscreenFraming = true)}
-						>
-							{copy('全屏取景', 'Frame full screen')}
-						</button>
-					</div>
-				{/if}
-			{/if}
+				</div>
+			</div>
+		{/if}
+		{#if framingMediaUrl && (currentBackground.kind === 'local-image' || currentBackground.kind === 'official-video')}
+			<p class="mist-editor-mode-label">
+				{copy('左右滑动取景（随当前屏幕比例）', 'Slide left/right (matches your screen)')}
+			</p>
+			<CropEditor
+				sourceUrl={framingMediaUrl}
+				mediaKind={framingMediaKind}
+				focus={activeFocus}
+				aspectRatio={screenAspect}
+				onchange={setActiveFocus}
+			/>
 			<div class="mist-editor-image-actions">
-				<button type="button" class="mist-button mist-button--ghost" onclick={useImageColors}>
-					{copy('从图片取色', 'Sample colors')}
+				<button
+					type="button"
+					class="mist-button mist-button--primary"
+					onclick={() => (fullscreenFraming = true)}
+				>
+					{copy('全屏取景', 'Frame full screen')}
 				</button>
+				{#if currentBackground.kind === 'local-image'}
+					<button type="button" class="mist-button mist-button--ghost" onclick={useImageColors}>
+						{copy('从图片取色', 'Sample colors')}
+					</button>
+				{/if}
 			</div>
 		{/if}
 		{@render rangeRow(
@@ -1459,82 +1516,162 @@
 	</button>
 {/if}
 
-{#if open && fullscreenFraming && currentBackground.kind === 'local-image'}
-	{@const frameUrl =
-		library.find((item) => item.id === currentBackground.assetId)?.url ??
-		previewUrls[editorMode] ??
-		null}
-	{#if frameUrl}
-		<div class="mist-framing" role="dialog" aria-label={copy('全屏取景', 'Full-screen framing')}>
-			<div class="mist-framing__stage">
-				<CropEditor
-					imageUrl={frameUrl}
-					focus={activeFocus}
-					aspectRatio={screenAspect}
-					onchange={setActiveFocus}
+{#if open && fullscreenFraming && framingMediaUrl}
+	<div class="mist-framing" role="dialog" aria-label={copy('全屏取景', 'Full-screen framing')}>
+		<div class="mist-framing__stage">
+			<CropEditor
+				sourceUrl={framingMediaUrl}
+				mediaKind={framingMediaKind}
+				focus={activeFocus}
+				aspectRatio={screenAspect}
+				onchange={setActiveFocus}
+			/>
+		</div>
+		<div class="mist-framing__controls">
+			<label class="mist-framing__slider">
+				<span>{copy('遮罩', 'Mask')} {Math.round(currentBackground.mask)}%</span>
+				<input
+					type="range"
+					min="0"
+					max="80"
+					step="1"
+					value={currentBackground.mask}
+					oninput={(e) =>
+						setBackground({
+							...currentBackground,
+							mask: Number((e.currentTarget as HTMLInputElement).value)
+						})}
 				/>
-			</div>
-			<div class="mist-framing__controls">
-				<label class="mist-framing__slider">
-					<span>{copy('遮罩', 'Mask')} {Math.round(currentBackground.mask)}%</span>
-					<input
-						type="range"
-						min="0"
-						max="80"
-						step="1"
-						value={currentBackground.mask}
-						oninput={(e) =>
-							setBackground({
-								...currentBackground,
-								mask: Number((e.currentTarget as HTMLInputElement).value)
-							})}
-					/>
-				</label>
-				<label class="mist-framing__slider">
-					<span>{copy('模糊', 'Blur')} {Math.round(currentBackground.blur)}px</span>
-					<input
-						type="range"
-						min="0"
-						max="16"
-						step="1"
-						value={currentBackground.blur}
-						oninput={(e) =>
-							setBackground({
-								...currentBackground,
-								blur: Number((e.currentTarget as HTMLInputElement).value)
-							})}
-					/>
-				</label>
-				<div class="mist-framing__actions">
-					<button
-						type="button"
-						class="mist-button mist-button--ghost"
-						onclick={() => (fullscreenFraming = false)}
-					>
-						{copy('取消', 'Cancel')}
-					</button>
-					<button
-						type="button"
-						class="mist-button mist-button--primary"
-						onclick={() => (fullscreenFraming = false)}
-					>
-						{copy('完成', 'Done')}
-					</button>
-				</div>
+			</label>
+			<label class="mist-framing__slider">
+				<span>{copy('模糊', 'Blur')} {Math.round(currentBackground.blur)}px</span>
+				<input
+					type="range"
+					min="0"
+					max="16"
+					step="1"
+					value={currentBackground.blur}
+					oninput={(e) =>
+						setBackground({
+							...currentBackground,
+							blur: Number((e.currentTarget as HTMLInputElement).value)
+						})}
+				/>
+			</label>
+			<div class="mist-framing__actions">
+				<button
+					type="button"
+					class="mist-button mist-button--ghost"
+					onclick={() => (fullscreenFraming = false)}
+				>
+					{copy('取消', 'Cancel')}
+				</button>
+				<button
+					type="button"
+					class="mist-button mist-button--primary"
+					onclick={() => (fullscreenFraming = false)}
+				>
+					{copy('完成', 'Done')}
+				</button>
 			</div>
 		</div>
-	{/if}
+	</div>
 {/if}
 
 <style>
-	.mist-background-types { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:16px 0; }
-	.mist-background-types button { display:flex; align-items:center; gap:10px; padding:14px 12px; border:1px solid var(--mist-border); border-radius:14px; text-align:start; min-width:0; background:rgb(var(--mist-surface-rgb) / .14); }
-	.mist-background-types button[data-active='true'] { border-color:var(--mist-accent); background:var(--mist-highlight); box-shadow:inset 0 0 0 1px var(--mist-accent); }
-	.mist-background-types strong { display:block; font-size:13px; color:var(--mist-ink); }
-	.mist-background-types small { display:block; margin-top:4px; font-size:11px; color:var(--mist-muted); }
-	.mist-background-types__icon { font-size:25px; color:var(--mist-accent); }
-	.mist-background-types__check { margin-inline-start:auto; color:var(--mist-accent); }
-	@media(max-width:400px) { .mist-background-types button { padding:12px 9px; gap:7px; } .mist-background-types small { font-size:10px; } }
+	.mist-background-types {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 10px;
+		margin: 16px 0;
+	}
+	.mist-background-types button {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 14px 12px;
+		border: 1px solid var(--mist-border);
+		border-radius: 14px;
+		text-align: start;
+		min-width: 0;
+		background: rgb(var(--mist-surface-rgb) / 0.14);
+	}
+	.mist-background-types button[data-active='true'] {
+		border-color: var(--mist-accent);
+		background: var(--mist-highlight);
+		box-shadow: inset 0 0 0 1px var(--mist-accent);
+	}
+	.mist-background-types strong {
+		display: block;
+		font-size: 13px;
+		color: var(--mist-ink);
+	}
+	.mist-background-types small {
+		display: block;
+		margin-top: 4px;
+		font-size: 11px;
+		color: var(--mist-muted);
+	}
+	.mist-background-types__icon {
+		font-size: 25px;
+		color: var(--mist-accent);
+	}
+	.mist-background-types__check {
+		margin-inline-start: auto;
+		color: var(--mist-accent);
+	}
+	.mist-official-video-card {
+		position: relative;
+		display: grid;
+		grid-template-columns: 140px minmax(0, 1fr);
+		gap: 14px;
+		align-items: center;
+		margin: 14px 0 16px;
+		padding: 12px;
+		overflow: hidden;
+		border: 1px solid var(--mist-border);
+		border-radius: 16px;
+		background: rgb(7 11 20 / 0.34);
+		color: #fff;
+	}
+	.mist-official-video-card video {
+		width: 100%;
+		aspect-ratio: 16/9;
+		object-fit: cover;
+		border-radius: 11px;
+	}
+	.mist-official-video-card strong {
+		font-size: 14px;
+	}
+	.mist-official-video-card p {
+		margin: 6px 0 0;
+		color: rgb(255 255 255 / 0.72);
+		font-size: 12px;
+		line-height: 1.5;
+	}
+	@media (max-width: 760px) {
+		.mist-background-types {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.mist-background-types button:last-child {
+			grid-column: 1 / -1;
+		}
+		.mist-official-video-card {
+			grid-template-columns: 110px minmax(0, 1fr);
+		}
+	}
+	@media (max-width: 400px) {
+		.mist-background-types button {
+			padding: 12px 9px;
+			gap: 7px;
+		}
+		.mist-background-types small {
+			font-size: 10px;
+		}
+		.mist-official-video-card {
+			grid-template-columns: 1fr;
+		}
+	}
 
 	.mist-editor-status {
 		position: sticky;
