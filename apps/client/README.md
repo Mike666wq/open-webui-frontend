@@ -1,6 +1,6 @@
 > 客户端现位于 frontend 的 apps/client；以下命令均在本目录执行。活动工作流在仓库根目录。旧工作流说明属于迁移前历史，当前使用方式见 [两仓库流程](../../docs/TWO_REPOSITORY_PIPELINE.md)。
 
-> 三仓库共同进度见 [当前进度](docs/PROJECT_STATUS.md)，操作方式见 [GitHub 构建与人工验收](docs/CLOUD_DEVELOPMENT.md)。Codespaces 当前暂停使用，尚未验收可用。
+> 两仓库共同进度见 [当前进度](docs/PROJECT_STATUS.md)，操作方式见 [GitHub 构建与人工验收](docs/CLOUD_DEVELOPMENT.md)。Codespaces 当前暂停使用，尚未验收可用。
 
 # Open WebUI Client
 
