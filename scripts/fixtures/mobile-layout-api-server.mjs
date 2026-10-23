@@ -122,6 +122,13 @@ const config = {
 	metadata: {}
 };
 
+// Layout and gesture tests start with onboarding already acknowledged. Otherwise
+// the async changelog modal can appear after navigation readiness and eat swipes.
+let userSettings = {
+	ui: { theme: 'light', chatDirection: 'ltr', version: config.version },
+	keybindings: {}
+};
+
 const user = {
 	id: userId,
 	name: 'Fixture User',
@@ -230,10 +237,7 @@ function api(pathname) {
 	if (pathname === '/api/version') return { version: '0.12.2', deployment_id: 'fixture' };
 	if (pathname === '/api/v1/auths/') return user;
 	if (pathname === '/api/v1/users/user/settings') {
-		return {
-			ui: { theme: 'light', chatDirection: 'ltr' },
-			keybindings: {}
-		};
+		return userSettings;
 	}
 	if (pathname === '/api/models') {
 		return { object: 'list', data: [model] };
@@ -390,7 +394,15 @@ const server = createServer(async (request, response) => {
 			return;
 		}
 		if (request.method === 'POST' && url.pathname === '/api/v1/users/user/settings/update') {
-			send(response, 200, { ui: { theme: 'light' } });
+			const chunks = [];
+			for await (const chunk of request) chunks.push(chunk);
+			const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+			userSettings = {
+				...userSettings,
+				...payload,
+				ui: { ...userSettings.ui, ...payload.ui }
+			};
+			send(response, 200, userSettings);
 			return;
 		}
 		if (request.method === 'POST' && url.pathname === '/api/v1/users/user/status/update') {
