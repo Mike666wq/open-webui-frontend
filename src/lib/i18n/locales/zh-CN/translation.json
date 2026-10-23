@@ -4105,5 +4105,12 @@
 	"Uses a server-saved API key. ChatGPT and Kimi account sign-in does not cover transcription.": "使用服务器保存的 API 密钥。ChatGPT 和 Kimi 账号授权不包含音频转写。",
 	"Uses a server-saved API key and the OpenAI-compatible /audio/speech endpoint.": "使用服务器保存的 API 密钥，调用兼容 OpenAI 的语音合成接口。",
 	"Transcription model ID": "转写模型 ID",
-	"Only users with access to this connection can use this media feature. Share it in Connections for other users.": "只有获得此连接访问权限的用户才能使用该媒体功能。如需供他人使用，请在连接设置中配置共享。"
+	"Only users with access to this connection can use this media feature. Share it in Connections for other users.": "只有获得此连接访问权限的用户才能使用该媒体功能。如需供他人使用，请在连接设置中配置共享。",
+	"Update the backend to use browser-based ChatGPT sign-in.": "请更新后端，以使用 ChatGPT 网页授权登录。",
+	"Open the ChatGPT sign-in page, authorize your account, then paste the complete callback URL below. No terminal or script is needed.": "打开 ChatGPT 登录页并完成授权，然后将完整回调地址粘贴到下方。无需终端或脚本。",
+	"Open ChatGPT sign-in page": "打开 ChatGPT 登录页",
+	"After authorization, the browser may show that 127.0.0.1 cannot be reached. Copy the entire address from its address bar and return here. Keep this address private.": "授权后，浏览器可能提示无法访问 127.0.0.1。请复制地址栏中的完整地址，返回此处粘贴。请勿将该地址发送给他人。",
+	"Complete callback URL": "完整回调地址",
+	"Complete sign-in": "完成登录",
+	"Waiting for ChatGPT authorization…": "等待 ChatGPT 授权…"
 }

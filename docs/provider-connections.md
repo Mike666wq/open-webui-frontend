@@ -14,7 +14,7 @@ Personal provider accounts are private to their owner. An administrator can crea
 
 ## First ChatGPT sign-in
 
-The first sign-in needs a computer with Python 3 and a browser. Copy the command shown in the UI into that computer's terminal and enter the one-time pairing code when the local helper asks for it. The helper opens the official OpenAI sign-in page and sends the resulting credentials directly to the configured backend. Return to Open WebUI when the account shows as connected. To reconnect later, use **Reconnect** on the ChatGPT account. Removing it clears the local credential and reports whether remote revocation was confirmed.
+Select ChatGPT, start sign-in, and click **Open ChatGPT sign-in page**. After authorizing in the official page, copy the **entire callback URL** from the browser address bar and paste it into **Complete callback URL**, then select **Complete sign-in**. The callback targets `http://127.0.0.1:1455/auth/callback`; with a remote backend it is expected that this page may not load. The address still contains the one-time result. No Python, terminal, or downloaded helper is needed. Keep this URL private. Attempts expire after ten minutes and can be cancelled. Reconnect reuses the saved registration and verifies the same account. This follows Pi's browser/manual-callback interaction; it is not Codex device-code authentication.
 
 ## Existing connections
 
@@ -28,7 +28,7 @@ For the backend API contract, provider adapters, credential storage and security
 
 个人提供商账户由服务器管理，仅账户所有者可见，并且不受浏览器直连开关影响。管理员可以为自己创建私有账户，也可以选择与指定用户或群组共享。共享账户可供获授权者使用，但密钥保持隐藏。ChatGPT 和 Kimi Code 订阅登录始终为私有账户。
 
-首次 ChatGPT 登录需要安装 Python 3 的电脑和浏览器。在界面复制命令，在该电脑终端中运行，并在本地辅助程序提示时输入一次性配对码。辅助程序会打开 OpenAI 官方登录页，并将凭据直接发送到配置的服务器。账户显示已连接后即可返回使用；之后可以通过 **重新连接** 更新登录。移除账户时，界面会说明远程令牌撤销是否得到确认。
+选择 ChatGPT 并开始登录，点击 **打开 ChatGPT 登录页**。在官方页面完成授权后，从地址栏复制**完整回调地址**，粘贴到 WebUI 的输入框并点击 **完成登录**。回调目标是 `http://127.0.0.1:1455/auth/callback`，远程部署时该页面可能无法打开，地址栏仍保留一次性授权结果；这是正常现象。无需 Python、终端或下载辅助脚本。不要向他人发送回调地址。登录尝试十分钟后失效，可随时取消。重新连接会沿用原注册信息并校验同一账号。这采用 Pi 的网页授权/手动回调交互，不是 Codex 设备码认证。
 
 原有 OpenAI、Ollama 和浏览器直连设置继续可用，已保存的连接和聊天无需迁移。更多 API 契约、适配器和凭据安全说明见[后端提供商连接指南](https://github.com/Mike666wq/open-webui-backend/blob/main/docs/provider-connections.md)。
 
