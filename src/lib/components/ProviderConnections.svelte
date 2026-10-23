@@ -1100,11 +1100,13 @@
 								disabled={submittingCallback || !callbackUrl.trim()}
 								on:click={submitChatGPTCallback}
 							>
-								{submittingCallback ? $i18n.t('Connecting...') : $i18n.t('Complete sign-in')}</button
+								{submittingCallback
+									? $i18n.t('Connecting...')
+									: $i18n.t('Complete sign-in')}</button
 							>
 						{/if}
 						<p class="text-center text-[11px] text-gray-400">
-							{$i18n.t('Code expires at {{time}}', {
+							{$i18n.t(kimi ? 'Code expires at {{time}}' : 'Sign-in expires at {{time}}', {
 								time: formatExpiry(oauthAttempt.expires_at)
 							})}
 						</p>

@@ -4109,5 +4109,6 @@
 	"After authorization, the browser may show that 127.0.0.1 cannot be reached. Copy the entire address from its address bar and return here. Keep this address private.": "After authorization, the browser may show that 127.0.0.1 cannot be reached. Copy the entire address from its address bar and return here. Keep this address private.",
 	"Complete callback URL": "Complete callback URL",
 	"Complete sign-in": "Complete sign-in",
-	"Waiting for ChatGPT authorization…": "Waiting for ChatGPT authorization…"
+	"Waiting for ChatGPT authorization…": "Waiting for ChatGPT authorization…",
+	"Sign-in expires at {{time}}": "Sign-in expires at {{time}}"
 }

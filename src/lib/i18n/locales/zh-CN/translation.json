@@ -4112,5 +4112,6 @@
 	"After authorization, the browser may show that 127.0.0.1 cannot be reached. Copy the entire address from its address bar and return here. Keep this address private.": "授权后，浏览器可能提示无法访问 127.0.0.1。请复制地址栏中的完整地址，返回此处粘贴。请勿将该地址发送给他人。",
 	"Complete callback URL": "完整回调地址",
 	"Complete sign-in": "完成登录",
-	"Waiting for ChatGPT authorization…": "等待 ChatGPT 授权…"
+	"Waiting for ChatGPT authorization…": "等待 ChatGPT 授权…",
+	"Sign-in expires at {{time}}": "本次登录于 {{time}} 过期"
 }
