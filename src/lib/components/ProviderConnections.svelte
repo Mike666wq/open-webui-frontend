@@ -1100,7 +1100,7 @@
 								disabled={submittingCallback || !callbackUrl.trim()}
 								on:click={submitChatGPTCallback}
 							>
-								{submittingCallback ? $i18n.t('Connecting…') : $i18n.t('Complete sign-in')}</button
+								{submittingCallback ? $i18n.t('Connecting...') : $i18n.t('Complete sign-in')}</button
 							>
 						{/if}
 						<p class="text-center text-[11px] text-gray-400">
