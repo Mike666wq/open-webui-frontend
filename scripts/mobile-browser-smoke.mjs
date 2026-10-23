@@ -495,6 +495,29 @@ async function providerSettings(cdp) {
 		'connected Kimi account'
 	);
 
+	const accountLayout = await cdp.evaluate(`
+        [...document.querySelectorAll('[data-testid="provider-account-row"]')].map(row => {
+            const info = row.querySelector('[data-testid="provider-account-info"]').getBoundingClientRect();
+            const actions = row.querySelector('[data-testid="provider-account-actions"]').getBoundingClientRect();
+            const buttons = [...row.querySelectorAll('button')].map(button => { const r=button.getBoundingClientRect(); return {left:r.left,right:r.right}; });
+            return {infoWidth:info.width, infoBottom:info.bottom, actionsTop:actions.top, buttons};
+        })
+    `);
+	assert.equal(accountLayout.length, 2);
+	for (const account of accountLayout) {
+		assert.ok(account.infoWidth >= 200, 'Provider information must have enough width on mobile');
+		assert.ok(
+			account.actionsTop >= account.infoBottom - 1,
+			'Mobile actions must sit below provider information'
+		);
+		for (const button of account.buttons) {
+			assert.ok(
+				button.left >= 0 && button.right <= 394,
+				'Provider action must stay inside the viewport'
+			);
+		}
+	}
+
 	await cdp.screenshot('provider-accounts-393x852.png');
 	await cdp.click(
 		`document.querySelector('button[aria-controls="tab-appearance"]')`,
@@ -511,7 +534,8 @@ async function providerSettings(cdp) {
 		privateConnectionSaved: true,
 		kimiDeviceCode: true,
 		kimiCancelAndDenied: true,
-		kimiConnected: true
+		kimiConnected: true,
+		accountActionsBelowInfo: true
 	};
 }
 

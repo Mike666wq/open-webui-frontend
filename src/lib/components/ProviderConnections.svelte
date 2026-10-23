@@ -688,8 +688,11 @@
 							</div>
 						</div>
 					{:else}
-						<div class="flex items-start justify-between gap-3">
-							<div class="min-w-0">
+						<div
+							class="flex flex-col items-start justify-between gap-3 sm:flex-row"
+							data-testid="provider-account-row"
+						>
+							<div class="min-w-0 w-full sm:w-auto sm:flex-1" data-testid="provider-account-info">
 								<div class="flex flex-wrap items-center gap-2">
 									<p class="truncate text-sm font-medium text-gray-900 dark:text-white">
 										{connection.name}
@@ -717,7 +720,10 @@
 										: $i18n.t('API key')}
 								</p>
 							</div>
-							<div class="flex shrink-0 gap-1">
+							<div
+								class="flex w-full shrink-0 flex-wrap justify-end gap-1 sm:w-auto"
+								data-testid="provider-account-actions"
+							>
 								{#if canManageConnection(connection)}
 									<button
 										type="button"
