@@ -560,6 +560,7 @@
 		<button
 			type="button"
 			data-testid="provider-add"
+			disabled={loading || providers.length === 0}
 			class="rounded-lg bg-gray-900 px-3 py-2 text-xs text-white hover:bg-black dark:bg-gray-100 dark:text-gray-900"
 			on:click={() => {
 				wizard = true;

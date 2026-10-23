@@ -370,7 +370,7 @@ async function providerSettings(cdp) {
 		'provider settings tab'
 	);
 	await cdp.waitForExpression(
-		`Boolean(document.querySelector('[data-testid="provider-add"]'))`,
+		`document.querySelector('[data-testid="provider-add"]')?.disabled === false`,
 		'provider account entry'
 	);
 	await cdp.click(`document.querySelector('[data-testid="provider-add"]')`, 'add provider');
@@ -379,6 +379,10 @@ async function providerSettings(cdp) {
 		'provider wizard'
 	);
 	const choose = async (id) => {
+		await cdp.waitForExpression(
+			`Boolean([...document.querySelectorAll('[aria-labelledby="provider-wizard-title"] select option')].find(option => option.value === ${JSON.stringify(id)}))`,
+			`loaded provider option ${id}`
+		);
 		await cdp.evaluate(
 			`(() => { const select=document.querySelector('[aria-labelledby="provider-wizard-title"] select'); select.value=${JSON.stringify(id)}; select.dispatchEvent(new Event('change',{bubbles:true})); })()`
 		);
