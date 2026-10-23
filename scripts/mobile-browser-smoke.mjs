@@ -771,6 +771,41 @@ async function wallpaperPanning(cdp) {
 	return { swipes: swipes.length, leftPositions };
 }
 
+async function verifyChineseFonts(cdp) {
+	await cdp.send('DOM.enable');
+	await cdp.send('CSS.enable');
+	await cdp.evaluate(`(async () => {
+		const probe = document.createElement('span');
+		probe.id = 'mobile-smoke-chinese-font-probe';
+		probe.textContent = '中文连接账号设置';
+		probe.style.cssText = 'position:fixed;left:0;top:0;opacity:0;pointer-events:none;font-family:inherit';
+		document.body.append(probe);
+		await document.fonts.ready;
+	})()`);
+	try {
+		const { root } = await cdp.send('DOM.getDocument', { depth: 0 });
+		const { nodeId } = await cdp.send('DOM.querySelector', {
+			nodeId: root.nodeId,
+			selector: '#mobile-smoke-chinese-font-probe'
+		});
+		const { fonts } = await cdp.send('CSS.getPlatformFontsForNode', { nodeId });
+		assert.ok(
+			fonts.some((font) => font.glyphCount > 0),
+			'Chinese text must use a rendered font'
+		);
+		if (process.env.MOBILE_SMOKE_CJK_FONT_PATTERN) {
+			const expected = new RegExp(process.env.MOBILE_SMOKE_CJK_FONT_PATTERN);
+			assert.ok(
+				fonts.some((font) => expected.test(font.familyName) && font.glyphCount >= 8),
+				`Chinese text must use the prepared CJK font; actual=${JSON.stringify(fonts)}`
+			);
+		}
+		return fonts;
+	} finally {
+		await cdp.evaluate("document.querySelector('#mobile-smoke-chinese-font-probe')?.remove()");
+	}
+}
+
 async function main() {
 	const fixture = await waitForHttp(`${origin}/__fixture_provenance`);
 	assert.equal(fixture.schema, 1);
@@ -846,7 +881,11 @@ async function main() {
 		);
 		await dismissUpdateDialog(client);
 
-		const results = { sourceCommit: fixture.sourceCommit, viewports: {} };
+		const results = {
+			sourceCommit: fixture.sourceCommit,
+			chineseFonts: await verifyChineseFonts(client),
+			viewports: {}
+		};
 		for (const viewport of viewports) {
 			await client.send('Emulation.setDeviceMetricsOverride', {
 				width: viewport.width,
