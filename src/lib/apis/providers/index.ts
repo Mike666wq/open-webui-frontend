@@ -52,7 +52,15 @@ export const getProviderModels = () => request('/models');
 export const startChatGPTLogin = (connectionId?: string) =>
 	request('/auth/chatgpt/start', {
 		method: 'POST',
-		body: JSON.stringify(connectionId ? { connection_id: connectionId } : {})
+		body: JSON.stringify({
+			mode: 'browser',
+			...(connectionId ? { connection_id: connectionId } : {})
+		})
+	});
+export const completeChatGPTLogin = (attemptId: string, callbackUrl: string) =>
+	request(`/auth/chatgpt/${encodeURIComponent(attemptId)}/callback`, {
+		method: 'POST',
+		body: JSON.stringify({ callback_url: callbackUrl })
 	});
 export const getChatGPTLoginStatus = (attemptId: string) =>
 	request(`/auth/chatgpt/${encodeURIComponent(attemptId)}`);

@@ -370,7 +370,7 @@ async function providerSettings(cdp) {
 		'provider settings tab'
 	);
 	await cdp.waitForExpression(
-		`Boolean(document.querySelector('[data-testid="provider-add"]'))`,
+		`document.querySelector('[data-testid="provider-add"]')?.disabled === false`,
 		'provider account entry'
 	);
 	await cdp.click(`document.querySelector('[data-testid="provider-add"]')`, 'add provider');
@@ -379,6 +379,10 @@ async function providerSettings(cdp) {
 		'provider wizard'
 	);
 	const choose = async (id) => {
+		await cdp.waitForExpression(
+			`Boolean([...document.querySelectorAll('[aria-labelledby="provider-wizard-title"] select option')].find(option => option.value === ${JSON.stringify(id)}))`,
+			`loaded provider option ${id}`
+		);
 		await cdp.evaluate(
 			`(() => { const select=document.querySelector('[aria-labelledby="provider-wizard-title"] select'); select.value=${JSON.stringify(id)}; select.dispatchEvent(new Event('change',{bubbles:true})); })()`
 		);
@@ -495,6 +499,79 @@ async function providerSettings(cdp) {
 		'connected Kimi account'
 	);
 
+	const startChatGPT = async () => {
+		await cdp.click(`document.querySelector('[data-testid="provider-add"]')`, 'add ChatGPT');
+		await cdp.waitForExpression(
+			`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] select'))`,
+			'ChatGPT select'
+		);
+		await choose('chatgpt');
+		await cdp.waitForExpression(
+			`document.querySelector('[data-testid="provider-verify"]')?.disabled === false`,
+			'ChatGPT login enabled'
+		);
+		await cdp.click(
+			`document.querySelector('[data-testid="provider-verify"]')`,
+			'start browser login'
+		);
+		await cdp.waitForExpression(
+			`Boolean(document.querySelector('#chatgpt-callback-url'))`,
+			'ChatGPT callback form'
+		);
+		assert.equal(
+			await cdp.evaluate(
+				`Boolean(document.querySelector('a[href^="https://auth.openai.com/api/accounts/authorize"]'))`
+			),
+			true
+		);
+		assert.equal(
+			await cdp.evaluate(
+				`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] pre, a[href$="/helper"]'))`
+			),
+			false
+		);
+	};
+	await startChatGPT();
+	await cdp.screenshot('chatgpt-browser-login-393x852.png');
+	await cdp.click(
+		`document.querySelector('[aria-labelledby="provider-wizard-title"] button[aria-label]')`,
+		'cancel ChatGPT'
+	);
+	await waitForValue(
+		async () =>
+			(await (await fetch(`${origin}/__fixture_provenance`)).json()).events.some(
+				(event) => event.kind === 'chatgpt-browser-cancelled'
+			),
+		Boolean,
+		'ChatGPT cancelled'
+	);
+	await startChatGPT();
+	const submitCallback = async (value) => {
+		await cdp.evaluate(
+			`(() => {const input=document.querySelector('#chatgpt-callback-url'); input.value=${JSON.stringify(value)}; input.dispatchEvent(new Event('input',{bubbles:true}));})()`
+		);
+		await cdp.click(
+			`document.querySelector('#chatgpt-callback-url').nextElementSibling`,
+			'complete ChatGPT login'
+		);
+	};
+	await submitCallback('http://127.0.0.1:1455/auth/callback?state=wrong');
+	await cdp.waitForExpression(
+		`document.querySelector('[aria-labelledby="provider-wizard-title"]')?.textContent.includes('different sign-in')`,
+		'invalid callback feedback'
+	);
+	await cdp.waitForExpression(
+		`document.querySelector('#chatgpt-callback-url')?.value === ''`,
+		'callback cleared after submission'
+	);
+	await submitCallback(
+		'http://127.0.0.1:1455/auth/callback?code=fixture-code&state=fixture-state&client_id=oaiapp_fixture'
+	);
+	await cdp.waitForExpression(
+		`!document.querySelector('[aria-labelledby="provider-wizard-title"]') && document.querySelector('#tab-connections')?.textContent.includes('ChatGPT')`,
+		'ChatGPT connected without helper'
+	);
+
 	const accountLayout = await cdp.evaluate(`
         [...document.querySelectorAll('[data-testid="provider-account-row"]')].map(row => {
             const info = row.querySelector('[data-testid="provider-account-info"]').getBoundingClientRect();
@@ -503,7 +580,7 @@ async function providerSettings(cdp) {
             return {infoWidth:info.width, infoBottom:info.bottom, actionsTop:actions.top, buttons};
         })
     `);
-	assert.equal(accountLayout.length, 2);
+	assert.equal(accountLayout.length, 3);
 	for (const account of accountLayout) {
 		assert.ok(account.infoWidth >= 200, 'Provider information must have enough width on mobile');
 		assert.ok(
@@ -532,6 +609,8 @@ async function providerSettings(cdp) {
 		keyClearedOnProviderChange: true,
 		upstreamModelIds: true,
 		privateConnectionSaved: true,
+		chatgptBrowserLoginWithoutHelper: true,
+		chatgptCancelAndInvalidCallback: true,
 		kimiDeviceCode: true,
 		kimiCancelAndDenied: true,
 		kimiConnected: true,

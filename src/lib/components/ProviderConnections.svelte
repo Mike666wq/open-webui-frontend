@@ -7,6 +7,7 @@
 	import { config as backendConfig, models, settings, user } from '$lib/stores';
 	import {
 		createProviderConnection,
+		completeChatGPTLogin,
 		cancelChatGPTLogin,
 		cancelKimiLogin,
 		disconnectChatGPTConnection,
@@ -64,6 +65,8 @@
 	let verifiedModels: Model[] = [];
 	let selectedModelIds: string[] = [];
 	let oauthAttempt: any = null;
+	let callbackUrl = '';
+	let submittingCallback = false;
 	let pollTimer: ReturnType<typeof setInterval> | undefined;
 	let pollGeneration = 0;
 	let editingId = '';
@@ -153,6 +156,7 @@
 				: cancelKimiLogin(oauthAttempt.attempt_id)
 			).catch(() => {});
 		oauthAttempt = null;
+		callbackUrl = '';
 		wizard = false;
 		step = 'setup';
 		providerId = '';
@@ -409,6 +413,29 @@
 		}
 	};
 
+	const submitChatGPTCallback = async () => {
+		if (!oauthAttempt || submittingCallback || !callbackUrl.trim()) return;
+		submittingCallback = true;
+		error = '';
+		const attemptId = oauthAttempt.attempt_id;
+		try {
+			await completeChatGPTLogin(attemptId, callbackUrl.trim());
+			if (oauthAttempt?.attempt_id !== attemptId) return;
+			stopPolling();
+			oauthAttempt = null;
+			callbackUrl = '';
+			await load();
+			await refreshGlobalModels();
+			clearWizard();
+			toast.success($i18n.t('{{provider}} account connected', { provider: 'ChatGPT' }));
+		} catch (err) {
+			if (oauthAttempt?.attempt_id === attemptId) error = readableError(err);
+		} finally {
+			if (oauthAttempt?.attempt_id === attemptId) callbackUrl = '';
+			submittingCallback = false;
+		}
+	};
+
 	const beginOAuth = async (connectionId?: string) => {
 		if (saving) return;
 		saving = true;
@@ -428,13 +455,18 @@
 				).catch(() => {});
 				return;
 			}
+			if (signingProvider === 'chatgpt' && !attempt.authorization_url) {
+				await cancelChatGPTLogin(attempt.attempt_id).catch(() => {});
+				throw new Error($i18n.t('Update the backend to use browser-based ChatGPT sign-in.'));
+			}
+			callbackUrl = '';
 			oauthAttempt = { ...attempt, provider_id: signingProvider };
 			wizard = true;
 			step = 'oauth';
 			let polling = false;
 			pollTimer = setInterval(
 				async () => {
-					if (polling) return;
+					if (polling || (signingProvider === 'chatgpt' && submittingCallback)) return;
 					polling = true;
 					try {
 						const state =
@@ -528,6 +560,7 @@
 		<button
 			type="button"
 			data-testid="provider-add"
+			disabled={loading || providers.length === 0}
 			class="rounded-lg bg-gray-900 px-3 py-2 text-xs text-white hover:bg-black dark:bg-gray-100 dark:text-gray-900"
 			on:click={() => {
 				wizard = true;
@@ -1010,27 +1043,26 @@
 					{:else}
 						<p class="text-sm text-gray-600 dark:text-gray-300">
 							{$i18n.t(
-								'Finish sign-in in the local helper. This account will be stored securely when the helper confirms completion.'
+								'Open the ChatGPT sign-in page, authorize your account, then paste the complete callback URL below. No terminal or script is needed.'
 							)}
 						</p>
 					{/if}
 					{#if oauthAttempt}
-						<div class="rounded-xl bg-gray-50 p-4 text-center dark:bg-gray-800/70">
-							<p class="text-[10px] uppercase tracking-widest text-gray-400">
-								{kimi ? $i18n.t('DEVICE CODE') : $i18n.t('PAIRING CODE')}
-							</p>
-							<p
-								class="mt-2 font-mono text-3xl font-semibold tracking-[0.22em] text-gray-900 dark:text-white"
-							>
-								{kimi ? oauthAttempt.user_code : oauthAttempt.pairing_code}
-							</p>
-							<button
-								type="button"
-								class="mt-2 text-xs text-blue-600 hover:underline"
-								on:click={() => copyText(kimi ? oauthAttempt.user_code : oauthAttempt.pairing_code)}
-								>{$i18n.t('Copy code')}</button
-							>
-						</div>
+						{#if kimi}
+							<div class="rounded-xl bg-gray-50 p-4 text-center dark:bg-gray-800/70">
+								<p class="text-[10px] uppercase tracking-widest text-gray-400">
+									{$i18n.t('DEVICE CODE')}
+								</p>
+								<p class="mt-2 font-mono text-3xl font-semibold tracking-[0.22em]">
+									{oauthAttempt.user_code}
+								</p>
+								<button
+									type="button"
+									class="mt-2 text-xs text-blue-600 hover:underline"
+									on:click={() => copyText(oauthAttempt.user_code)}>{$i18n.t('Copy code')}</button
+								>
+							</div>
+						{/if}
 						{#if kimi}
 							<a
 								class="block rounded-lg border border-blue-200 px-3 py-2 text-center text-xs text-blue-600 hover:bg-blue-50 dark:border-blue-900 dark:hover:bg-blue-950/40"
@@ -1039,46 +1071,49 @@
 								rel="noreferrer">{$i18n.t('Open Kimi verification page')}</a
 							>
 						{:else}
-							<div
-								class="space-y-2 rounded-xl border border-gray-100 p-3 text-xs dark:border-gray-800"
+							<a
+								class="block rounded-lg bg-blue-600 px-3 py-2 text-center text-sm text-white hover:bg-blue-700"
+								href={oauthAttempt.authorization_url}
+								target="_blank"
+								rel="noreferrer noopener">{$i18n.t('Open ChatGPT sign-in page')}</a
 							>
-								<p class="font-medium text-gray-700 dark:text-gray-200">
-									{$i18n.t('On this computer')}
-								</p>
-								<p class="text-gray-500">
-									{$i18n.t(
-										'Run this command in a terminal on the computer where you want to sign in. It downloads and starts the local helper.'
-									)}
-								</p>
-								<p class="text-gray-500">
-									<a
-										class="text-blue-600 hover:underline"
-										href={oauthAttempt.helper_url}
-										target="_blank"
-										rel="noreferrer">{$i18n.t('Download helper script')}</a
-									>
-								</p>
-								<p class="text-gray-500">
-									{$i18n.t('Enter the pairing code when the local helper asks for it.')}
-								</p>
-								<pre
-									class="overflow-x-auto rounded-lg bg-gray-900 p-3 text-[11px] text-gray-100">{oauthAttempt.command}</pre>
-								<button
-									type="button"
-									class="rounded-md border border-gray-200 px-2.5 py-1.5 text-[11px] dark:border-gray-700"
-									on:click={() => copyText(oauthAttempt.command)}>{$i18n.t('Copy command')}</button
-								>
-							</div>
+							<p class="text-xs text-gray-500">
+								{$i18n.t(
+									'After authorization, the browser may show that 127.0.0.1 cannot be reached. Copy the entire address from its address bar and return here. Keep this address private.'
+								)}
+							</p>
+							<label class="block text-xs font-medium" for="chatgpt-callback-url"
+								>{$i18n.t('Complete callback URL')}</label
+							>
+							<textarea
+								id="chatgpt-callback-url"
+								class="w-full resize-y rounded-lg border border-gray-200 bg-transparent p-3 text-xs dark:border-gray-700"
+								rows="3"
+								bind:value={callbackUrl}
+								autocomplete="off"
+								spellcheck="false"
+								placeholder={`${oauthAttempt.redirect_uri}?code=…&state=…&client_id=…`}
+							></textarea>
+							<button
+								type="button"
+								class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-50"
+								disabled={submittingCallback || !callbackUrl.trim()}
+								on:click={submitChatGPTCallback}
+							>
+								{submittingCallback
+									? $i18n.t('Connecting...')
+									: $i18n.t('Complete sign-in')}</button
+							>
 						{/if}
 						<p class="text-center text-[11px] text-gray-400">
-							{$i18n.t('Code expires at {{time}}', {
+							{$i18n.t(kimi ? 'Code expires at {{time}}' : 'Sign-in expires at {{time}}', {
 								time: formatExpiry(oauthAttempt.expires_at)
 							})}
 						</p>
 						{#if !error}<p class="animate-pulse text-center text-xs text-gray-500">
 								{kimi
 									? $i18n.t('Waiting for Kimi authorization…')
-									: $i18n.t('Waiting for the local helper…')}
+									: $i18n.t('Waiting for ChatGPT authorization…')}
 							</p>{/if}
 					{/if}
 				</div>
@@ -1096,6 +1131,7 @@
 							stopPolling();
 							step = 'setup';
 							oauthAttempt = null;
+							callbackUrl = '';
 						}}>{$i18n.t('Back')}</button
 					>
 				</div>

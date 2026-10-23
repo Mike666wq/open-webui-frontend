@@ -19,6 +19,8 @@ const events = [];
 const upgradedSockets = new Set();
 let providerConnection = null;
 let kimiConnection = null;
+let chatgptConnection = null;
+const chatgptAttempts = [];
 const kimiAttempts = [];
 
 if (!root || !statSync(root).isDirectory()) {
@@ -229,10 +231,11 @@ function api(pathname) {
 				auth_types: ['api_key'],
 				default_base_url: 'https://api.openai.com/v1'
 			},
-			{ id: 'kimi', name: 'Kimi Code', auth_types: ['oauth'], default_base_url: '' }
+			{ id: 'kimi', name: 'Kimi Code', auth_types: ['oauth'], default_base_url: '' },
+			{ id: 'chatgpt', name: 'ChatGPT', auth_types: ['oauth'], default_base_url: '' }
 		];
 	if (pathname === '/api/v1/providers/connections')
-		return [providerConnection, kimiConnection].filter(Boolean);
+		return [providerConnection, kimiConnection, chatgptConnection].filter(Boolean);
 	if (pathname === '/api/config') return config;
 	if (pathname === '/api/version') return { version: '0.12.2', deployment_id: 'fixture' };
 	if (pathname === '/api/v1/auths/') return user;
@@ -290,6 +293,65 @@ function isPage(pathname) {
 const server = createServer(async (request, response) => {
 	const url = new URL(request.url || '/', origin);
 	try {
+		if (url.pathname === '/api/v1/providers/auth/chatgpt/start' && request.method === 'POST') {
+			const chunks = [];
+			for await (const chunk of request) chunks.push(chunk);
+			const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+			if (payload.mode !== 'browser') {
+				send(response, 400, { detail: 'Browser mode required' });
+				return;
+			}
+			const attempt = {
+				attempt_id: 'chatgpt-fixture-' + (chatgptAttempts.length + 1),
+				status: 'pending',
+				authorization_url: 'https://auth.openai.com/api/accounts/authorize?state=fixture-state',
+				redirect_uri: 'http://127.0.0.1:1455/auth/callback',
+				expires_at: now + 600
+			};
+			chatgptAttempts.push(attempt);
+			event('chatgpt-browser-started');
+			send(response, 200, attempt);
+			return;
+		}
+		if (url.pathname.startsWith('/api/v1/providers/auth/chatgpt/chatgpt-fixture-')) {
+			const attempt = chatgptAttempts.find((item) =>
+				url.pathname.split('/').includes(item.attempt_id)
+			);
+			if (!attempt) {
+				send(response, 404, {});
+				return;
+			}
+			if (request.method === 'POST' && url.pathname.endsWith('/callback')) {
+				const chunks = [];
+				for await (const chunk of request) chunks.push(chunk);
+				const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+				if (
+					payload.callback_url !==
+					'http://127.0.0.1:1455/auth/callback?code=fixture-code&state=fixture-state&client_id=oaiapp_fixture'
+				) {
+					send(response, 400, { detail: 'This callback belongs to a different sign-in.' });
+					return;
+				}
+				attempt.status = 'complete';
+				chatgptConnection = {
+					id: 'fixture-chatgpt-connection',
+					provider_id: 'chatgpt',
+					name: 'ChatGPT',
+					auth_type: 'oauth',
+					visibility: 'private',
+					owner_id: userId,
+					config: {},
+					models: [],
+					status: 'connected'
+				};
+				event('chatgpt-browser-complete');
+			} else if (request.method === 'DELETE') {
+				attempt.status = 'cancelled';
+				event('chatgpt-browser-cancelled');
+			}
+			send(response, 200, { status: attempt.status, connection_id: chatgptConnection?.id });
+			return;
+		}
 		if (url.pathname === '/api/v1/providers/auth/kimi/start' && request.method === 'POST') {
 			const attempt = {
 				attempt_id: 'kimi-fixture-' + (kimiAttempts.length + 1),

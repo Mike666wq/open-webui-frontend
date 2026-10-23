@@ -4102,5 +4102,13 @@
 	"Uses a server-saved API key. ChatGPT and Kimi account sign-in does not cover transcription.": "Uses a server-saved API key. ChatGPT and Kimi account sign-in does not cover transcription.",
 	"Uses a server-saved API key and the OpenAI-compatible /audio/speech endpoint.": "Uses a server-saved API key and the OpenAI-compatible /audio/speech endpoint.",
 	"Transcription model ID": "Transcription model ID",
-	"Only users with access to this connection can use this media feature. Share it in Connections for other users.": "Only users with access to this connection can use this media feature. Share it in Connections for other users."
+	"Only users with access to this connection can use this media feature. Share it in Connections for other users.": "Only users with access to this connection can use this media feature. Share it in Connections for other users.",
+	"Update the backend to use browser-based ChatGPT sign-in.": "Update the backend to use browser-based ChatGPT sign-in.",
+	"Open the ChatGPT sign-in page, authorize your account, then paste the complete callback URL below. No terminal or script is needed.": "Open the ChatGPT sign-in page, authorize your account, then paste the complete callback URL below. No terminal or script is needed.",
+	"Open ChatGPT sign-in page": "Open ChatGPT sign-in page",
+	"After authorization, the browser may show that 127.0.0.1 cannot be reached. Copy the entire address from its address bar and return here. Keep this address private.": "After authorization, the browser may show that 127.0.0.1 cannot be reached. Copy the entire address from its address bar and return here. Keep this address private.",
+	"Complete callback URL": "Complete callback URL",
+	"Complete sign-in": "Complete sign-in",
+	"Waiting for ChatGPT authorization…": "Waiting for ChatGPT authorization…",
+	"Sign-in expires at {{time}}": "Sign-in expires at {{time}}"
 }
