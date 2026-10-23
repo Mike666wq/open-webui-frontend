@@ -17,6 +17,9 @@ const origin = `http://127.0.0.1:${port}`;
 const startedAt = Date.now();
 const events = [];
 const upgradedSockets = new Set();
+let providerConnection = null;
+let kimiConnection = null;
+const kimiAttempts = [];
 
 if (!root || !statSync(root).isDirectory()) {
 	console.error('Usage: node frontend-api-server.mjs <verified-frontend-directory>');
@@ -47,8 +50,7 @@ const messages = {
 		parentId: null,
 		childrenIds: [assistantId],
 		role: 'user',
-		content:
-			'请检查移动端长消息、代码块、表格、操作按钮和输入框是否都完整落在视口内。',
+		content: '请检查移动端长消息、代码块、表格、操作按钮和输入框是否都完整落在视口内。',
 		timestamp: now - 80,
 		models: ['fixture-model'],
 		done: true
@@ -102,6 +104,7 @@ const config = {
 		enable_login_form: true,
 		enable_websocket: true,
 		enable_direct_connections: false,
+		enable_provider_connections: true,
 		enable_tool_servers: false,
 		enable_notes: false,
 		enable_channels: false,
@@ -187,7 +190,9 @@ const usage = {
 };
 
 function send(response, status, body, contentType = 'application/json; charset=utf-8') {
-	const bytes = Buffer.isBuffer(body) ? body : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
+	const bytes = Buffer.isBuffer(body)
+		? body
+		: Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
 	response.writeHead(status, {
 		'Content-Type': contentType,
 		'Content-Length': bytes.length,
@@ -203,6 +208,24 @@ function event(kind, details = {}) {
 }
 
 function api(pathname) {
+	if (pathname === '/api/v1/providers')
+		return [
+			{
+				id: 'deepseek',
+				name: 'DeepSeek',
+				auth_types: ['api_key'],
+				default_base_url: 'https://api.deepseek.com/v1'
+			},
+			{
+				id: 'openai',
+				name: 'OpenAI',
+				auth_types: ['api_key'],
+				default_base_url: 'https://api.openai.com/v1'
+			},
+			{ id: 'kimi', name: 'Kimi Code', auth_types: ['oauth'], default_base_url: '' }
+		];
+	if (pathname === '/api/v1/providers/connections')
+		return [providerConnection, kimiConnection].filter(Boolean);
 	if (pathname === '/api/config') return config;
 	if (pathname === '/api/version') return { version: '0.12.2', deployment_id: 'fixture' };
 	if (pathname === '/api/v1/auths/') return user;
@@ -263,14 +286,110 @@ function isPage(pathname) {
 const server = createServer(async (request, response) => {
 	const url = new URL(request.url || '/', origin);
 	try {
+		if (url.pathname === '/api/v1/providers/auth/kimi/start' && request.method === 'POST') {
+			const attempt = {
+				attempt_id: 'kimi-fixture-' + (kimiAttempts.length + 1),
+				status: 'pending',
+				user_code: 'TEST-1234',
+				verification_uri_complete: 'https://www.kimi.com/device?code=TEST-1234',
+				expires_at: now + 600,
+				interval: 1
+			};
+			kimiAttempts.push(attempt);
+			event('kimi-started', { attempt_id: attempt.attempt_id });
+			send(response, 200, attempt);
+			return;
+		}
+		if (url.pathname.startsWith('/api/v1/providers/auth/kimi/kimi-fixture-')) {
+			const attempt = kimiAttempts.find((item) => url.pathname.endsWith('/' + item.attempt_id));
+			if (!attempt) {
+				send(response, 404, {});
+				return;
+			}
+			if (request.method === 'DELETE') {
+				attempt.status = 'cancelled';
+				event('kimi-cancelled', { attempt_id: attempt.attempt_id });
+			} else if (attempt === kimiAttempts[1]) {
+				attempt.status = 'denied';
+			} else if (attempt === kimiAttempts[2]) {
+				attempt.status = 'complete';
+				attempt.connection_id = 'fixture-kimi-connection';
+				kimiConnection = {
+					id: attempt.connection_id,
+					provider_id: 'kimi',
+					name: 'Kimi Code',
+					auth_type: 'oauth',
+					visibility: 'private',
+					owner_id: userId,
+					config: {},
+					status: 'connected',
+					models: [],
+					configured: true
+				};
+				event('kimi-completed', { attempt_id: attempt.attempt_id });
+			}
+			send(response, 200, attempt);
+			return;
+		}
+
+		if (
+			request.method === 'POST' &&
+			['/api/v1/providers/connections/verify', '/api/v1/providers/connections'].includes(
+				url.pathname
+			)
+		) {
+			const chunks = [];
+			for await (const chunk of request) chunks.push(chunk);
+			const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+			if (!payload.name || !payload.api_key) {
+				send(response, 422, { detail: 'Missing provider name/key' });
+				return;
+			}
+			if (url.pathname.endsWith('/verify')) {
+				send(response, 200, {
+					ok: true,
+					status: 'connected',
+					models: [
+						{
+							id: 'provider:temporary:deepseek-fixture',
+							upstream_id: 'deepseek-fixture',
+							name: 'Fixture DeepSeek'
+						}
+					]
+				});
+				return;
+			}
+			if (JSON.stringify(payload.config?.model_ids) !== JSON.stringify(['deepseek-fixture'])) {
+				send(response, 422, {
+					detail: 'Expected upstream model IDs rather than temporary connection IDs'
+				});
+				return;
+			}
+			providerConnection = {
+				id: 'fixture-provider-connection',
+				provider_id: payload.provider_id,
+				name: payload.name,
+				auth_type: 'api_key',
+				visibility: 'private',
+				owner_id: userId,
+				config: payload.config,
+				status: 'configured',
+				configured: true,
+				models: []
+			};
+			event('provider-saved', {
+				provider_id: payload.provider_id,
+				model_ids: payload.config.model_ids,
+				visibility: payload.visibility
+			});
+			send(response, 200, providerConnection);
+			return;
+		}
 		if (request.method === 'POST' && url.pathname === '/api/v1/auths/signin') {
 			send(response, 200, user);
 			return;
 		}
-		if (
-			request.method === 'POST' &&
-			url.pathname === '/api/v1/users/user/settings/update'
-		) {
+		if (request.method === 'POST' && url.pathname === '/api/v1/users/user/settings/update') {
 			send(response, 200, { ui: { theme: 'light' } });
 			return;
 		}

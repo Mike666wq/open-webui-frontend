@@ -13,6 +13,7 @@
 		updateConfig,
 		verifyConnection
 	} from '$lib/apis/images';
+	import { getProviderConnections } from '$lib/apis/providers';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import SensitiveInput from '$lib/components/common/SensitiveInput.svelte';
 	import Switch from '$lib/components/common/Switch.svelte';
@@ -32,6 +33,12 @@
 
 	let models = null;
 	let config = null;
+	let providerConnections: Array<{
+		id: string;
+		name: string;
+		provider_id: string;
+		auth_type: string;
+	}> = [];
 	const inputClass =
 		'w-full h-7 rounded-lg border border-gray-100/50 bg-gray-50/40 px-2 text-xs text-gray-700 outline-hidden transition-colors placeholder:text-gray-300 focus:border-blue-400 dark:border-white/[0.04] dark:bg-white/[0.03] dark:text-gray-300 dark:placeholder:text-gray-700 dark:focus:border-blue-500';
 	const textareaClass =
@@ -130,6 +137,20 @@
 			toast.error($i18n.t('Gemini API Key is required.'));
 			config.ENABLE_IMAGE_GENERATION = false;
 
+			return null;
+		} else if (
+			config.IMAGE_GENERATION_ENGINE === 'provider' &&
+			!config.IMAGES_PROVIDER_CONNECTION_ID
+		) {
+			toast.error($i18n.t('Select an API-key provider connection.'));
+			config.ENABLE_IMAGE_GENERATION = false;
+			return null;
+		} else if (
+			config.IMAGE_EDIT_ENGINE === 'provider' &&
+			!config.IMAGES_EDIT_PROVIDER_CONNECTION_ID
+		) {
+			toast.error($i18n.t('Select an API-key provider connection for image editing.'));
+			config.ENABLE_IMAGE_EDIT = false;
 			return null;
 		}
 
@@ -240,6 +261,13 @@
 
 	onMount(async () => {
 		if ($user?.role === 'admin') {
+			getProviderConnections()
+				.then((rows) => {
+					providerConnections = (Array.isArray(rows) ? rows : (rows?.connections ?? [])).filter(
+						(connection: { auth_type: string }) => connection.auth_type === 'api_key'
+					);
+				})
+				.catch(() => {});
 			const res = await getConfig(localStorage.token).catch((error) => {
 				toast.error(`${error}`);
 				return null;
@@ -349,10 +377,35 @@
 							<option value="comfyui">{$i18n.t('ComfyUI')}</option>
 							<option value="automatic1111">{$i18n.t('Automatic1111')}</option>
 							<option value="gemini">{$i18n.t('Gemini')}</option>
+							{#if $backendConfig?.features?.enable_provider_media_connections}<option
+									value="provider">{$i18n.t('Saved provider connection')}</option
+								>{/if}
 						</SettingsSelect>
 					</AdminSettingRow>
 
 					{#if config.ENABLE_IMAGE_GENERATION}
+						{#if config.IMAGE_GENERATION_ENGINE === 'provider'}
+							<AdminSettingField
+								label={$i18n.t('API-key provider connection')}
+								description={$i18n.t(
+									'Uses the server-saved key. ChatGPT and Kimi account sign-in does not cover image generation.'
+								)}
+							>
+								<p class="mb-2 text-[11px] text-gray-500">
+									{$i18n.t(
+										'Only users with access to this connection can use this media feature. Share it in Connections for other users.'
+									)}
+								</p>
+								<SettingsSelect bind:value={config.IMAGES_PROVIDER_CONNECTION_ID}>
+									<option value="">{$i18n.t('Select a provider connection')}</option>
+									{#each providerConnections as connection}
+										<option value={connection.id}
+											>{connection.name} · {connection.provider_id}</option
+										>
+									{/each}
+								</SettingsSelect>
+							</AdminSettingField>
+						{/if}
 						<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 							<AdminSettingField
 								label={$i18n.t('settings.admin.images.imageGenerationModel.label')}
@@ -768,10 +821,30 @@
 							<option value="openai">{$i18n.t('Default (Open AI)')}</option>
 							<option value="comfyui">{$i18n.t('ComfyUI')}</option>
 							<option value="gemini">{$i18n.t('Gemini')}</option>
+							{#if $backendConfig?.features?.enable_provider_media_connections}<option
+									value="provider">{$i18n.t('Saved provider connection')}</option
+								>{/if}
 						</SettingsSelect>
 					</AdminSettingRow>
 
 					{#if config?.ENABLE_IMAGE_GENERATION && config?.ENABLE_IMAGE_EDIT}
+						{#if config.IMAGE_EDIT_ENGINE === 'provider'}
+							<AdminSettingField
+								label={$i18n.t('API-key provider connection')}
+								description={$i18n.t(
+									'Uses the server-saved key. Account sign-in connections are not used for image editing.'
+								)}
+							>
+								<SettingsSelect bind:value={config.IMAGES_EDIT_PROVIDER_CONNECTION_ID}>
+									<option value="">{$i18n.t('Select a provider connection')}</option>
+									{#each providerConnections as connection}
+										<option value={connection.id}
+											>{connection.name} · {connection.provider_id}</option
+										>
+									{/each}
+								</SettingsSelect>
+							</AdminSettingField>
+						{/if}
 						<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 							<AdminSettingField label={$i18n.t('settings.admin.images.imageEditModel.label')}>
 								<input

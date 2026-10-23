@@ -120,6 +120,20 @@
 				</Tooltip>
 			</div>
 
+			{#if item.model.provider_visibility}
+				<Tooltip
+					content={`${item.model.provider_id ?? item.model.owned_by ?? ''} · ${item.model.connection_name ?? ''} · ${$i18n.t(item.model.provider_visibility === 'shared' ? 'Shared' : 'Private')}`}
+				>
+					<span
+						class="max-w-32 shrink-0 truncate rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+					>
+						{item.model.connection_name ?? item.model.provider_id ?? item.model.owned_by} · {$i18n.t(
+							item.model.provider_visibility === 'shared' ? 'Shared' : 'Private'
+						)}
+					</span>
+				</Tooltip>
+			{/if}
+
 			<div class="flex shrink-0 items-center gap-1.5">
 				{#if item.model.owned_by === 'ollama'}
 					{#if (item.model.ollama?.details?.parameter_size ?? '') !== ''}

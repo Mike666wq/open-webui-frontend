@@ -53,10 +53,22 @@ jobs:
         run: |
           npm run frontend:bundle
           echo "artifact-name=frontend-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - name: Prepare Chinese fonts for browser screenshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'Chinese font fallback before preparation:'
+          fc-match --format '%{family}\n' 'sans-serif:lang=zh-cn'
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fontconfig fonts-noto-cjk
+          fc-cache -f
+          echo 'Chinese font fallback after preparation:'
+          fc-match --format '%{family}\n' 'sans-serif:lang=zh-cn'
       - name: Run mobile layout in real Chromium
         shell: bash
         env:
           MOBILE_SMOKE_OUTPUT: ${{ runner.temp }}/mobile-browser-smoke
+          MOBILE_SMOKE_CJK_FONT_PATTERN: 'Noto Sans CJK'
         run: |
           set -euo pipefail
           chrome_bin="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"

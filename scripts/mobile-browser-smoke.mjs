@@ -131,8 +131,7 @@ class CdpClient {
 		if (response.exceptionDetails) {
 			throw new Error(
 				`Page evaluation failed: ${
-					response.exceptionDetails.exception?.description ||
-					response.exceptionDetails.text
+					response.exceptionDetails.exception?.description || response.exceptionDetails.text
 				}`
 			);
 		}
@@ -357,6 +356,187 @@ async function openSettings(cdp) {
 		`Boolean(document.querySelector('#open-mist-appearance-editor'))`,
 		'appearance editor entry'
 	);
+}
+
+async function providerSettings(cdp) {
+	// The fixture intentionally disables browser direct connections. This catches
+	// regressions where the server-managed account tab inherits that switch.
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('button[aria-controls="tab-connections"]'))`,
+		'server provider settings tab'
+	);
+	await cdp.click(
+		`document.querySelector('button[aria-controls="tab-connections"]')`,
+		'provider settings tab'
+	);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[data-testid="provider-add"]'))`,
+		'provider account entry'
+	);
+	await cdp.click(`document.querySelector('[data-testid="provider-add"]')`, 'add provider');
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] select'))`,
+		'provider wizard'
+	);
+	const choose = async (id) => {
+		await cdp.evaluate(
+			`(() => { const select=document.querySelector('[aria-labelledby="provider-wizard-title"] select'); select.value=${JSON.stringify(id)}; select.dispatchEvent(new Event('change',{bubbles:true})); })()`
+		);
+	};
+	const enterKey = async () => {
+		await cdp.evaluate(
+			`(() => { const input=document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="password"]'); input.value='synthetic-fixture-key'; input.dispatchEvent(new Event('input',{bubbles:true})); })()`
+		);
+	};
+	await choose('deepseek');
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="password"]'))`,
+		'provider key input'
+	);
+	await enterKey();
+	await choose('openai');
+	await cdp.waitForExpression(
+		`document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="password"]')?.value === ''`,
+		'key cleared after provider change'
+	);
+	await choose('deepseek');
+	await enterKey();
+	await cdp.waitForExpression(
+		`document.querySelector('[data-testid="provider-verify"]')?.disabled === false`,
+		'verify enabled'
+	);
+	await cdp.click(`document.querySelector('[data-testid="provider-verify"]')`, 'verify provider');
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[data-testid="provider-save"]'))`,
+		'provider model choice'
+	);
+	await cdp.click(
+		`document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="checkbox"]')`,
+		'unselect provider model'
+	);
+	await cdp.waitForExpression(
+		`document.querySelector('[data-testid="provider-save"]')?.disabled === true`,
+		'save disabled without selected models'
+	);
+	await cdp.click(
+		`document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="checkbox"]')`,
+		'select provider model'
+	);
+	await cdp.waitForExpression(
+		`document.querySelector('[data-testid="provider-save"]')?.disabled === false`,
+		'save re-enabled after model selection'
+	);
+	await cdp.click(`document.querySelector('[data-testid="provider-save"]')`, 'save provider');
+	await cdp.waitForExpression(
+		`!document.querySelector('[aria-labelledby="provider-wizard-title"]') && document.querySelector('#tab-connections')?.textContent.includes('DeepSeek')`,
+		'saved provider account'
+	);
+	const provenance = await (await fetch(`${origin}/__fixture_provenance`)).json();
+	const saved = provenance.events.find((event) => event.kind === 'provider-saved');
+	assert.deepEqual(saved?.model_ids, ['deepseek-fixture']);
+	assert.equal(saved?.visibility, 'private');
+	const startKimi = async () => {
+		await cdp.click(`document.querySelector('[data-testid="provider-add"]')`, 'add Kimi provider');
+		await cdp.waitForExpression(
+			`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] select'))`,
+			'Kimi provider select'
+		);
+		await choose('kimi');
+		await cdp.waitForExpression(
+			`document.querySelector('[data-testid="provider-verify"]')?.disabled === false`,
+			'Kimi sign-in enabled without key'
+		);
+		assert.equal(
+			await cdp.evaluate(
+				`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="password"]'))`
+			),
+			false
+		);
+		await cdp.click(
+			`document.querySelector('[data-testid="provider-verify"]')`,
+			'start Kimi device sign-in'
+		);
+		await cdp.waitForExpression(
+			`Boolean(document.querySelector('a[href^="https://www.kimi.com/device"]'))`,
+			'Kimi verification link'
+		);
+		assert.match(
+			await cdp.evaluate(
+				`document.querySelector('[aria-labelledby="provider-wizard-title"]').textContent`
+			),
+			/TEST-1234/
+		);
+	};
+	await startKimi();
+	await cdp.click(
+		`document.querySelector('[aria-labelledby="provider-wizard-title"] button[aria-label]')`,
+		'cancel Kimi authorization'
+	);
+	await waitForValue(
+		async () =>
+			(await (await fetch(`${origin}/__fixture_provenance`)).json()).events.some(
+				(event) => event.kind === 'kimi-cancelled'
+			),
+		Boolean,
+		'Kimi cancel request'
+	);
+	await startKimi();
+	await cdp.waitForExpression(
+		`/Kimi Code (authorization was denied|授权已被拒绝)/.test(document.querySelector('[aria-labelledby="provider-wizard-title"]')?.textContent ?? '')`,
+		'denied Kimi authorization'
+	);
+	await cdp.click(
+		`document.querySelector('[aria-labelledby="provider-wizard-title"] button[aria-label]')`,
+		'close denied Kimi authorization'
+	);
+	await startKimi();
+	await cdp.waitForExpression(
+		`!document.querySelector('[aria-labelledby="provider-wizard-title"]') && document.querySelector('#tab-connections')?.textContent.includes('Kimi Code')`,
+		'connected Kimi account'
+	);
+
+	const accountLayout = await cdp.evaluate(`
+        [...document.querySelectorAll('[data-testid="provider-account-row"]')].map(row => {
+            const info = row.querySelector('[data-testid="provider-account-info"]').getBoundingClientRect();
+            const actions = row.querySelector('[data-testid="provider-account-actions"]').getBoundingClientRect();
+            const buttons = [...row.querySelectorAll('button')].map(button => { const r=button.getBoundingClientRect(); return {left:r.left,right:r.right}; });
+            return {infoWidth:info.width, infoBottom:info.bottom, actionsTop:actions.top, buttons};
+        })
+    `);
+	assert.equal(accountLayout.length, 2);
+	for (const account of accountLayout) {
+		assert.ok(account.infoWidth >= 200, 'Provider information must have enough width on mobile');
+		assert.ok(
+			account.actionsTop >= account.infoBottom - 1,
+			'Mobile actions must sit below provider information'
+		);
+		for (const button of account.buttons) {
+			assert.ok(
+				button.left >= 0 && button.right <= 394,
+				'Provider action must stay inside the viewport'
+			);
+		}
+	}
+
+	await cdp.screenshot('provider-accounts-393x852.png');
+	await cdp.click(
+		`document.querySelector('button[aria-controls="tab-appearance"]')`,
+		'restore appearance tab'
+	);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('#open-mist-appearance-editor'))`,
+		'restored appearance settings'
+	);
+	return {
+		independentOfDirectConnections: true,
+		keyClearedOnProviderChange: true,
+		upstreamModelIds: true,
+		privateConnectionSaved: true,
+		kimiDeviceCode: true,
+		kimiCancelAndDenied: true,
+		kimiConnected: true,
+		accountActionsBelowInfo: true
+	};
 }
 
 async function dismissUpdateDialog(cdp) {
@@ -591,6 +771,41 @@ async function wallpaperPanning(cdp) {
 	return { swipes: swipes.length, leftPositions };
 }
 
+async function verifyChineseFonts(cdp) {
+	await cdp.send('DOM.enable');
+	await cdp.send('CSS.enable');
+	await cdp.evaluate(`(async () => {
+		const probe = document.createElement('span');
+		probe.id = 'mobile-smoke-chinese-font-probe';
+		probe.textContent = '中文连接账号设置';
+		probe.style.cssText = 'position:fixed;left:0;top:0;opacity:0;pointer-events:none;font-family:inherit';
+		document.body.append(probe);
+		await document.fonts.ready;
+	})()`);
+	try {
+		const { root } = await cdp.send('DOM.getDocument', { depth: 0 });
+		const { nodeId } = await cdp.send('DOM.querySelector', {
+			nodeId: root.nodeId,
+			selector: '#mobile-smoke-chinese-font-probe'
+		});
+		const { fonts } = await cdp.send('CSS.getPlatformFontsForNode', { nodeId });
+		assert.ok(
+			fonts.some((font) => font.glyphCount > 0),
+			'Chinese text must use a rendered font'
+		);
+		if (process.env.MOBILE_SMOKE_CJK_FONT_PATTERN) {
+			const expected = new RegExp(process.env.MOBILE_SMOKE_CJK_FONT_PATTERN);
+			assert.ok(
+				fonts.some((font) => expected.test(font.familyName) && font.glyphCount >= 8),
+				`Chinese text must use the prepared CJK font; actual=${JSON.stringify(fonts)}`
+			);
+		}
+		return fonts;
+	} finally {
+		await cdp.evaluate("document.querySelector('#mobile-smoke-chinese-font-probe')?.remove()");
+	}
+}
+
 async function main() {
 	const fixture = await waitForHttp(`${origin}/__fixture_provenance`);
 	assert.equal(fixture.schema, 1);
@@ -666,7 +881,11 @@ async function main() {
 		);
 		await dismissUpdateDialog(client);
 
-		const results = { sourceCommit: fixture.sourceCommit, viewports: {} };
+		const results = {
+			sourceCommit: fixture.sourceCommit,
+			chineseFonts: await verifyChineseFonts(client),
+			viewports: {}
+		};
 		for (const viewport of viewports) {
 			await client.send('Emulation.setDeviceMetricsOverride', {
 				width: viewport.width,
@@ -694,6 +913,7 @@ async function main() {
 		});
 		results.wallpaperPan = await wallpaperPanning(client);
 		await openSettings(client);
+		results.providers = await providerSettings(client);
 		results.settings = await settingsGeometry(client, 393, 852);
 		await client.screenshot('appearance-editor-393x852.png');
 
@@ -772,7 +992,9 @@ async function main() {
 		}
 		if (removeError) {
 			// A leftover temp profile must never fail a run whose checks passed.
-			console.warn(`Could not remove Chromium profile ${userDataDirectory}: ${removeError.message}`);
+			console.warn(
+				`Could not remove Chromium profile ${userDataDirectory}: ${removeError.message}`
+			);
 		}
 	}
 }

@@ -15,6 +15,11 @@ This repository maintains the DIY Svelte UI and publishes verified static bundle
 Both the backend image and Android APK consume that same pinned bundle. Backend
 accounts, models and conversations remain managed by the backend repository.
 
+Provider account setup, shared access and first-time ChatGPT sign-in are covered
+in the [provider accounts guide](docs/provider-connections.md). The backend API
+and credential-handling contract is documented in
+[the backend provider guide](../open-webui-backend/docs/provider-connections.md).
+
 Daily development can stay in a local editor with Git; GitHub Actions installs
 dependencies, tests and builds. Local hot reload below is optional when resources
 permit. Manual acceptance uses an isolated test service and physical devices.
