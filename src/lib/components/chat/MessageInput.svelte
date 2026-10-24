@@ -1752,10 +1752,11 @@
 />
 
 {#if loaded}
-	<div class="w-full">
-		<div class=" mx-auto inset-x-0 bg-transparent flex justify-center">
+	<div class="owui-composer-root w-full min-w-0">
+		<div class="mx-auto inset-x-0 bg-transparent flex justify-center min-w-0">
 			<div
-				class="flex flex-col px-3 {($settings?.widescreenMode ?? null)
+				class="owui-composer-dock__inner min-w-0 mx-auto flex flex-col px-3 {($settings?.widescreenMode ??
+				null)
 					? 'max-w-full'
 					: 'max-w-[58rem]'} w-full"
 			>

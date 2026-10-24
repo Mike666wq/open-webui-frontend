@@ -261,6 +261,8 @@ async function chatGeometry(cdp, width) {
 				card: capture(card),
 				body: capture(body),
 				composer: capture(composer),
+                pane: capture(document.querySelector('.owui-messages')),
+                message: capture(document.querySelector('.owui-message-listitem')),
 				actions: [...document.querySelectorAll('.owui-assistant-card .buttons button')]
 					.map(capture)
 			};
@@ -284,6 +286,15 @@ async function chatGeometry(cdp, width) {
 	assert.ok(
 		geometry.composer.top < geometry.viewport.height + 0.5,
 		`${width}px composer is below the viewport`
+	);
+	const center = (rect) => (rect.left + rect.right) / 2;
+	assert.ok(
+		Math.abs(center(geometry.composer) - center(geometry.pane)) <= 2,
+		`${width}px composer is not centered in chat pane: ${JSON.stringify(geometry)}`
+	);
+	assert.ok(
+		Math.abs(center(geometry.message) - center(geometry.pane)) <= 2,
+		`${width}px message is not centered in chat pane`
 	);
 	return geometry;
 }
@@ -995,6 +1006,127 @@ async function main() {
 		results.providers = await providerSettings(client);
 		results.settings = await settingsGeometry(client, 393, 852);
 		await client.screenshot('appearance-editor-393x852.png');
+
+		results.desktop = {};
+		const savedAppearance = await client.evaluate(
+			"localStorage.getItem('owui-appearance:v3:' + location.origin)"
+		);
+		for (const width of [1280, 1440, 1920]) {
+			for (const sidebar of [false, true]) {
+				for (const wallpaper of [false, true]) {
+					await client.send('Emulation.setDeviceMetricsOverride', {
+						width,
+						height: 1000,
+						deviceScaleFactor: 1,
+						mobile: false
+					});
+					await client.evaluate(
+						`localStorage.sidebar='${sidebar}';localStorage.sidebarWidth='300'`
+					);
+					await client.evaluate(
+						`(() => { const key='owui-appearance:v3:' + location.origin; const appearance=JSON.parse(${JSON.stringify(savedAppearance)}); appearance.enabled=${wallpaper}; localStorage.setItem(key,JSON.stringify(appearance)); })()`
+					);
+					await client.navigate(
+						chatUrl,
+						"document.querySelector('.owui-messages') && document.querySelector('#message-input-container')"
+					);
+					await sleep(500);
+					results.desktop[`${width}-${sidebar}-${wallpaper}`] = await chatGeometry(client, width);
+					await client.evaluate(
+						"document.documentElement.style.setProperty('--owui-assistant-width','720px'); document.documentElement.style.setProperty('--owui-composer-width','700px');"
+					);
+					await sleep(50);
+					results.desktop[`${width}-${sidebar}-${wallpaper}-custom`] = await chatGeometry(
+						client,
+						width
+					);
+				}
+			}
+		}
+		await client.screenshot('chat-desktop-centered.png');
+		await client.send('Emulation.setDeviceMetricsOverride', {
+			width: 393,
+			height: 852,
+			deviceScaleFactor: 2,
+			mobile: true
+		});
+		await client.navigate(
+			`${origin}/notes/recordings?id=recording-fixture`,
+			"document.querySelector('.recordings-page textarea')"
+		);
+		await client.waitForExpression(
+			"document.querySelector('.recordings-page textarea').value.includes('老师讲课')",
+			'transcript note'
+		);
+
+		// LAN HTTP pages may expose getRandomValues but not randomUUID.
+		await client.evaluate(
+			"Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true })"
+		);
+		await client.evaluate(
+			`(() => {const input=document.querySelector('#recording-file');const transfer=new DataTransfer();transfer.items.add(new File(['fixture audio'],'class.wav',{type:'audio/wav'}));input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`
+		);
+		await client.click(
+			`[...document.querySelectorAll('.recordings-page button')].find(b=>b.textContent.trim()==='开始转写')`,
+			'upload recording'
+		);
+		await waitForValue(
+			async () => (await (await fetch(`${origin}/__fixture_provenance`)).json()).events,
+			(events) =>
+				events.some((e) => e.kind === 'recording-action' && e.path === '/api/v1/recordings'),
+			'recording upload'
+		);
+		await client.waitForExpression(
+			"!document.querySelector('#recording-file').disabled",
+			'upload completed'
+		);
+		await client.evaluate(
+			`(() => {const e=document.querySelector('.recordings-page textarea');e.value='修改后的课堂原文';e.dispatchEvent(new Event('input',{bubbles:true}));})()`
+		);
+		await client.click(
+			`[...document.querySelectorAll('.recordings-page button')].find(b=>b.textContent.trim()==='保存' && !b.disabled)`,
+			'save transcript'
+		);
+		await client.waitForExpression(
+			"document.querySelector('.recordings-page textarea').value==='修改后的课堂原文'",
+			'edited transcript'
+		);
+		await client.evaluate(
+			`(() => {const e=document.querySelector('select[aria-label="文字模型"]');e.value='fixture-model';e.dispatchEvent(new Event('change',{bubbles:true}));})()`
+		);
+		await client.click(
+			`[...document.querySelectorAll('.recordings-page button')].find(b=>['Generate','生成'].includes(b.textContent.trim()))`,
+			'generate class notes'
+		);
+		await client.waitForExpression(
+			"document.querySelector('.recordings-page textarea').value==='课堂知识点整理'",
+			'separate summary note'
+		);
+		await client.evaluate(
+			`(() => {const e=document.querySelector('select[aria-label="知识库"]');e.value='recording-kb';e.dispatchEvent(new Event('change',{bubbles:true}));})()`
+		);
+		const syncButton = `[...document.querySelectorAll('.recordings-page button')].find(b=>b.textContent.trim()==='将当前文档保存到知识库')`;
+		await client.click(syncButton, 'save knowledge snapshot');
+		await waitForValue(
+			async () => (await (await fetch(`${origin}/__fixture_provenance`)).json()).events,
+			(events) =>
+				events.some((e) => e.kind === 'recording-action' && e.path?.endsWith('/file/add')),
+			'knowledge snapshot add'
+		);
+		await client.waitForExpression(`!(${syncButton}).disabled`, 'knowledge action complete');
+		await client.click(syncButton, 'update knowledge snapshot');
+		await waitForValue(
+			async () => (await (await fetch(`${origin}/__fixture_provenance`)).json()).events,
+			(events) =>
+				events.some((e) => e.kind === 'recording-action' && e.path?.endsWith('/file/update')),
+			'knowledge snapshot update'
+		);
+		await client.screenshot('recording-documents-393x852.png');
+		results.recordings = {
+			editableTranscript: true,
+			separateSummary: true,
+			knowledgeAddAndUpdate: true
+		};
 
 		await writeFile(
 			path.join(outputDirectory, 'geometry.json'),
