@@ -1059,6 +1059,10 @@ async function main() {
 			'transcript note'
 		);
 
+		// LAN HTTP pages may expose getRandomValues but not randomUUID.
+		await client.evaluate(
+			"Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true })"
+		);
 		await client.evaluate(
 			`(() => {const input=document.querySelector('#recording-file');const transfer=new DataTransfer();transfer.items.add(new File(['fixture audio'],'class.wav',{type:'audio/wav'}));input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`
 		);

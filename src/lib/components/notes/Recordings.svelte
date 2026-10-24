@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, getContext } from 'svelte';
+	import { v4 as uuidv4 } from 'uuid';
 	import { toast } from 'svelte-sonner';
 	import { beforeNavigate } from '$app/navigation';
 	import { models, user, showSidebar } from '$lib/stores';
@@ -268,7 +269,7 @@
 				disabled={uploading}
 				on:change={(e) => {
 					selectedFile = e.currentTarget.files?.[0] ?? null;
-					uploadKey = crypto.randomUUID();
+					uploadKey = uuidv4();
 				}}
 				class="block max-w-full text-sm"
 			/>
@@ -599,7 +600,7 @@
 									on:click={() =>
 										execute(async () => {
 											if (dirty) await save();
-											summaryKey ||= crypto.randomUUID();
+											summaryKey ||= uuidv4();
 											const result = await recordingRequest<{ note_id: string }>(
 												localStorage.token,
 												`/${selected!.id}/summary`,
