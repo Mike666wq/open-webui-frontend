@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ProviderModelManager from '$lib/components/ProviderModelManager.svelte';
 	import { getContext, onMount, onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import AccessControl from '$lib/components/workspace/common/AccessControl.svelte';
@@ -752,6 +753,13 @@
 										? $i18n.t('Account sign-in')
 										: $i18n.t('API key')}
 								</p>
+								{#if canManageConnection(connection) && $backendConfig?.features?.enable_provider_model_capabilities}<ProviderModelManager
+										{connection}
+										on:updated={async () => {
+											await load();
+											await refreshGlobalModels();
+										}}
+									/>{/if}
 							</div>
 							<div
 								class="flex w-full shrink-0 flex-wrap justify-end gap-1 sm:w-auto"

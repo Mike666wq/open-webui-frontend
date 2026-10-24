@@ -3,6 +3,7 @@ import { WEBUI_API_BASE_URL } from '$lib/constants';
 export type Segment = { text: string; start?: number; end?: number; speaker?: string };
 export type RecordingJob = {
 	id: string;
+	config?: { model_ref?: string; model?: string; provider_connection_id?: string };
 	title: string;
 	state: string;
 	duration: number;
@@ -24,6 +25,7 @@ export type RecordingConfig = {
 	max_duration_seconds: number;
 	response_format: string;
 	configured: boolean;
+	default_model_ref?: string;
 	reason?: string;
 };
 export const recordingsUrl = `${WEBUI_API_BASE_URL}/recordings`;
@@ -56,7 +58,8 @@ export function uploadRecording(
 	token: string,
 	file: File,
 	key: string,
-	progress: (percent: number) => void
+	progress: (percent: number) => void,
+	modelRef = ''
 ): Promise<RecordingJob> {
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
@@ -86,6 +89,7 @@ export function uploadRecording(
 		const data = new FormData();
 		data.append('file', file);
 		data.append('language', 'zh');
+		if (modelRef) data.append('model_ref', modelRef);
 		xhr.send(data);
 	});
 }

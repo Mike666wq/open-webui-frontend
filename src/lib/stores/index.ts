@@ -401,6 +401,7 @@ type Config = {
 		enable_provider_connections?: boolean;
 		enable_recording_documents?: boolean;
 		enable_provider_media_connections?: boolean;
+		enable_provider_model_capabilities?: boolean;
 		enable_direct_integrations?: boolean;
 		enable_version_update_check: boolean;
 		enable_pyodide_file_persistence?: boolean;

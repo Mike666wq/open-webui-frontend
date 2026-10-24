@@ -1,9 +1,10 @@
 <script lang="ts">
+	import ProviderModelSelect from '$lib/components/common/ProviderModelSelect.svelte';
 	import { onMount, getContext } from 'svelte';
 	import { v4 as uuidv4 } from 'uuid';
 	import { toast } from 'svelte-sonner';
 	import { beforeNavigate } from '$app/navigation';
-	import { models, user, showSidebar } from '$lib/stores';
+	import { models, user, showSidebar, config as backendConfig } from '$lib/stores';
 	import { getNoteById, updateNoteById } from '$lib/apis/notes';
 	import {
 		getKnowledgeBases,
@@ -20,6 +21,8 @@
 	} from '$lib/apis/recordings';
 	import { transcriptText, timeLabel, hasCompleteSegments } from './Recordings/utils';
 	const i18n = getContext<typeof import('$lib/i18n').default>('i18n');
+	let selectedModelRef = '';
+	let retryModelRef = '';
 	let jobs: RecordingJob[] = [];
 	let selected: RecordingJob | null = null;
 	let configuration: RecordingConfig | null = null;
@@ -98,6 +101,7 @@
 		if (dirty && !window.confirm($i18n.t('Discard unsaved changes?'))) return;
 		content = savedContent;
 		selected = await recordingRequest<RecordingJob>(localStorage.token, `/${job.id}`);
+		retryModelRef = selected.config?.model_ref ?? '';
 		speakerNames = { ...selected.speaker_names };
 		summaryKey = '';
 		deleteConfirm = false;
@@ -131,6 +135,7 @@
 		};
 		execute(async () => {
 			configuration = await recordingRequest<RecordingConfig>(localStorage.token, '/config');
+			selectedModelRef = configuration.default_model_ref ?? '';
 			const bases = await getKnowledgeBases(localStorage.token).catch(() => []);
 			knowledge = (Array.isArray(bases) ? bases : (bases.items ?? [])).filter(
 				(k: any) => k.write_access !== false && k.type !== 'external'
@@ -164,7 +169,8 @@
 				localStorage.token,
 				selectedFile,
 				uploadKey,
-				(value) => (progress = value)
+				(value) => (progress = value),
+				selectedModelRef
 			);
 			await refresh();
 			await selectJob(job);
@@ -262,6 +268,19 @@
 			<label class="block text-sm font-medium" for="recording-file"
 				>{$i18n.t('Upload recording')}</label
 			>
+			{#if $backendConfig?.features?.enable_provider_model_capabilities}<p
+					id="recording-model-label"
+					class="text-sm"
+				>
+					{$i18n.t('Transcription model')}
+				</p>
+				<ProviderModelSelect
+					purpose="transcription"
+					labelledBy="recording-model-label"
+					bind:value={selectedModelRef}
+					disabled={uploading}
+					on:change={() => (uploadKey = uuidv4())}
+				/>{/if}
 			<input
 				id="recording-file"
 				type="file"
@@ -282,7 +301,10 @@
 			</p>
 			<button
 				class="primary"
-				disabled={!selectedFile || uploading || busy || !configuration?.configured}
+				disabled={!selectedFile ||
+					uploading ||
+					busy ||
+					(!configuration?.configured && !selectedModelRef)}
 				on:click={upload}
 				>{uploading
 					? `${progress}% · ${$i18n.t('Uploading')}`
@@ -428,6 +450,38 @@
 									})}>{$i18n.t('Retry unfinished segments')}</button
 							>{/if}
 					</div>
+					{#if ['failed', 'interrupted', 'cancelled'].includes(selected.state) && selected.source_present}
+						<details class="rounded border p-2 text-sm">
+							<summary>{$i18n.t('Restart with a selected model')}</summary>
+							<ProviderModelSelect
+								purpose="transcription"
+								bind:value={retryModelRef}
+								disabled={busy}
+							/>
+							<button
+								class="secondary mt-2"
+								disabled={busy || !retryModelRef}
+								on:click={() =>
+									execute(async () => {
+										if (
+											!confirm(
+												$i18n.t(
+													'Restart the entire recording with this model? Saved segments will be replaced and new charges may apply.'
+												)
+											)
+										)
+											return;
+										selected = await recordingRequest(
+											localStorage.token,
+											`/${selected!.id}/retry`,
+											'POST',
+											{ model_ref: retryModelRef, restart: true }
+										);
+										await refresh();
+									})}>{$i18n.t('Restart full transcription')}</button
+							>
+						</details>
+					{/if}
 					{#if selected.source_present}
 						<audio
 							class="w-full"

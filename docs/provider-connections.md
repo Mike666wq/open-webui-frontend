@@ -32,25 +32,74 @@ For the backend API contract, provider adapters, credential storage and security
 
 原有 OpenAI、Ollama 和浏览器直连设置继续可用，已保存的连接和聊天无需迁移。更多 API 契约、适配器和凭据安全说明见[后端提供商连接指南](https://github.com/Mike666wq/open-webui-backend/blob/main/docs/provider-connections.md)。
 
-## Kimi Code and media
+## Unified models and media
 
-Choose **Kimi Code** to start device authorization. Open the official verification
-page on any device, confirm the displayed code, and return to Open WebUI. Cancel,
-expiry and denied authorization are shown in the wizard. Tokens stay on the
-backend. This is an experimental compatibility integration for personal
-interactive coding; third-party access depends on Kimi granting this client
-access. The backend identifies itself as Open WebUI. Disconnect clears local
-tokens; remote revocation is not claimed.
+Chat, transcription, speech synthesis and image generation use the same server
+model catalog. Save a provider API key once under **Admin settings →
+Connections**, discover its models and classify each model by purpose. The
+administrator's **Audio** and **Images** pages then select models from that
+catalog; they do not ask for the key or base URL again. The chat model picker
+only shows models with a chat use.
 
-Account sign-in does not include image generation, speech synthesis or
-transcription APIs. Add a separate API-key connection, then choose **Saved
-provider connection** in the administrator's Images or Audio settings. Select the
-connection and enter the provider's media model ID (and voice for TTS). Every
-request checks connection permissions; share the key connection explicitly if
-other users should use it. Realtime calls still use their dedicated API-key
-settings. These controls appear only after the updated backend advertises media
-connection support.
+A provider flow has four distinct states: the connection is reachable, models
+were discovered, a capability was declared or manually classified, and a real
+inference test passed. Discovery and saving do not run paid inference. The
+separate **Test model** action sends one explicitly confirmed request and never
+retries automatically. Changing the endpoint, credential, model or purpose
+invalidates the previous test result.
 
-在 **设置 → 连接** 选择 **Kimi Code**，开始设备授权。在任意设备打开官方验证页并确认验证码，然后返回等待连接完成。后端保存令牌，界面支持取消、过期和拒绝状态。这是供个人交互式编程使用的实验性兼容接入，实际权限由 Kimi 决定。断开连接会清除本地凭据，暂不声明远程撤销成功。
+For SiliconFlow, use the native preset or enter
+`https://api.siliconflow.cn/v1`. Its model adapter reads native chat,
+transcription and image categories. Transcription sends only the model and file
+because the public endpoint does not expose language, response-format,
+timestamp or speaker controls. Speech voices use the public
+`model:voice` format and include Alex, Benjamin, Charles, David, Anna, Bella,
+Claire and Diana. Image generation sends `image_size` and reads the native
+`images` response.
 
-ChatGPT/Kimi 套餐授权不包含生图、语音合成或音频转写 API。如需使用这些功能，请先添加独立 API 密钥连接，再在 **管理面板 → 图片/音频** 中选择 **已保存的厂商连接**，填写模型 ID 和音色。其他用户使用时仍需获得连接共享授权。Realtime 通话继续使用原有独立 API 密钥配置。媒体连接入口会在后端更新后显示。
+Recording uploads preselect the administrator's default transcription model and
+allow a per-job choice. The job stores the stable connection-and-model reference
+when submitted, so changing the global default while it is queued does not
+silently switch providers. Retrying keeps that model unless the user explicitly
+restarts the complete transcript with another model. Every operation checks
+current connection and model permissions again on the backend.
+
+Legacy OpenAI media settings remain visible as **Legacy configuration** until an
+administrator previews and explicitly confirms migration. Confirmed migration
+creates a private connection and is idempotent; defaults are not silently shared
+with other users. Inaccessible defaults are reported instead of falling back to
+another paid channel.
+
+ChatGPT and Kimi account sign-in remain chat-only for the capabilities their
+official protocols expose. They do not grant image, transcription, speech or
+Realtime API access. Use a separate API-key connection for those media features.
+
+## 统一模型与媒体
+
+聊天、录音转写、语音合成和生图现在共用同一个服务端模型目录。只需在
+**管理面板 → 连接** 保存一次厂商 API Key，获取模型并按用途分类；之后在
+**语音** 和 **图片** 设置中直接选择模型，不再重复填写 Key 或 Base URL。
+聊天选择器只显示带聊天用途的模型。
+
+需要区分“连接可用”“模型已发现”“能力已声明或手动分类”和“真实推理测试通过”
+四种状态。获取模型和保存配置不会发起付费推理；只有管理员明确点击“测试模型”
+才会发送一次请求，失败不会自动重试。连接地址、凭据、模型或用途改变后，旧测试
+结果会失效。
+
+硅基流动可直接选择预设，或填写 `https://api.siliconflow.cn/v1`。其适配器读取
+原生聊天、转写和生图分类。转写接口只发送模型与文件，因为官方公开接口没有可供
+依赖的语言、响应格式、时间戳或说话人参数。语音音色使用
+`模型名:音色` 格式，提供 Alex、Benjamin、Charles、David、Anna、Bella、
+Claire、Diana 八种预置音色；生图使用 `image_size` 并读取原生 `images` 响应。
+
+录音页会预选管理员设置的默认转写模型，也允许本次任务切换模型。上传时任务固定
+保存“连接 + 模型”的稳定引用，排队期间修改全局默认值不会悄悄换模型。重试沿用
+原选择；只有用户明确确认重新转写全部内容时才可更换模型。每次操作仍会在后端
+重新检查连接、模型用途和用户权限。
+
+旧 OpenAI 媒体配置会标为 **旧版配置**，直到管理员查看迁移预览并明确确认。迁移
+创建私有连接且可重复执行，不会自动扩大共享范围。默认模型失去权限时会明确报错，
+不会静默切换到其他付费渠道。
+
+ChatGPT 和 Kimi 账号登录仍只提供各自官方协议允许的聊天能力，不会自动获得生图、
+转写、语音合成或 Realtime 权限；这些功能需要使用独立的 API Key 连接。
