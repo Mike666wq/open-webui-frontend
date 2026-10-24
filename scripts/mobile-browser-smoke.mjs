@@ -1058,6 +1058,11 @@ async function main() {
 			"document.querySelector('.recordings-page textarea').value.includes('老师讲课')",
 			'transcript note'
 		);
+		const selectedRecordingModel = await client.waitForExpression(
+			`document.querySelector('select[aria-labelledby="recording-model-label"]')?.value`,
+			'preloaded transcription model'
+		);
+		assert.equal(selectedRecordingModel, 'provider:fixture-provider-connection:asr-fixture');
 
 		const recordingSurface = await client.evaluate(`(() => {
    const style=getComputedStyle(document.querySelector('.recordings-surface'));
@@ -1082,11 +1087,16 @@ async function main() {
 			`[...document.querySelectorAll('.recordings-page button')].find(b=>b.textContent.trim()==='开始转写')`,
 			'upload recording'
 		);
-		await waitForValue(
+		const recordingEvents = await waitForValue(
 			async () => (await (await fetch(`${origin}/__fixture_provenance`)).json()).events,
 			(events) =>
 				events.some((e) => e.kind === 'recording-action' && e.path === '/api/v1/recordings'),
 			'recording upload'
+		);
+		assert.equal(
+			recordingEvents.find((e) => e.kind === 'recording-action' && e.path === '/api/v1/recordings')
+				?.payload?.model_ref,
+			selectedRecordingModel
 		);
 		await client.waitForExpression(
 			"!document.querySelector('#recording-file').disabled",
@@ -1138,7 +1148,8 @@ async function main() {
 			readingSurface: recordingSurface,
 			editableTranscript: true,
 			separateSummary: true,
-			knowledgeAddAndUpdate: true
+			knowledgeAddAndUpdate: true,
+			submittedModelRef: selectedRecordingModel
 		};
 
 		await writeFile(

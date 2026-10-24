@@ -47,7 +47,28 @@ export const refreshProviderModels = (id: string) =>
 		method: 'POST',
 		body: '{}'
 	});
-export const getProviderModels = () => request('/models');
+export const getProviderModels = (purpose = 'chat') =>
+	request(`/models?purpose=${encodeURIComponent(purpose)}`);
+export const setProviderModelUses = (
+	id: string,
+	upstream_id: string,
+	uses: Record<string, string>
+) =>
+	request(`/connections/${encodeURIComponent(id)}/model-uses`, {
+		method: 'PUT',
+		body: JSON.stringify({ upstream_id, uses })
+	});
+export const testProviderModel = (id: string, payload: Record<string, unknown>) =>
+	request(`/connections/${encodeURIComponent(id)}/model-test`, {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+export const getMediaMigration = () => request('/media-migration');
+export const migrateMediaSetting = (purpose: string, fingerprint: string) =>
+	request('/media-migration', {
+		method: 'POST',
+		body: JSON.stringify({ purpose, fingerprint })
+	});
 
 export const startChatGPTLogin = (connectionId?: string) =>
 	request('/auth/chatgpt/start', {

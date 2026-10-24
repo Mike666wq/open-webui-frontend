@@ -1,4 +1,6 @@
 <script lang="ts">
+	import ProviderModelSelect from '$lib/components/common/ProviderModelSelect.svelte';
+	import MediaMigration from '$lib/components/admin/Settings/MediaMigration.svelte';
 	import { toast } from 'svelte-sonner';
 
 	import { createEventDispatcher, onMount, getContext } from 'svelte';
@@ -31,8 +33,8 @@
 
 	let loading = false;
 
-	let models = null;
-	let config = null;
+	let models: any[] | null = null;
+	let config: any = null;
 	let providerConnections: Array<{
 		id: string;
 		name: string;
@@ -341,6 +343,8 @@
 	});
 </script>
 
+<MediaMigration purposes={['image']} />
+
 <form
 	class="flex h-full flex-col justify-between text-sm"
 	on:submit|preventDefault={async () => {
@@ -385,45 +389,34 @@
 
 					{#if config.ENABLE_IMAGE_GENERATION}
 						{#if config.IMAGE_GENERATION_ENGINE === 'provider'}
-							<AdminSettingField
-								label={$i18n.t('API-key provider connection')}
-								description={$i18n.t(
-									'Uses the server-saved key. ChatGPT and Kimi account sign-in does not cover image generation.'
-								)}
-							>
-								<p class="mb-2 text-[11px] text-gray-500">
-									{$i18n.t(
-										'Only users with access to this connection can use this media feature. Share it in Connections for other users.'
-									)}
-								</p>
-								<SettingsSelect bind:value={config.IMAGES_PROVIDER_CONNECTION_ID}>
-									<option value="">{$i18n.t('Select a provider connection')}</option>
-									{#each providerConnections as connection}
-										<option value={connection.id}
-											>{connection.name} · {connection.provider_id}</option
-										>
-									{/each}
-								</SettingsSelect>
+							<AdminSettingField label={$i18n.t('Image generation model')}>
+								<ProviderModelSelect
+									purpose="image"
+									bind:value={config.IMAGE_GENERATION_MODEL}
+									bind:connectionId={config.IMAGES_PROVIDER_CONNECTION_ID}
+								/>
 							</AdminSettingField>
 						{/if}
 						<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-							<AdminSettingField
-								label={$i18n.t('settings.admin.images.imageGenerationModel.label')}
-							>
-								<input
-									list="model-list"
-									class={inputClass}
-									bind:value={config.IMAGE_GENERATION_MODEL}
-									placeholder={$i18n.t('Select a model')}
-									required
-								/>
+							{#if config.IMAGE_GENERATION_ENGINE !== 'provider'}
+								<AdminSettingField
+									label={$i18n.t('settings.admin.images.imageGenerationModel.label')}
+								>
+									<input
+										list="model-list"
+										class={inputClass}
+										bind:value={config.IMAGE_GENERATION_MODEL}
+										placeholder={$i18n.t('Select a model')}
+										required
+									/>
 
-								<datalist id="model-list">
-									{#each models ?? [] as model}
-										<option value={model.id}>{model.name}</option>
-									{/each}
-								</datalist>
-							</AdminSettingField>
+									<datalist id="model-list">
+										{#each models ?? [] as model}
+											<option value={model.id}>{model.name}</option>
+										{/each}
+									</datalist>
+								</AdminSettingField>
+							{/if}
 
 							<AdminSettingField label={$i18n.t('settings.admin.images.imageSize.label')}>
 								<input

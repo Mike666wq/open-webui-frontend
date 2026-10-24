@@ -1,4 +1,6 @@
 <script lang="ts">
+	import ProviderModelSelect from '$lib/components/common/ProviderModelSelect.svelte';
+	import MediaMigration from '$lib/components/admin/Settings/MediaMigration.svelte';
 	import { toast } from 'svelte-sonner';
 	import { createEventDispatcher, onMount, getContext } from 'svelte';
 	const dispatch = createEventDispatcher();
@@ -74,6 +76,8 @@
 	let STT_PROVIDER_CONNECTION_ID = '';
 	let STT_OPENAI_API_REQUEST_FORMAT = 'multipart';
 	let STT_ENGINE = '';
+	let legacySTT = false;
+	let legacyTTS = false;
 	let STT_MODEL = '';
 	let STT_SUPPORTED_CONTENT_TYPES = '';
 	let STT_WHISPER_MODEL = '';
@@ -259,7 +263,6 @@
 		const res = await getAudioConfig(localStorage.token);
 
 		if (res) {
-			console.log(res);
 			TTS_OPENAI_API_BASE_URL = res.tts.OPENAI_API_BASE_URL;
 			TTS_OPENAI_API_KEY = res.tts.OPENAI_API_KEY;
 			TTS_PROVIDER_CONNECTION_ID = res.tts.PROVIDER_CONNECTION_ID ?? '';
@@ -267,6 +270,7 @@
 			TTS_API_KEY = res.tts.API_KEY;
 
 			TTS_ENGINE = res.tts.ENGINE;
+			legacyTTS = TTS_ENGINE === 'openai';
 			TTS_MODEL = res.tts.MODEL;
 			TTS_VOICE = res.tts.VOICE;
 			REALTIME_TTS_PROMPT_TEMPLATE = res.tts.REALTIME_TTS_PROMPT_TEMPLATE ?? '';
@@ -293,6 +297,7 @@
 			STT_OPENAI_API_REQUEST_FORMAT = res.stt.OPENAI_API_REQUEST_FORMAT || 'multipart';
 
 			STT_ENGINE = res.stt.ENGINE;
+			legacySTT = STT_ENGINE === 'openai';
 			STT_MODEL = res.stt.MODEL;
 			STT_SUPPORTED_CONTENT_TYPES = (res?.stt?.SUPPORTED_CONTENT_TYPES ?? []).join(',');
 			STT_WHISPER_MODEL = res.stt.WHISPER_MODEL;
@@ -311,6 +316,8 @@
 		await getModels();
 	});
 </script>
+
+<MediaMigration purposes={['transcription', 'speech']} />
 
 <form
 	class="flex h-full flex-col justify-between text-sm"
@@ -441,7 +448,8 @@
 					<option value="" disabled={$config?.features?.slim === true}
 						>{$i18n.t('Whisper (Local)')}</option
 					>
-					<option value="openai">{$i18n.t('OpenAI')}</option>
+					{#if legacySTT}<option value="openai">{$i18n.t('Legacy configuration')} · OpenAI</option
+						>{/if}
 					<option value="web">{$i18n.t('Web API')}</option>
 					<option value="deepgram">{$i18n.t('Deepgram')}</option>
 					<option value="azure">{$i18n.t('Azure AI Speech')}</option>
@@ -466,29 +474,11 @@
 			{/if}
 
 			{#if STT_ENGINE === 'provider'}
-				<AdminSettingField
-					label={$i18n.t('API-key provider connection')}
-					description={$i18n.t(
-						'Uses a server-saved API key. ChatGPT and Kimi account sign-in does not cover transcription.'
-					)}
-				>
-					<p class="mb-2 text-[11px] text-gray-500">
-						{$i18n.t(
-							'Only users with access to this connection can use this media feature. Share it in Connections for other users.'
-						)}
-					</p>
-					<SettingsSelect bind:value={STT_PROVIDER_CONNECTION_ID}>
-						<option value="">{$i18n.t('Select a provider connection')}</option>
-						{#each providerConnections as connection}
-							<option value={connection.id}>{connection.name} · {connection.provider_id}</option>
-						{/each}
-					</SettingsSelect>
-				</AdminSettingField>
-				<AdminSettingField label={$i18n.t('settings.admin.audio.sttModel.label')}>
-					<input
-						class={inputClass}
+				<AdminSettingField label={$i18n.t('Transcription model')}>
+					<ProviderModelSelect
+						purpose="transcription"
 						bind:value={STT_MODEL}
-						placeholder={$i18n.t('Transcription model ID')}
+						bind:connectionId={STT_PROVIDER_CONNECTION_ID}
 					/>
 				</AdminSettingField>
 			{:else if STT_ENGINE === 'openai'}
@@ -697,7 +687,13 @@
 					on:change={async (e) => {
 						const value = (e.currentTarget as HTMLSelectElement).value;
 
-						if (value === 'openai' || value === 'provider') {
+						if (value === 'provider') {
+							TTS_MODEL = '';
+							TTS_VOICE = '';
+							TTS_PROVIDER_CONNECTION_ID = '';
+							providerVoices = [];
+							return;
+						} else if (value === 'openai') {
 							TTS_VOICE = 'alloy';
 							TTS_MODEL = 'tts-1';
 						} else if (value === 'openai-realtime') {
@@ -721,7 +717,8 @@
 					<option value="transformers" disabled={$config?.features?.slim === true}
 						>{$i18n.t('Transformers')} ({$i18n.t('Local')})</option
 					>
-					<option value="openai">{$i18n.t('OpenAI')}</option>
+					{#if legacyTTS}<option value="openai">{$i18n.t('Legacy configuration')} · OpenAI</option
+						>{/if}
 					<option value="openai-realtime">{$i18n.t('OpenAI Realtime')}</option>
 					<option value="elevenlabs">{$i18n.t('ElevenLabs')}</option>
 					<option value="azure">{$i18n.t('Azure AI Speech')}</option>
@@ -733,18 +730,16 @@
 			</AdminSettingRow>
 
 			{#if TTS_ENGINE === 'provider'}
-				<AdminSettingField
-					label={$i18n.t('API-key provider connection')}
-					description={$i18n.t(
-						'Uses a server-saved API key and the OpenAI-compatible /audio/speech endpoint.'
-					)}
-				>
-					<SettingsSelect bind:value={TTS_PROVIDER_CONNECTION_ID}>
-						<option value="">{$i18n.t('Select a provider connection')}</option>
-						{#each providerConnections as connection}
-							<option value={connection.id}>{connection.name} · {connection.provider_id}</option>
-						{/each}
-					</SettingsSelect>
+				<AdminSettingField label={$i18n.t('Speech synthesis model')}>
+					<ProviderModelSelect
+						purpose="speech"
+						on:change={(event) => {
+							providerVoices = event.detail?.voice_options ?? [];
+							TTS_VOICE = providerVoices[0]?.id ?? '';
+						}}
+						bind:value={TTS_MODEL}
+						bind:connectionId={TTS_PROVIDER_CONNECTION_ID}
+					/>
 				</AdminSettingField>
 			{:else if TTS_ENGINE === 'openai' || TTS_ENGINE === 'openai-realtime'}
 				<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -860,7 +855,7 @@
 						</a>
 					</div>
 				</AdminSettingField>
-			{:else if ['openai', 'openai-realtime', 'provider'].includes(TTS_ENGINE)}
+			{:else if ['openai', 'openai-realtime'].includes(TTS_ENGINE)}
 				<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 					<AdminSettingField label={$i18n.t('settings.admin.audio.ttsVoice.label')}>
 						<TTSVoiceInput
@@ -901,6 +896,15 @@
 						/>
 					</AdminSettingField>
 				{/if}
+			{:else if TTS_ENGINE === 'provider'}
+				<AdminSettingField label={$i18n.t('settings.admin.audio.ttsVoice.label')}>
+					<TTSVoiceInput
+						bind:value={TTS_VOICE}
+						voices={providerVoices}
+						placeholder={$i18n.t('Select a voice')}
+						className={inputClass}
+					/>
+				</AdminSettingField>
 			{:else if TTS_ENGINE === 'elevenlabs' || TTS_ENGINE === 'mistral'}
 				<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 					<AdminSettingField label={$i18n.t('settings.admin.audio.ttsVoice.label')}>

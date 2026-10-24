@@ -107,6 +107,7 @@ const config = {
 		enable_websocket: true,
 		enable_direct_connections: false,
 		enable_provider_connections: true,
+		enable_provider_model_capabilities: true,
 		enable_tool_servers: false,
 		enable_notes: true,
 		enable_recording_documents: true,
@@ -193,6 +194,15 @@ const model = {
 	created: now,
 	info: { id: 'fixture-model', meta: { capabilities: { status_updates: true } } }
 };
+const transcriptionModel = {
+	id: 'provider:fixture-provider-connection:asr-fixture',
+	connection_id: 'fixture-provider-connection',
+	connection_name: 'Fixture SiliconFlow',
+	upstream_id: 'asr-fixture',
+	name: 'Fixture ASR',
+	uses: { transcription: 'openai-transcription' },
+	verification: { transcription: { status: 'untested' } }
+};
 
 const usage = {
 	totals: {
@@ -271,6 +281,8 @@ function api(pathname) {
 		];
 	if (pathname === '/api/v1/providers/connections')
 		return [providerConnection, kimiConnection, chatgptConnection].filter(Boolean);
+	if (pathname === '/api/v1/providers/models')
+		return { object: 'list', data: [transcriptionModel] };
 	if (pathname === '/api/config') return config;
 	if (pathname === '/api/version') return { version: '0.12.2', deployment_id: 'fixture' };
 	if (pathname === '/api/v1/auths/') return user;
@@ -305,7 +317,8 @@ function api(pathname) {
 			max_size_mb: 500,
 			max_duration_seconds: 7200,
 			response_format: 'json',
-			configured: true
+			configured: true,
+			default_model_ref: transcriptionModel.id
 		};
 	if (pathname === '/api/v1/recordings') return [recording];
 	if (pathname === '/api/v1/recordings/recording-fixture') return recording;
@@ -565,7 +578,9 @@ const server = createServer(async (request, response) => {
 			const raw = Buffer.concat(chunks).toString('utf8');
 			const payload = request.headers['content-type']?.includes('application/json')
 				? JSON.parse(raw)
-				: {};
+				: {
+						model_ref: /name="model_ref"\r\n\r\n([^\r\n]*)/.exec(raw)?.[1] ?? ''
+					};
 			event('recording-action', { path: url.pathname, payload });
 			if (url.pathname === '/api/v1/recordings') {
 				send(response, 202, recording);
