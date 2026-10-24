@@ -1002,6 +1002,13 @@ ${content}
 
 <div class="w-full h-full flex">
 	<div class="h-full flex flex-col min-w-0 flex-1 relative">
+		{#if note?.meta?.recording_id && note?.user_id === $user?.id}
+			<a
+				class="mx-auto px-4 py-2 text-xs underline"
+				href={`/notes/recordings?id=${note.meta.recording_id}`}
+				>{$i18n.t('Recording and transcription details')}</a
+			>
+		{/if}
 		<div class="relative flex-1 w-full h-full flex justify-center pt-2" id="note-editor">
 			{#if loading}
 				<div class=" absolute top-0 bottom-0 left-0 right-0 flex">

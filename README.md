@@ -143,3 +143,7 @@ Read [LICENSE](LICENSE), [LICENSE_HISTORY](LICENSE_HISTORY) and the applicable
 third-party notices before redistribution. Open WebUI branding conditions
 continue to apply. The original project overview is preserved in
 [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
+
+## 录音转文档
+
+笔记页录音、转写原文与整理稿、回听导出及知识库快照使用方式见 [录音文档说明](docs/recording-documents.md)。

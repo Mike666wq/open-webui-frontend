@@ -108,7 +108,8 @@ const config = {
 		enable_direct_connections: false,
 		enable_provider_connections: true,
 		enable_tool_servers: false,
-		enable_notes: false,
+		enable_notes: true,
+		enable_recording_documents: true,
 		enable_channels: false,
 		enable_folders: false,
 		enable_automations: false,
@@ -150,6 +151,40 @@ const user = {
 	}
 };
 
+const recordingNotes = new Map([
+	[
+		'recording-note',
+		{
+			id: 'recording-note',
+			user_id: userId,
+			title: '课堂录音',
+			data: { content: { md: '老师讲课。\n\n同学提问。' } },
+			meta: { recording_id: 'recording-fixture' },
+			access_grants: [],
+			created_at: now * 1e9,
+			updated_at: now * 1e9
+		}
+	]
+]);
+const recording = {
+	id: 'recording-fixture',
+	title: '课堂录音.wav',
+	state: 'completed',
+	duration: 3000,
+	size_bytes: 32044,
+	source_present: false,
+	completed_chunks: 5,
+	total_chunks: 5,
+	note_id: 'recording-note',
+	summary_note_ids: [],
+	speaker_names: {},
+	text: '老师讲课。\n\n同学提问。',
+	segments: [
+		{ text: '老师讲课。', start: 0, end: 2, speaker: 'part-1:0' },
+		{ text: '同学提问。', start: 600, end: 602, speaker: 'part-2:0' }
+	],
+	capabilities: { timestamps: true, speakers: true, cross_chunk_speakers: false }
+};
 const model = {
 	id: 'fixture-model',
 	name: 'Fixture model',
@@ -265,6 +300,20 @@ function api(pathname) {
 	if (pathname === '/api/v1/folders/') return [];
 	if (pathname === '/api/v1/channels/') return [];
 	if (pathname === '/api/v1/notes/pinned') return [];
+	if (pathname === '/api/v1/recordings/config')
+		return {
+			max_size_mb: 500,
+			max_duration_seconds: 7200,
+			response_format: 'json',
+			configured: true
+		};
+	if (pathname === '/api/v1/recordings') return [recording];
+	if (pathname === '/api/v1/recordings/recording-fixture') return recording;
+	if (pathname === '/api/v1/knowledge/')
+		return [{ id: 'recording-kb', name: '课程资料', write_access: true }];
+	if (pathname.startsWith('/api/v1/notes/') && recordingNotes.has(pathname.split('/').pop()))
+		return recordingNotes.get(pathname.split('/').pop());
+
 	if (pathname === '/api/version/updates') return { current: '0.12.2', latest: '0.12.2' };
 	if (pathname === '/api/models/default') {
 		return { model: 'fixture-model', params: {} };
@@ -495,6 +544,63 @@ const server = createServer(async (request, response) => {
 			return;
 		}
 
+		if (
+			request.method === 'GET' &&
+			url.pathname === '/api/v1/files/recording-file/process/status'
+		) {
+			response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+			response.end('data: {"status":"completed"}\n\n');
+			return;
+		}
+		if (
+			['POST', 'PATCH'].includes(request.method) &&
+			(url.pathname.startsWith('/api/v1/recordings') ||
+				url.pathname.startsWith('/api/v1/notes/recording-') ||
+				url.pathname.startsWith('/api/v1/knowledge/recording-kb/') ||
+				url.pathname === '/api/v1/files/' ||
+				url.pathname === '/api/v1/files/recording-file/data/content/update')
+		) {
+			const chunks = [];
+			for await (const chunk of request) chunks.push(chunk);
+			const raw = Buffer.concat(chunks).toString('utf8');
+			const payload = request.headers['content-type']?.includes('application/json')
+				? JSON.parse(raw)
+				: {};
+			event('recording-action', { path: url.pathname, payload });
+			if (url.pathname === '/api/v1/recordings') {
+				send(response, 202, recording);
+				return;
+			}
+			if (url.pathname.endsWith('/speakers')) {
+				recording.speaker_names = payload.names;
+				send(response, 200, recording);
+				return;
+			}
+			if (url.pathname.endsWith('/summary')) {
+				recordingNotes.set('recording-summary', {
+					...recordingNotes.get('recording-note'),
+					id: 'recording-summary',
+					title: '课堂笔记',
+					data: { content: { md: '课堂知识点整理' } }
+				});
+				recording.summary_note_ids = ['recording-summary'];
+				send(response, 200, { note_id: 'recording-summary' });
+				return;
+			}
+			if (url.pathname.startsWith('/api/v1/notes/')) {
+				const id = url.pathname.split('/')[4];
+				const note = { ...recordingNotes.get(id), ...payload };
+				recordingNotes.set(id, note);
+				send(response, 200, note);
+				return;
+			}
+			if (url.pathname === '/api/v1/files/') {
+				send(response, 200, { id: 'recording-file', data: { status: 'completed' } });
+				return;
+			}
+			send(response, 200, {});
+			return;
+		}
 		const body = api(url.pathname);
 		if (body !== undefined) {
 			event('api', { path: url.pathname });

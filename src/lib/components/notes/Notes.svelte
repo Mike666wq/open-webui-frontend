@@ -433,6 +433,12 @@
 				</div>
 
 				<div class="ml-auto flex items-center gap-1">
+					{#if $config?.features?.enable_recording_documents}
+						<a
+							class="text-xs px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+							href="/notes/recordings">{$i18n.t('Transcription tasks')}</a
+						>
+					{/if}
 					<SplitCreateButton
 						actions={[
 							{
@@ -447,6 +453,12 @@
 										goto(`/notes/${res.id}`);
 									}
 								}
+							},
+							{
+								id: 'notes-recordings',
+								visible: $config?.features?.enable_recording_documents ?? false,
+								label: $i18n.t('Recording to document'),
+								href: '/notes/recordings'
 							},
 							{
 								id: 'notes-import',

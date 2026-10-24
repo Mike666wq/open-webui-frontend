@@ -57,16 +57,20 @@ html[data-owui-appearance='on'] body {
  * lighter than the base glass to keep wallpaper visible without losing
  * readability as content scrolls underneath. */
 html[data-owui-appearance='on'] .owui-sidebar-shell {
-	background-color: rgb(var(--mist-surface-rgb) / calc(var(--mist-navigation-alpha) * 0.88)) !important;
+	background-color: rgb(
+		var(--mist-surface-rgb) / calc(var(--mist-navigation-alpha) * 0.88)
+	) !important;
 	backdrop-filter: blur(var(--mist-navigation-blur)) saturate(1.1);
 	box-shadow: none;
-	border-inline-end-color: rgb(var(--mist-surface-rgb) / .12) !important;
+	border-inline-end-color: rgb(var(--mist-surface-rgb) / 0.12) !important;
 }
 
 html[data-owui-appearance='on'] .owui-mist-app #main-content nav.owui-chat-topbar {
-	background-color: rgb(var(--mist-surface-rgb) / calc(var(--mist-navigation-alpha) * 0.8)) !important;
+	background-color: rgb(
+		var(--mist-surface-rgb) / calc(var(--mist-navigation-alpha) * 0.8)
+	) !important;
 	backdrop-filter: blur(var(--mist-navigation-blur)) saturate(1.08);
-	border-bottom: 1px solid rgb(var(--mist-surface-rgb) / .1);
+	border-bottom: 1px solid rgb(var(--mist-surface-rgb) / 0.1);
 	box-shadow: none;
 	padding-top: 0 !important;
 }
@@ -259,8 +263,33 @@ html:not([data-owui-appearance='on']) #channel-container {
 	backdrop-filter: blur(calc(var(--mist-composer-blur) * 0.65)) saturate(1.08);
 }
 
+.owui-messages {
+	min-width: 0;
+	width: 100%;
+}
+
 .owui-messages > div {
 	width: 100%;
+	min-width: 0;
+}
+
+.owui-message-listitem,
+.owui-message-listitem .flex-auto {
+	min-width: 0;
+}
+
+.owui-message-listitem .markdown,
+.owui-message-listitem .markdown-prose {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.owui-message-listitem .markdown pre,
+.owui-message-listitem .markdown table,
+.owui-message-listitem .markdown-prose pre,
+.owui-message-listitem .markdown-prose table {
+	max-width: 100%;
+	overflow-x: auto;
 }
 
 .owui-message-listitem {
@@ -541,9 +570,16 @@ html[data-owui-code-tone='solid'] .owui-code-block {
 	padding-bottom: max(4px, env(safe-area-inset-bottom));
 }
 
-.owui-composer-dock > div:first-child,
+.owui-composer-dock > .owui-composer-root {
+	width: 100%;
+	min-width: 0;
+}
+
 .owui-composer-dock .owui-composer-dock__inner {
-	max-width: var(--owui-composer-width) !important;
+	width: 100%;
+	min-width: 0;
+	margin-inline: auto;
+	max-width: min(100%, var(--owui-composer-width)) !important;
 }
 
 .owui-composer-dock #message-input-container {
@@ -982,6 +1018,18 @@ html[data-owui-motion-reduced='true'] .owui-message-listitem {
 }
 
 [data-scrollable-x='true'][data-can-scroll-start='true'][data-can-scroll-end='true'] {
-	-webkit-mask-image: linear-gradient(to right, transparent 0, black 28px, black calc(100% - 28px), transparent 100%);
-	mask-image: linear-gradient(to right, transparent 0, black 28px, black calc(100% - 28px), transparent 100%);
+	-webkit-mask-image: linear-gradient(
+		to right,
+		transparent 0,
+		black 28px,
+		black calc(100% - 28px),
+		transparent 100%
+	);
+	mask-image: linear-gradient(
+		to right,
+		transparent 0,
+		black 28px,
+		black calc(100% - 28px),
+		transparent 100%
+	);
 }

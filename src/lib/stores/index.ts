@@ -399,6 +399,7 @@ type Config = {
 		enable_autocomplete_generation: boolean;
 		enable_direct_connections: boolean;
 		enable_provider_connections?: boolean;
+		enable_recording_documents?: boolean;
 		enable_provider_media_connections?: boolean;
 		enable_direct_integrations?: boolean;
 		enable_version_update_check: boolean;
