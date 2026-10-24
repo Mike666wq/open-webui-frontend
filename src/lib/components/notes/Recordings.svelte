@@ -233,7 +233,7 @@
 		? 'md:max-w-[calc(100%-var(--sidebar-width))]'
 		: ''}"
 >
-	<div class="mx-auto max-w-6xl px-4 py-6 space-y-5">
+	<div class="recordings-surface mx-auto min-h-full max-w-6xl px-4 py-6 space-y-5">
 		<header class="flex items-center justify-between gap-3">
 			<div>
 				<a class="text-sm underline" href="/notes">← {$i18n.t('Notes')}</a>
@@ -652,7 +652,7 @@
 </div>
 
 <style>
-	.recordings-page {
+	.recordings-surface {
 		background-color: rgb(var(--mist-surface-rgb, 255 255 255) / 0.96);
 	}
 	.field {

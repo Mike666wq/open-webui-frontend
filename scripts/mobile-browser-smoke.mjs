@@ -1059,6 +1059,18 @@ async function main() {
 			'transcript note'
 		);
 
+		const recordingSurface = await client.evaluate(`(() => {
+   const style=getComputedStyle(document.querySelector('.recordings-surface'));
+   return {background:style.backgroundColor,color:style.color};
+  })()`);
+		const surfaceAlpha = /rgba?\([^)]*[,/]\s*([0-9.]+)\)$/.exec(recordingSurface.background);
+		assert.ok(
+			recordingSurface.background !== 'transparent' &&
+				(!surfaceAlpha || Number(surfaceAlpha[1]) >= 0.9),
+			`Recording text needs an opaque reading surface over wallpaper: ${JSON.stringify(recordingSurface)}`
+		);
+		await client.screenshot('recording-workspace-393x852.png');
+
 		// LAN HTTP pages may expose getRandomValues but not randomUUID.
 		await client.evaluate(
 			"Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true })"
@@ -1123,6 +1135,7 @@ async function main() {
 		);
 		await client.screenshot('recording-documents-393x852.png');
 		results.recordings = {
+			readingSurface: recordingSurface,
 			editableTranscript: true,
 			separateSummary: true,
 			knowledgeAddAndUpdate: true
