@@ -14,6 +14,9 @@
 	import { uploadFile, updateFileDataContentById, renameFileById } from '$lib/apis/files';
 	import {
 		recordingRequest,
+		getRecordingNote,
+		RecordingNoteError,
+		RecordingRequestError,
 		uploadRecording,
 		recordingsUrl,
 		type RecordingJob,
@@ -62,6 +65,9 @@
 	let knowledgeId = '';
 	let more = true;
 	let deleteConfirm = false;
+	let deleteTaskConfirm = false;
+	let missingNotes = new Set<string>();
+	let removedTaskNotice = '';
 	$: dirty = content !== savedContent || documentTitle !== savedTitle;
 	$: snapshotState = knowledgeSnapshotState(note?.meta, knowledgeId, documentTitle, content);
 	$: speakerIds = [
@@ -113,7 +119,19 @@
 			return;
 		}
 		if (!id) return;
-		const loaded = await getNoteById(localStorage.token, id);
+		let loaded;
+		try {
+			loaded = await getRecordingNote(localStorage.token, id);
+		} catch (e) {
+			if (!(e instanceof RecordingNoteError) || ![403, 404].includes(e.status)) throw e;
+			missingNotes = new Set([...missingNotes, id]);
+			note = null;
+			documentId = id;
+			content = savedContent = documentTitle = savedTitle = '';
+			return;
+		}
+		missingNotes.delete(id);
+		missingNotes = new Set(missingNotes);
 		note = loaded;
 		documentId = id;
 		content = savedContent = loaded?.data?.content?.md ?? '';
@@ -125,11 +143,26 @@
 		if (dirty && !window.confirm($i18n.t('Discard unsaved changes?'))) return;
 		content = savedContent;
 		documentTitle = savedTitle;
-		selected = await recordingRequest<RecordingJob>(localStorage.token, `/${job.id}`);
+		try {
+			selected = await recordingRequest<RecordingJob>(localStorage.token, `/${job.id}`);
+			removedTaskNotice = '';
+		} catch (e) {
+			if (!(e instanceof RecordingRequestError) || e.status !== 404) throw e;
+			selected = null;
+			note = null;
+			content = savedContent = documentTitle = savedTitle = '';
+			removedTaskNotice = $i18n.t(
+				'This task record was removed or is unavailable. Existing notes and knowledge documents are managed separately.'
+			);
+			return;
+		}
 		retryModelRef = selected.config?.model_ref ?? '';
+		actionErrors = { knowledgeList: actionErrors.knowledgeList ?? '' };
+		knowledgeNotice = '';
 		speakerNames = { ...selected.speaker_names };
 		summaryKey = '';
 		deleteConfirm = false;
+		deleteTaskConfirm = false;
 		audioError = false;
 		note = null;
 		documentId = '';
@@ -146,7 +179,8 @@
 			const result = await recordingRequest<RecordingJob>(localStorage.token, `/${id}`);
 			if (selected?.id !== id) return;
 			selected = result;
-			if (!note && result.state === 'completed') await loadDocument(result.note_id);
+			if (!note && result.state === 'completed' && !missingNotes.has(documentId || result.note_id))
+				await loadDocument(documentId || result.note_id);
 		}
 		pollingError = '';
 	}
@@ -241,6 +275,19 @@
 		documentTitle = savedTitle = note.title;
 		toast.success($i18n.t('Saved'));
 	}
+	async function removeTask() {
+		if (!selected) return;
+		if (dirty) await save();
+		const id = selected.id;
+		await recordingRequest(localStorage.token, `/${id}`, 'DELETE');
+		selected = null;
+		note = null;
+		content = savedContent = documentTitle = savedTitle = documentId = '';
+		deleteTaskConfirm = false;
+		jobs = jobs.filter((job) => job.id !== id);
+		toast.success($i18n.t('Task record deleted. Notes and knowledge documents were kept.'));
+		await refresh();
+	}
 	function download(text: string, name: string, extension: string) {
 		const url = URL.createObjectURL(
 			new Blob([text], {
@@ -321,6 +368,9 @@
 				{error}
 				<button class="ml-3 underline" on:click={() => (error = '')}>{$i18n.t('Dismiss')}</button>
 			</div>{/if}
+		{#if removedTaskNotice}<p role="status" class="rounded-xl bg-amber-500/10 p-3 text-sm">
+				{removedTaskNotice}
+			</p>{/if}
 		{#if pollingError}<div
 				data-testid="recording-poll-warning"
 				role="status"
@@ -644,6 +694,37 @@
 					{:else}<p class="text-xs text-gray-500">
 							{$i18n.t('Original audio deleted. Text documents remain available.')}
 						</p>{/if}
+					{#if !selected.source_present && !active(selected) && configuration?.can_delete_tasks}
+						<button
+							class="secondary text-red-600"
+							disabled={busy}
+							data-testid="remove-recording-task"
+							on:click={() => (deleteTaskConfirm = !deleteTaskConfirm)}
+							>{$i18n.t('Delete task record')}</button
+						>
+						{#if deleteTaskConfirm}<div class="rounded-xl border border-red-400 p-3 text-sm">
+								<p>
+									{$i18n.t(
+										'Permanently delete this task and its ASR snapshot? Existing notes and knowledge documents will be kept. This cannot be undone.'
+									)}
+								</p>
+								<button
+									class="secondary mt-2"
+									disabled={busy}
+									data-testid="confirm-remove-recording-task"
+									on:click={() => execute(removeTask, 'removeTask')}
+									>{$i18n.t('Confirm deletion')}</button
+								>
+								<button
+									class="secondary ml-2"
+									disabled={busy}
+									on:click={() => (deleteTaskConfirm = false)}>{$i18n.t('Cancel')}</button
+								>
+							</div>{/if}
+						{#if actionErrors.removeTask}<p role="alert" class="text-sm text-red-600">
+								{actionErrors.removeTask}
+							</p>{/if}
+					{/if}
 					{#if selected.state === 'completed'}
 						{#if !selected.capabilities?.timestamps || !selected.capabilities?.speakers}<p
 								class="text-xs text-gray-500"
@@ -723,17 +804,33 @@
 									>{/each}
 							</div>
 						</details>
-						<div
-							class="rounded-xl border border-green-500/30 bg-green-500/5 p-3 text-sm"
-							role="status"
-						>
-							{$i18n.t(
-								'Transcription is complete. The transcript was saved automatically as a private note.'
-							)}
-							<a class="ml-2 underline" href={`/notes/${selected.note_id}`}
-								>{$i18n.t('Open transcript note')}</a
+						{#if missingNotes.has(documentId || selected.note_id)}
+							<div
+								role="status"
+								class="rounded-xl border border-amber-400 p-3 text-sm"
+								data-testid="recording-note-missing"
 							>
-						</div>
+								{$i18n.t(
+									'The linked note was deleted or is unavailable. Transcription is complete and its original snapshot is still available below. Restore the note from Resources & Storage if needed.'
+								)}
+								<button
+									class="underline ml-2"
+									disabled={busy}
+									on:click={() => execute(() => loadDocument(documentId || selected!.note_id))}
+									>{$i18n.t('Check note again')}</button
+								>
+							</div>
+						{:else}<div
+								class="rounded-xl border border-green-500/30 bg-green-500/5 p-3 text-sm"
+								role="status"
+							>
+								{$i18n.t(
+									'Transcription is complete. The transcript was saved automatically as a private note.'
+								)}
+								<a class="ml-2 underline" href={`/notes/${selected.note_id}`}
+									>{$i18n.t('Open transcript note')}</a
+								>
+							</div>{/if}
 						<h3 class="font-medium">1 · {$i18n.t('Edit and save notes')}</h3>
 						<label class="block text-sm"
 							>{$i18n.t('Document')}<select
@@ -814,7 +911,7 @@
 									></select
 								><button
 									class="secondary"
-									disabled={busy || !model}
+									disabled={busy || !model || missingNotes.has(selected.note_id)}
 									on:click={() =>
 										execute(async () => {
 											if (dirty) await save();

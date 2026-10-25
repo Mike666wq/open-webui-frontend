@@ -1199,6 +1199,42 @@ async function main() {
 			'knowledge retry completed'
 		);
 		await client.screenshot('recording-documents-393x852.png');
+		await fetch(`${origin}/__fixture_missing_recording_note`, { method: 'POST' });
+		await client.navigate(
+			`${origin}/notes/recordings?id=recording-fixture`,
+			"document.querySelector('[data-testid=recording-note-missing]')"
+		);
+		const missingCount = async () =>
+			(await (await fetch(`${origin}/__fixture_provenance`)).json()).events.filter(
+				(e) => e.kind === 'missing-recording-note'
+			).length;
+		const initialMissingCount = await missingCount();
+		await sleep(4500);
+		assert.equal(
+			await missingCount(),
+			initialMissingCount,
+			'Missing notes must not be fetched on each status poll'
+		);
+		assert.equal(
+			await client.evaluate(
+				"document.querySelectorAll('.recordings-page [role=alert], [data-testid=recording-poll-warning]').length"
+			),
+			0
+		);
+		await client.click(
+			"document.querySelector('[data-testid=remove-recording-task]')",
+			'remove synthetic task'
+		);
+		await client.click(
+			"document.querySelector('[data-testid=confirm-remove-recording-task]')",
+			'confirm synthetic task removal'
+		);
+		await client.waitForExpression(
+			"!document.querySelector('[data-testid=remove-recording-task]')",
+			'task record removed'
+		);
+		const retainedSummary = await (await fetch(`${origin}/api/v1/notes/recording-summary`)).json();
+		assert.ok(retainedSummary.data.content.md.includes('新增课堂重点'));
 		results.recordings = {
 			readingSurface: recordingSurface,
 			editableTranscript: true,

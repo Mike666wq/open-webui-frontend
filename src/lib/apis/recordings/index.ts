@@ -20,6 +20,7 @@ export type RecordingJob = {
 	capabilities?: { timestamps: boolean; speakers: boolean; cross_chunk_speakers: boolean };
 };
 export type RecordingConfig = {
+	can_delete_tasks?: boolean;
 	max_size_mb: number;
 	effective_max_size_mb?: number;
 	max_duration_seconds: number;
@@ -29,6 +30,39 @@ export type RecordingConfig = {
 	reason?: string;
 };
 export const recordingsUrl = `${WEBUI_API_BASE_URL}/recordings`;
+
+export class RecordingRequestError extends Error {
+	constructor(
+		public status: number,
+		message: string
+	) {
+		super(message);
+	}
+}
+
+export class RecordingNoteError extends Error {
+	constructor(
+		public status: number,
+		message: string
+	) {
+		super(message);
+	}
+}
+
+export async function getRecordingNote(token: string, id: string) {
+	const response = await fetch(`${WEBUI_API_BASE_URL}/notes/${encodeURIComponent(id)}`, {
+		credentials: 'include',
+		headers: { Authorization: `Bearer ${token}` }
+	});
+	if (!response.ok) {
+		const body = await response.json().catch(() => ({}));
+		throw new RecordingNoteError(
+			response.status,
+			typeof body.detail === 'string' ? body.detail : `Request failed (${response.status})`
+		);
+	}
+	return response.json();
+}
 
 export async function recordingRequest<T>(
 	token: string,
@@ -47,7 +81,8 @@ export async function recordingRequest<T>(
 	});
 	if (!response.ok) {
 		const data = await response.json().catch(() => ({}));
-		throw new Error(
+		throw new RecordingRequestError(
+			response.status,
 			typeof data.detail === 'string' ? data.detail : `Request failed (${response.status})`
 		);
 	}

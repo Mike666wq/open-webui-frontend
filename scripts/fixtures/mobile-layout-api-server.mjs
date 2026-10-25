@@ -21,6 +21,8 @@ let providerConnection = null;
 let recordingListReads = 0;
 let recordingSummaryAttempts = 0;
 let recordingKnowledgeUpdateAttempts = 0;
+let recordingNoteMissing = false;
+let recordingRemoved = false;
 let kimiConnection = null;
 let chatgptConnection = null;
 const chatgptAttempts = [];
@@ -321,9 +323,10 @@ function api(pathname) {
 			max_duration_seconds: 7200,
 			response_format: 'json',
 			configured: true,
+			can_delete_tasks: true,
 			default_model_ref: transcriptionModel.id
 		};
-	if (pathname === '/api/v1/recordings') return [recording];
+	if (pathname === '/api/v1/recordings') return recordingRemoved ? [] : [recording];
 	if (pathname === '/api/v1/recordings/recording-fixture') return recording;
 	if (pathname === '/api/v1/knowledge/')
 		return [{ id: 'recording-kb', name: '课程资料', write_access: true }];
@@ -358,6 +361,25 @@ function isPage(pathname) {
 const server = createServer(async (request, response) => {
 	const url = new URL(request.url || '/', origin);
 	try {
+		if (request.method === 'POST' && url.pathname === '/__fixture_missing_recording_note') {
+			recordingNoteMissing = true;
+			send(response, 200, {});
+			return;
+		}
+		if (
+			request.method === 'GET' &&
+			url.pathname === '/api/v1/notes/recording-note' &&
+			recordingNoteMissing
+		) {
+			event('missing-recording-note');
+			send(response, 404, { detail: 'Synthetic deleted note' });
+			return;
+		}
+		if (request.method === 'DELETE' && url.pathname === '/api/v1/recordings/recording-fixture') {
+			recordingRemoved = true;
+			send(response, 200, { deleted: true, notes_retained: true });
+			return;
+		}
 		if (request.method === 'GET' && url.pathname === '/api/v1/recordings') {
 			recordingListReads += 1;
 			if (recordingListReads === 2) {
