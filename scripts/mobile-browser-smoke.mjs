@@ -1054,6 +1054,7 @@ async function main() {
 			await client.evaluate(
 				`document.documentElement.classList.remove('light','dark');document.documentElement.classList.add('${dark ? 'dark' : 'light'}')`
 			);
+			await sleep(300); // Wait for the tabs' color transition before measuring.
 			const tabs = await client.evaluate(
 				`(() => {const ctx=document.createElement('canvas').getContext('2d'); return Array.from(document.querySelectorAll('a[href^="/workspace/"]')).filter(e=>e.closest('nav')).map(e=>{ctx.clearRect(0,0,1,1);ctx.fillStyle=getComputedStyle(e).color;ctx.fillRect(0,0,1,1);return {color:getComputedStyle(e).color,rgb:Array.from(ctx.getImageData(0,0,1,1).data).slice(0,3),active:e.getAttribute('aria-current')};});})()`
 			);
@@ -1068,7 +1069,7 @@ async function main() {
 					.reduce((n, v, i) => n + v * [0.2126, 0.7152, 0.0722][i], 0);
 				assert.ok(
 					dark ? (luminance + 0.05) / 0.06 >= 4.5 : 1.05 / (luminance + 0.05) >= 4.5,
-					`workspace tab contrast: ${tab.color}`
+					`workspace tab contrast (${dark ? 'dark' : 'light'}): ${tab.color}; sRGB=${tab.rgb}`
 				);
 			}
 			await client.screenshot(`workspace-tabs-${dark ? 'dark' : 'light'}.png`);
@@ -1126,6 +1127,7 @@ async function main() {
 			await client.evaluate(
 				`document.documentElement.classList.remove('light','dark');document.documentElement.classList.add('${dark ? 'dark' : 'light'}')`
 			);
+			await sleep(300); // Wait for the tabs' color transition before measuring.
 			for (const width of [393, 1256]) {
 				await client.send('Emulation.setDeviceMetricsOverride', {
 					width,
