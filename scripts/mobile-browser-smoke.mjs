@@ -1051,16 +1051,15 @@ async function main() {
 			'document.querySelector(\'a[aria-current=page][href="/workspace/models"]\')'
 		);
 		for (const dark of [false, true]) {
-			await client.evaluate(`document.documentElement.classList.toggle('dark', ${dark})`);
+			await client.evaluate(
+				`document.documentElement.classList.remove('light','dark');document.documentElement.classList.add('${dark ? 'dark' : 'light'}')`
+			);
 			const tabs = await client.evaluate(
-				`Array.from(document.querySelectorAll('a[href^="/workspace/"]')).filter(e=>e.closest('nav')).map(e=>({color:getComputedStyle(e).color,active:e.getAttribute('aria-current')}))`
+				`(() => {const ctx=document.createElement('canvas').getContext('2d'); return Array.from(document.querySelectorAll('a[href^="/workspace/"]')).filter(e=>e.closest('nav')).map(e=>{ctx.clearRect(0,0,1,1);ctx.fillStyle=getComputedStyle(e).color;ctx.fillRect(0,0,1,1);return {color:getComputedStyle(e).color,rgb:Array.from(ctx.getImageData(0,0,1,1).data).slice(0,3),active:e.getAttribute('aria-current')};});})()`
 			);
 			assert.ok(tabs.length >= 3, 'workspace tabs are present');
 			for (const tab of tabs) {
-				const rgb = tab.color
-					.match(/[0-9.]+/g)
-					.slice(0, 3)
-					.map(Number);
+				const rgb = tab.rgb;
 				const luminance = rgb
 					.map((v) => {
 						v /= 255;
@@ -1124,7 +1123,9 @@ async function main() {
 		await client.screenshot('recording-workspace-393x852.png');
 		// Theme, filter and deletion semantics must remain visible at every width.
 		for (const dark of [false, true]) {
-			await client.evaluate(`document.documentElement.classList.toggle('dark', ${dark})`);
+			await client.evaluate(
+				`document.documentElement.classList.remove('light','dark');document.documentElement.classList.add('${dark ? 'dark' : 'light'}')`
+			);
 			for (const width of [393, 1256]) {
 				await client.send('Emulation.setDeviceMetricsOverride', {
 					width,
