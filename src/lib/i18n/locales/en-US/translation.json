@@ -4238,5 +4238,15 @@
 	"This task record was removed or is unavailable. Existing notes and knowledge documents are managed separately.": "This task record was removed or is unavailable. Existing notes and knowledge documents are managed separately.",
 	"This knowledge base is shared. Confirm that removal affects all members before continuing.": "This knowledge base is shared. Confirm that removal affects all members before continuing.",
 	"Failed to remove document from knowledge": "Failed to remove document from knowledge",
-	"If this knowledge base is shared, I confirm that removing this document affects all members.": "If this knowledge base is shared, I confirm that removing this document affects all members."
+	"If this knowledge base is shared, I confirm that removing this document affects all members.": "If this knowledge base is shared, I confirm that removing this document affects all members.",
+	"Choose an audio file and transcription model to create a document.": "Choose an audio file and transcription model to create a document.",
+	"Recording settings": "Recording settings",
+	"Upload limits and transcription output format · administrators only": "Upload limits and transcription output format · administrators only",
+	"Deleting audio keeps its task and documents. Delete the task separately to remove it from this list.": "Deleting audio keeps its task and documents. Delete the task separately to remove it from this list.",
+	"Filter recording tasks": "Filter recording tasks",
+	"All tasks": "All tasks",
+	"Audio available": "Audio available",
+	"Audio deleted": "Audio deleted",
+	"No tasks match this filter.": "No tasks match this filter.",
+	"Failed to update model": "Failed to update model"
 }

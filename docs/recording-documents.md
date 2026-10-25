@@ -45,3 +45,7 @@
 前后端分阶段发布时，新入口受后端 `enable_recording_documents` 能力标识控制；旧后端不会显示尚不可用的功能入口。
 
 知识库中的单文档移除若触发共享保护，确认框会说明原因并要求勾选影响其他成员的确认。没有写权限仍不能移除。网络或服务错误不会再被当成移除成功；失败时保留确认框与具体原因。
+
+### Task list and deletion states
+
+The task list labels whether the original audio is available and can filter retained tasks by that state. Deleting audio keeps the task and documents; deleting the task record removes it from the list and keeps independently managed notes and knowledge documents. Removed tasks are excluded from in-flight status responses in the current session.

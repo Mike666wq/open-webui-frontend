@@ -1045,6 +1045,35 @@ async function main() {
 			}
 		}
 		await client.screenshot('chat-desktop-centered.png');
+
+		await client.navigate(
+			`${origin}/workspace/models`,
+			'document.querySelector(\'a[aria-current=page][href="/workspace/models"]\')'
+		);
+		for (const dark of [false, true]) {
+			await client.evaluate(`document.documentElement.classList.toggle('dark', ${dark})`);
+			const tabs = await client.evaluate(
+				`Array.from(document.querySelectorAll('a[href^="/workspace/"]')).filter(e=>e.closest('nav')).map(e=>({color:getComputedStyle(e).color,active:e.getAttribute('aria-current')}))`
+			);
+			assert.ok(tabs.length >= 3, 'workspace tabs are present');
+			for (const tab of tabs) {
+				const rgb = tab.color
+					.match(/[0-9.]+/g)
+					.slice(0, 3)
+					.map(Number);
+				const luminance = rgb
+					.map((v) => {
+						v /= 255;
+						return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+					})
+					.reduce((n, v, i) => n + v * [0.2126, 0.7152, 0.0722][i], 0);
+				assert.ok(
+					dark ? (luminance + 0.05) / 0.06 >= 4.5 : 1.05 / (luminance + 0.05) >= 4.5,
+					`workspace tab contrast: ${tab.color}`
+				);
+			}
+			await client.screenshot(`workspace-tabs-${dark ? 'dark' : 'light'}.png`);
+		}
 		await client.send('Emulation.setDeviceMetricsOverride', {
 			width: 393,
 			height: 852,
@@ -1093,6 +1122,47 @@ async function main() {
 			`Recording text needs an opaque reading surface over wallpaper: ${JSON.stringify(recordingSurface)}`
 		);
 		await client.screenshot('recording-workspace-393x852.png');
+		// Theme, filter and deletion semantics must remain visible at every width.
+		for (const dark of [false, true]) {
+			await client.evaluate(`document.documentElement.classList.toggle('dark', ${dark})`);
+			for (const width of [393, 1256]) {
+				await client.send('Emulation.setDeviceMetricsOverride', {
+					width,
+					height: 900,
+					deviceScaleFactor: 1,
+					mobile: width < 600
+				});
+				await sleep(100);
+				assert.ok(
+					await client.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'),
+					'Recording workspace must not overflow'
+				);
+				await client.screenshot(`recording-redesign-${dark ? 'dark' : 'light'}-${width}.png`);
+			}
+		}
+		await client.send('Emulation.setDeviceMetricsOverride', {
+			width: 393,
+			height: 852,
+			deviceScaleFactor: 2,
+			mobile: true
+		});
+		await client.evaluate(
+			`(() => {const e=document.querySelector('select[aria-label="筛选录音任务"]');e.value='audio';e.dispatchEvent(new Event('change',{bubbles:true}));})()`
+		);
+		await client.waitForExpression(
+			"document.querySelectorAll('.task').length === 0",
+			'audio filter excludes deleted originals'
+		);
+		await client.evaluate(
+			`(() => {const e=document.querySelector('select[aria-label="筛选录音任务"]');e.value='removed';e.dispatchEvent(new Event('change',{bubbles:true}));})()`
+		);
+		await client.waitForExpression(
+			"document.querySelector('.task .audio-removed')",
+			'deleted audio remains a clearly labelled task'
+		);
+		await client.evaluate(
+			`(() => {const e=document.querySelector('select[aria-label="筛选录音任务"]');e.value='all';e.dispatchEvent(new Event('change',{bubbles:true}));})()`
+		);
 
 		// LAN HTTP pages may expose getRandomValues but not randomUUID.
 		await client.evaluate(

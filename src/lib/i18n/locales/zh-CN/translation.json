@@ -4241,5 +4241,15 @@
 	"This task record was removed or is unavailable. Existing notes and knowledge documents are managed separately.": "任务记录已被移除或不可访问。已有笔记和知识库文档独立管理，不会随任务记录删除。",
 	"This knowledge base is shared. Confirm that removal affects all members before continuing.": "这是共享知识库。请先勾选确认：移除此文档会影响该库的所有成员。",
 	"Failed to remove document from knowledge": "从知识库移除文档失败",
-	"If this knowledge base is shared, I confirm that removing this document affects all members.": "如果这是共享知识库，我确认移除此文档会影响该库的所有成员。"
+	"If this knowledge base is shared, I confirm that removing this document affects all members.": "如果这是共享知识库，我确认移除此文档会影响该库的所有成员。",
+	"Choose an audio file and transcription model to create a document.": "选择录音和转写模型，生成可编辑的文字文档。",
+	"Recording settings": "录音设置",
+	"Upload limits and transcription output format · administrators only": "上传限制与转写输出格式 · 仅管理员可设置",
+	"Deleting audio keeps its task and documents. Delete the task separately to remove it from this list.": "删除原音频会保留任务和文档。删除任务记录后，才会从此列表移除。",
+	"Filter recording tasks": "筛选录音任务",
+	"All tasks": "全部任务",
+	"Audio available": "可回听",
+	"Audio deleted": "原音频已删除",
+	"No tasks match this filter.": "没有符合筛选条件的任务。",
+	"Failed to update model": "模型更新失败"
 }
