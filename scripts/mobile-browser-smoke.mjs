@@ -1052,9 +1052,9 @@ async function main() {
 		);
 		for (const dark of [false, true]) {
 			await client.evaluate(
-				`document.documentElement.classList.remove('light','dark');document.documentElement.classList.add('${dark ? 'dark' : 'light'}')`
+				`(() => {const key='owui-appearance:v3:' + location.origin;const value=JSON.parse(localStorage.getItem(key));value.theme='${dark ? 'dark' : 'light'}';const serialized=JSON.stringify(value);localStorage.setItem(key,serialized);window.dispatchEvent(new StorageEvent('storage',{key,newValue:serialized,storageArea:localStorage}));})()`
 			);
-			await sleep(300); // Wait for the tabs' color transition before measuring.
+			await sleep(300); // Let the appearance provider update theme classes and color tokens together.
 			const tabs = await client.evaluate(
 				`(() => {const ctx=document.createElement('canvas').getContext('2d'); return Array.from(document.querySelectorAll('a[href^="/workspace/"]')).filter(e=>e.closest('nav')).map(e=>{ctx.clearRect(0,0,1,1);ctx.fillStyle=getComputedStyle(e).color;ctx.fillRect(0,0,1,1);return {color:getComputedStyle(e).color,rgb:Array.from(ctx.getImageData(0,0,1,1).data).slice(0,3),active:e.getAttribute('aria-current')};});})()`
 			);
@@ -1125,9 +1125,9 @@ async function main() {
 		// Theme, filter and deletion semantics must remain visible at every width.
 		for (const dark of [false, true]) {
 			await client.evaluate(
-				`document.documentElement.classList.remove('light','dark');document.documentElement.classList.add('${dark ? 'dark' : 'light'}')`
+				`(() => {const key='owui-appearance:v3:' + location.origin;const value=JSON.parse(localStorage.getItem(key));value.theme='${dark ? 'dark' : 'light'}';const serialized=JSON.stringify(value);localStorage.setItem(key,serialized);window.dispatchEvent(new StorageEvent('storage',{key,newValue:serialized,storageArea:localStorage}));})()`
 			);
-			await sleep(300); // Wait for the tabs' color transition before measuring.
+			await sleep(300); // Let the appearance provider update theme classes and color tokens together.
 			for (const width of [393, 1256]) {
 				await client.send('Emulation.setDeviceMetricsOverride', {
 					width,
