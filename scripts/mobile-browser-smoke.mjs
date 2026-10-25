@@ -1170,7 +1170,7 @@ async function main() {
 		);
 		assert.equal(await client.evaluate(`(${syncButton}).disabled`), true);
 		await client.evaluate(
-			`(() => {const e=document.querySelector('.recordings-page textarea');e.value+="\n新增课堂重点";e.dispatchEvent(new Event('input',{bubbles:true}));})()`
+			`(() => {const e=document.querySelector('.recordings-page textarea');e.value+=String.fromCharCode(10)+'新增课堂重点';e.dispatchEvent(new Event('input',{bubbles:true}));})()`
 		);
 		await client.waitForExpression(
 			`!(${syncButton}).disabled`,
