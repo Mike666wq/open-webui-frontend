@@ -13,19 +13,21 @@
 	let connections: any[] = [];
 	$: legacy = !$config?.features?.enable_provider_model_capabilities;
 	let error = '';
+	let catalogErrors: any[] = [];
 	let loading = true;
 	async function load() {
 		loading = true;
 		error = '';
+		catalogErrors = [];
 		try {
 			if (!$config?.features?.enable_provider_model_capabilities) {
 				connections = (await getProviderConnections()).filter(
 					(c: any) => c.auth_type === 'api_key'
 				);
 			} else {
-				options = ((await getProviderModels(purpose)).data ?? []).filter(
-					(m: any) => !!m.uses?.[purpose]
-				);
+				const catalog = await getProviderModels(purpose);
+				catalogErrors = catalog.errors ?? [];
+				options = (catalog.data ?? []).filter((m: any) => !!m.uses?.[purpose]);
 			}
 		} catch (e) {
 			error = String(e);
@@ -85,6 +87,14 @@
 					)}</option
 				>{/each}
 		</select>
+		{#each catalogErrors as failure}
+			<p class="text-xs text-amber-600">
+				{failure.connection_name} · HTTP {failure.status} · {$i18n.t('Unavailable or legacy model')}
+			</p>
+		{/each}
+		{#if catalogErrors.length && !error}<button type="button" on:click={load}
+				>{$i18n.t('Retry')}</button
+			>{/if}
 		{#if error}<p class="text-xs text-red-500">{error}</p>
 			<button type="button" on:click={load}>{$i18n.t('Retry')}</button>{/if}
 		{#if !loading && !error && !options.length}<p class="text-xs text-amber-600">
