@@ -4238,5 +4238,8 @@
 	"Permanently delete this task and its ASR snapshot? Existing notes and knowledge documents will be kept. This cannot be undone.": "永久删除这条任务记录及其转写快照？已有笔记和知识库文档将保留，此操作无法撤销。",
 	"The linked note was deleted or is unavailable. Transcription is complete and its original snapshot is still available below. Restore the note from Resources & Storage if needed.": "关联笔记已删除或暂不可访问。转写任务已完成，原文快照仍可查看和导出；若误删笔记，可到「资源与存储」中恢复。",
 	"Check note again": "重新检查笔记",
-	"This task record was removed or is unavailable. Existing notes and knowledge documents are managed separately.": "任务记录已被移除或不可访问。已有笔记和知识库文档独立管理，不会随任务记录删除。"
+	"This task record was removed or is unavailable. Existing notes and knowledge documents are managed separately.": "任务记录已被移除或不可访问。已有笔记和知识库文档独立管理，不会随任务记录删除。",
+	"This knowledge base is shared. Confirm that removal affects all members before continuing.": "这是共享知识库。请先勾选确认：移除此文档会影响该库的所有成员。",
+	"Failed to remove document from knowledge": "从知识库移除文档失败",
+	"If this knowledge base is shared, I confirm that removing this document affects all members.": "如果这是共享知识库，我确认移除此文档会影响该库的所有成员。"
 }

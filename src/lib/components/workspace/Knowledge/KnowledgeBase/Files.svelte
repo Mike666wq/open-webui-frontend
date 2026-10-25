@@ -66,6 +66,9 @@
 	let creatingBusy = false;
 	let deletion: { file?: KnowledgeFile; directory?: KnowledgeDirectory } | null = null;
 	let showDelete = false;
+	let confirmSharedRemoval = false;
+	let deletionFailure = '';
+	let removing = false;
 	let deleteContents = true;
 	const key = (id: string | null) => id ?? 'root';
 	const report = (error: unknown) =>
@@ -266,10 +269,17 @@
 		}
 	};
 	const remove = async () => {
-		if (!deletion || !knowledge.write_access) return;
+		if (!deletion || !knowledge.write_access || removing) return;
+		removing = true;
+		deletionFailure = '';
 		try {
 			if (deletion.file) {
-				await removeFileFromKnowledgeById(localStorage.token, knowledge.id, deletion.file.id!);
+				await removeFileFromKnowledgeById(
+					localStorage.token,
+					knowledge.id,
+					deletion.file.id!,
+					confirmSharedRemoval
+				);
 				toast.success($i18n.t('File removed successfully.'));
 				onChanged(undefined, [deletion.file.id!]);
 			} else if (deletion.directory) {
@@ -288,12 +298,29 @@
 			await reload();
 			deletion = null;
 		} catch (error) {
-			report(error);
+			const detail = error as { reason?: string; items?: { reasons?: string[] }[] };
+			const shared = detail?.items?.some((item) =>
+				item.reasons?.includes('shared_confirmation_required')
+			);
+			deletionFailure = shared
+				? $i18n.t(
+						'This knowledge base is shared. Confirm that removal affects all members before continuing.'
+					)
+				: error instanceof Error
+					? error.message
+					: typeof error === 'string'
+						? error
+						: detail?.reason || $i18n.t('Failed to remove document from knowledge');
+			showDelete = true;
+		} finally {
+			removing = false;
 		}
 	};
 	const askDelete = (value: typeof deletion) =>
 		guard(() => {
 			deletion = value;
+			confirmSharedRemoval = false;
+			deletionFailure = '';
 			deleteContents = true;
 			showDelete = true;
 		});
@@ -336,6 +363,19 @@
 	message={deletion?.directory ? $i18n.t('Are you sure you want to delete this directory?') : ''}
 	on:confirm={remove}
 >
+	{#if deletionFailure}<p role="alert" class="mb-3 text-sm text-red-600">{deletionFailure}</p>{/if}
+	{#if deletion?.file}<p class="mb-3 text-sm">{fileName(deletion.file)}</p>
+		<label class="flex items-start gap-2 text-sm"
+			><input
+				type="checkbox"
+				bind:checked={confirmSharedRemoval}
+				disabled={removing}
+				class="mt-1"
+			/>{$i18n.t(
+				'If this knowledge base is shared, I confirm that removing this document affects all members.'
+			)}</label
+		>
+	{/if}
 	{#if deletion?.directory}<label class="flex items-center gap-2 text-xs"
 			><input type="checkbox" bind:checked={deleteContents} />{$i18n.t(
 				'Delete all contents inside this directory'

@@ -758,39 +758,24 @@ export const updateFileFromKnowledgeById = async (token: string, id: string, fil
 	return res;
 };
 
-export const removeFileFromKnowledgeById = async (token: string, id: string, fileId: string) => {
-	let error = null;
-
-	const res = await fetch(`${WEBUI_API_BASE_URL}/knowledge/${id}/file/remove`, {
+export const removeFileFromKnowledgeById = async (
+	token: string,
+	id: string,
+	fileId: string,
+	confirmShared = false
+) => {
+	const response = await fetch(`${WEBUI_API_BASE_URL}/knowledge/${id}/file/remove`, {
 		method: 'POST',
 		headers: {
 			Accept: 'application/json',
 			'Content-Type': 'application/json',
 			authorization: `Bearer ${token}`
 		},
-		body: JSON.stringify({
-			file_id: fileId
-		})
-	})
-		.then(async (res) => {
-			if (!res.ok) throw await res.json();
-			return res.json();
-		})
-		.then((json) => {
-			return json;
-		})
-		.catch((err) => {
-			error = err.detail;
-
-			console.error(err);
-			return null;
-		});
-
-	if (error) {
-		throw error;
-	}
-
-	return res;
+		body: JSON.stringify({ file_id: fileId, confirm_shared: confirmShared })
+	});
+	const body = await response.json().catch(() => ({}));
+	if (!response.ok) throw body.detail ?? new Error(`Request failed (${response.status})`);
+	return body;
 };
 
 export const resetKnowledgeById = async (token: string, id: string) => {
