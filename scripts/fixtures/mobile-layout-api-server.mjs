@@ -18,6 +18,7 @@ const startedAt = Date.now();
 const events = [];
 const upgradedSockets = new Set();
 let providerConnection = null;
+let recordingListReads = 0;
 let kimiConnection = null;
 let chatgptConnection = null;
 const chatgptAttempts = [];
@@ -355,6 +356,13 @@ function isPage(pathname) {
 const server = createServer(async (request, response) => {
 	const url = new URL(request.url || '/', origin);
 	try {
+		if (request.method === 'GET' && url.pathname === '/api/v1/recordings') {
+			recordingListReads += 1;
+			if (recordingListReads === 2) {
+				send(response, 502, { detail: 'Synthetic transient status gateway failure' });
+				return;
+			}
+		}
 		if (url.pathname === '/api/v1/providers/auth/chatgpt/start' && request.method === 'POST') {
 			const chunks = [];
 			for await (const chunk of request) chunks.push(chunk);

@@ -27,11 +27,15 @@
 	let selected: RecordingJob | null = null;
 	let configuration: RecordingConfig | null = null;
 	let selectedFile: File | null = null;
+	let fileInput: HTMLInputElement;
 	let uploadKey = '';
 	let progress = 0;
 	let uploading = false;
 	let busy = false;
 	let error = '';
+	let pollingError = '';
+	let audioError = false;
+	let audioReload = 0;
 	let note: any = null;
 	let content = '';
 	let savedContent = '';
@@ -105,6 +109,7 @@
 		speakerNames = { ...selected.speaker_names };
 		summaryKey = '';
 		deleteConfirm = false;
+		audioError = false;
 		note = null;
 		documentId = '';
 		content = savedContent = '';
@@ -121,6 +126,7 @@
 			selected = result;
 			if (!note && result.state === 'completed') await loadDocument(result.note_id);
 		}
+		pollingError = '';
 	}
 	onMount(() => {
 		let disposed = false;
@@ -129,7 +135,7 @@
 			try {
 				await refresh();
 			} catch (e) {
-				error = String(e instanceof Error ? e.message : e);
+				pollingError = String(e instanceof Error ? e.message : e);
 			}
 			if (!disposed) timer = setTimeout(poll, 4000);
 		};
@@ -140,7 +146,11 @@
 			knowledge = (Array.isArray(bases) ? bases : (bases.items ?? [])).filter(
 				(k: any) => k.write_access !== false && k.type !== 'external'
 			);
-			await refresh();
+			try {
+				await refresh();
+			} catch (e) {
+				pollingError = String(e instanceof Error ? e.message : e);
+			}
 			const id = new URLSearchParams(location.search).get('id');
 			if (id) await selectJob({ id } as RecordingJob);
 		}).finally(() => {
@@ -172,9 +182,16 @@
 				(value) => (progress = value),
 				selectedModelRef
 			);
-			await refresh();
-			await selectJob(job);
 			selectedFile = null;
+			if (fileInput) fileInput.value = '';
+			jobs = [job, ...jobs.filter((item) => item.id !== job.id)];
+			try {
+				await selectJob(job);
+				await refresh();
+			} catch (e) {
+				// Upload acceptance is independent from subsequent status reads.
+				pollingError = String(e instanceof Error ? e.message : e);
+			}
 		} catch (e) {
 			error = String(e instanceof Error ? e.message : e);
 		} finally {
@@ -253,6 +270,17 @@
 		</p>
 		{#if error}<div role="alert" class="rounded-xl bg-red-500/10 p-3 text-sm break-words">
 				{error}
+				<button class="ml-3 underline" on:click={() => (error = '')}>{$i18n.t('Dismiss')}</button>
+			</div>{/if}
+		{#if pollingError}<div
+				data-testid="recording-poll-warning"
+				role="status"
+				class="rounded-xl bg-amber-500/10 p-3 text-sm break-words"
+			>
+				{$i18n.t(
+					'Task status could not be refreshed. Background transcription may still be running; this page will retry automatically.'
+				)}
+				<details><summary>{$i18n.t('Details')}</summary>{pollingError}</details>
 			</div>{/if}
 		{#if configuration && !configuration.configured}<div
 				role="status"
@@ -265,9 +293,7 @@
 			class="rounded-2xl border border-gray-200 dark:border-gray-800 p-4 space-y-3"
 			aria-label={$i18n.t('Upload recording')}
 		>
-			<label class="block text-sm font-medium" for="recording-file"
-				>{$i18n.t('Upload recording')}</label
-			>
+			<h2 class="text-sm font-medium">{$i18n.t('Upload recording')}</h2>
 			{#if $backendConfig?.features?.enable_provider_model_capabilities}<p
 					id="recording-model-label"
 					class="text-sm"
@@ -281,17 +307,48 @@
 					disabled={uploading}
 					on:change={() => (uploadKey = uuidv4())}
 				/>{/if}
-			<input
-				id="recording-file"
-				type="file"
-				accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg,.flac,.aac,.amr"
-				disabled={uploading}
-				on:change={(e) => {
-					selectedFile = e.currentTarget.files?.[0] ?? null;
-					uploadKey = uuidv4();
-				}}
-				class="block max-w-full text-sm"
-			/>
+			<label
+				for="recording-file"
+				class="flex min-w-0 cursor-pointer flex-wrap items-center gap-3 rounded-xl border border-dashed border-gray-400 bg-white/70 p-4 focus-within:ring-2 focus-within:ring-blue-500 dark:border-gray-600 dark:bg-gray-900/70"
+			>
+				<span
+					class="flex min-h-11 shrink-0 items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+				>
+					{$i18n.t(selectedFile ? 'Change recording file' : 'Choose recording file')}
+				</span>
+				<span class="min-w-0 flex-1 text-sm">
+					<span class="block break-all"
+						>{selectedFile?.name ?? $i18n.t('No recording selected')}</span
+					>
+					{#if selectedFile}<span class="text-xs text-gray-500"
+							>{(selectedFile.size / 1024 / 1024).toFixed(1)} MB</span
+						>{:else}<span class="text-xs text-gray-500">M4A · MP3 · WAV · WebM · OGG · FLAC</span
+						>{/if}
+				</span>
+				<input
+					id="recording-file"
+					bind:this={fileInput}
+					aria-label={$i18n.t('Choose recording file')}
+					type="file"
+					accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg,.flac,.aac,.amr"
+					disabled={uploading}
+					on:change={(e) => {
+						selectedFile = e.currentTarget.files?.[0] ?? null;
+						uploadKey = uuidv4();
+					}}
+					class="sr-only"
+				/>
+			</label>
+			{#if selectedFile}<button
+					type="button"
+					class="text-xs underline"
+					disabled={uploading}
+					on:click={() => {
+						selectedFile = null;
+						fileInput.value = '';
+						uploadKey = uuidv4();
+					}}>{$i18n.t('Clear selected recording')}</button
+				>{/if}
 			<p class="text-xs text-gray-500">
 				{$i18n.t('Ordinary Mandarin · original audio is retained until you delete it.')}
 				{#if configuration}{configuration.effective_max_size_mb ?? configuration.max_size_mb} MB · {Math.floor(
@@ -483,14 +540,31 @@
 						</details>
 					{/if}
 					{#if selected.source_present}
-						<audio
-							class="w-full"
-							bind:this={audio}
-							src={`${recordingsUrl}/${selected.id}/audio`}
-							controls
-							preload="metadata"
-							aria-label={$i18n.t('Original recording')}
-						></audio>
+						<p class="text-xs">{$i18n.t('Original recording')} · {timeLabel(selected.duration)}</p>
+						{#key `${selected.id}:${audioReload}`}
+							<audio
+								class="w-full"
+								bind:this={audio}
+								src={`${recordingsUrl}/${selected.id}/audio`}
+								controls
+								preload="metadata"
+								aria-label={$i18n.t('Original recording')}
+								on:error={() => (audioError = true)}
+								on:loadedmetadata={() => (audioError = false)}
+							></audio>
+						{/key}
+						{#if audioError}<p class="text-xs text-amber-700 dark:text-amber-300">
+								{$i18n.t(
+									'Audio playback failed. This does not affect transcription or saved documents.'
+								)}
+								<button
+									class="underline ml-2"
+									on:click={() => {
+										audioError = false;
+										audioReload += 1;
+									}}>{$i18n.t('Reload audio')}</button
+								>
+							</p>{/if}
 						{#if !active(selected)}<button
 								class="text-xs underline"
 								disabled={busy}

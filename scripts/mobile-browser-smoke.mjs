@@ -1063,6 +1063,23 @@ async function main() {
 			'preloaded transcription model'
 		);
 		assert.equal(selectedRecordingModel, 'provider:fixture-provider-connection:asr-fixture');
+		await client.waitForExpression(
+			"document.querySelector('[data-testid=recording-poll-warning]')",
+			'transient task status warning'
+		);
+		assert.equal(
+			await client.evaluate("document.querySelectorAll('.recordings-page [role=alert]').length"),
+			0
+		);
+		await client.waitForExpression(
+			"!document.querySelector('[data-testid=recording-poll-warning]')",
+			'automatic task status recovery'
+		);
+		assert.ok(
+			await client.evaluate(
+				"document.querySelector('.recordings-page textarea').value.includes('老师讲课')"
+			)
+		);
 
 		const recordingSurface = await client.evaluate(`(() => {
    const style=getComputedStyle(document.querySelector('.recordings-surface'));

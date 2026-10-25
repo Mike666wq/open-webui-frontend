@@ -4199,5 +4199,16 @@
 	"Create a private connection and switch this default model? Other users will need explicit access. Reload this settings page after migration.": "Create a private connection and switch this default model? Other users will need explicit access. Reload this settings page after migration.",
 	"Restart with a selected model": "Restart with a selected model",
 	"Restart full transcription": "Restart full transcription",
-	"Restart the entire recording with this model? Saved segments will be replaced and new charges may apply.": "Restart the entire recording with this model? Saved segments will be replaced and new charges may apply."
+	"Restart the entire recording with this model? Saved segments will be replaced and new charges may apply.": "Restart the entire recording with this model? Saved segments will be replaced and new charges may apply.",
+	"Task status could not be refreshed. Background transcription may still be running; this page will retry automatically.": "Task status could not be refreshed. Background transcription may still be running; this page will retry automatically.",
+	"Audio playback failed. This does not affect transcription or saved documents.": "Audio playback failed. This does not affect transcription or saved documents.",
+	"Reload audio": "Reload audio",
+	"Some provider catalogs are unavailable. Other models remain usable.": "Some provider catalogs are unavailable. Other models remain usable.",
+	"Refresh model catalogs": "Refresh model catalogs",
+	"Not independently tested": "Not independently tested",
+	"Completed": "Completed",
+	"Choose recording file": "Choose recording file",
+	"Change recording file": "Change recording file",
+	"No recording selected": "No recording selected",
+	"Clear selected recording": "Clear selected recording"
 }
