@@ -16,6 +16,7 @@
 		recordingRequest,
 		getRecordingNote,
 		RecordingNoteError,
+		RecordingRequestError,
 		uploadRecording,
 		recordingsUrl,
 		type RecordingJob,
@@ -66,6 +67,7 @@
 	let deleteConfirm = false;
 	let deleteTaskConfirm = false;
 	let missingNotes = new Set<string>();
+	let removedTaskNotice = '';
 	$: dirty = content !== savedContent || documentTitle !== savedTitle;
 	$: snapshotState = knowledgeSnapshotState(note?.meta, knowledgeId, documentTitle, content);
 	$: speakerIds = [
@@ -141,7 +143,19 @@
 		if (dirty && !window.confirm($i18n.t('Discard unsaved changes?'))) return;
 		content = savedContent;
 		documentTitle = savedTitle;
-		selected = await recordingRequest<RecordingJob>(localStorage.token, `/${job.id}`);
+		try {
+			selected = await recordingRequest<RecordingJob>(localStorage.token, `/${job.id}`);
+			removedTaskNotice = '';
+		} catch (e) {
+			if (!(e instanceof RecordingRequestError) || e.status !== 404) throw e;
+			selected = null;
+			note = null;
+			content = savedContent = documentTitle = savedTitle = '';
+			removedTaskNotice = $i18n.t(
+				'This task record was removed or is unavailable. Existing notes and knowledge documents are managed separately.'
+			);
+			return;
+		}
 		retryModelRef = selected.config?.model_ref ?? '';
 		speakerNames = { ...selected.speaker_names };
 		summaryKey = '';
@@ -352,6 +366,9 @@
 				{error}
 				<button class="ml-3 underline" on:click={() => (error = '')}>{$i18n.t('Dismiss')}</button>
 			</div>{/if}
+		{#if removedTaskNotice}<p role="status" class="rounded-xl bg-amber-500/10 p-3 text-sm">
+				{removedTaskNotice}
+			</p>{/if}
 		{#if pollingError}<div
 				data-testid="recording-poll-warning"
 				role="status"

@@ -31,6 +31,15 @@ export type RecordingConfig = {
 };
 export const recordingsUrl = `${WEBUI_API_BASE_URL}/recordings`;
 
+export class RecordingRequestError extends Error {
+	constructor(
+		public status: number,
+		message: string
+	) {
+		super(message);
+	}
+}
+
 export class RecordingNoteError extends Error {
 	constructor(
 		public status: number,
@@ -72,7 +81,8 @@ export async function recordingRequest<T>(
 	});
 	if (!response.ok) {
 		const data = await response.json().catch(() => ({}));
-		throw new Error(
+		throw new RecordingRequestError(
+			response.status,
 			typeof data.detail === 'string' ? data.detail : `Request failed (${response.status})`
 		);
 	}
