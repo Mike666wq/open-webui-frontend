@@ -68,6 +68,12 @@
 	let deleteTaskConfirm = false;
 	let missingNotes = new Set<string>();
 	let removedTaskNotice = '';
+	let taskFilter = 'all';
+	let removedTaskIds = new Set<string>();
+	$: visibleJobs = jobs.filter(
+		(job) =>
+			taskFilter === 'all' || (taskFilter === 'audio' ? job.source_present : !job.source_present)
+	);
 	$: dirty = content !== savedContent || documentTitle !== savedTitle;
 	$: snapshotState = knowledgeSnapshotState(note?.meta, knowledgeId, documentTitle, content);
 	$: speakerIds = [
@@ -148,6 +154,8 @@
 			removedTaskNotice = '';
 		} catch (e) {
 			if (!(e instanceof RecordingRequestError) || e.status !== 404) throw e;
+			removedTaskIds = new Set([...removedTaskIds, job.id]);
+			jobs = jobs.filter((item) => item.id !== job.id);
 			selected = null;
 			note = null;
 			content = savedContent = documentTitle = savedTitle = '';
@@ -172,11 +180,27 @@
 	}
 	async function refresh() {
 		const rows = await recordingRequest<RecordingJob[]>(localStorage.token);
-		jobs = [...rows, ...jobs.slice(50)];
+		jobs = [...rows, ...jobs.slice(50)].filter((job) => !removedTaskIds.has(job.id));
 		more = rows.length === 50;
 		if (selected) {
 			const id = selected.id;
-			const result = await recordingRequest<RecordingJob>(localStorage.token, `/${id}`);
+			let result: RecordingJob;
+			try {
+				result = await recordingRequest<RecordingJob>(localStorage.token, `/${id}`);
+			} catch (e) {
+				if (!(e instanceof RecordingRequestError) || e.status !== 404) throw e;
+				removedTaskIds = new Set([...removedTaskIds, id]);
+				jobs = jobs.filter((job) => job.id !== id);
+				if (selected?.id === id) {
+					selected = null;
+					// Keep an unsaved document in memory; task deletion does not delete notes.
+					removedTaskNotice = $i18n.t(
+						'This task record was removed or is unavailable. Existing notes and knowledge documents are managed separately.'
+					);
+				}
+				pollingError = '';
+				return;
+			}
 			if (selected?.id !== id) return;
 			selected = result;
 			if (!note && result.state === 'completed' && !missingNotes.has(documentId || result.note_id))
@@ -280,6 +304,7 @@
 		if (dirty) await save();
 		const id = selected.id;
 		await recordingRequest(localStorage.token, `/${id}`, 'DELETE');
+		removedTaskIds = new Set([...removedTaskIds, id]);
 		selected = null;
 		note = null;
 		content = savedContent = documentTitle = savedTitle = documentId = '';
@@ -352,11 +377,13 @@
 		? 'md:max-w-[calc(100%-var(--sidebar-width))]'
 		: ''}"
 >
-	<div class="recordings-surface mx-auto min-h-full max-w-6xl px-4 py-6 space-y-5">
-		<header class="flex items-center justify-between gap-3">
+	<div class="recordings-surface mx-auto min-h-full max-w-6xl px-4 py-6 md:px-8 md:py-8 space-y-6">
+		<header class="recording-header flex items-center justify-between gap-3">
 			<div>
 				<a class="text-sm underline" href="/notes">← {$i18n.t('Notes')}</a>
-				<h1 class="text-2xl font-semibold mt-2">{$i18n.t('Recording to document')}</h1>
+				<h1 class="text-2xl md:text-3xl font-semibold tracking-tight mt-3">
+					{$i18n.t('Recording to document')}
+				</h1>
 			</div>
 		</header>
 		<p class="text-sm text-gray-500">
@@ -389,10 +416,18 @@
 				<p class="mt-1">{configuration.reason}</p>
 			</div>{/if}
 		<section
-			class="rounded-2xl border border-gray-200 dark:border-gray-800 p-4 space-y-3"
+			class="upload-panel rounded-2xl border border-gray-200 dark:border-gray-700 p-5 md:p-6 space-y-4"
 			aria-label={$i18n.t('Upload recording')}
 		>
-			<h2 class="text-sm font-medium">{$i18n.t('Upload recording')}</h2>
+			<div class="section-heading">
+				<span class="step-number">01</span>
+				<div>
+					<h2 class="font-semibold">{$i18n.t('Upload recording')}</h2>
+					<p class="section-caption">
+						{$i18n.t('Choose an audio file and transcription model to create a document.')}
+					</p>
+				</div>
+			</div>
 			{#if $backendConfig?.features?.enable_provider_model_capabilities}<p
 					id="recording-model-label"
 					class="text-sm"
@@ -474,8 +509,17 @@
 			</p>
 		</section>
 		{#if configuration && $user?.role === 'admin'}
-			<details class="text-sm">
-				<summary>{$i18n.t('Recording limits and ASR response format')}</summary>
+			<details class="recording-settings text-sm">
+				<summary
+					><span
+						><span class="block font-medium">{$i18n.t('Recording settings')}</span><span
+							class="section-caption"
+							>{$i18n.t(
+								'Upload limits and transcription output format · administrators only'
+							)}</span
+						></span
+					><span class="settings-chevron" aria-hidden="true">⌄</span></summary
+				>
 				<div class="flex flex-wrap items-end gap-3 p-3">
 					<label
 						>{$i18n.t('Maximum size (MB)')}<input
@@ -525,20 +569,44 @@
 				</div>
 			</details>
 		{/if}
-		<div class="grid gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
+		<div class="recording-workspace grid gap-6 lg:grid-cols-[17rem_minmax(0,1fr)]">
 			<section aria-label={$i18n.t('Transcription tasks')} class="min-w-0 space-y-2">
-				<h2 class="font-semibold">{$i18n.t('Transcription tasks')}</h2>
-				{#each jobs as job (job.id)}<button
-						class="task w-full text-left rounded-xl border p-3"
+				<div class="flex items-center justify-between gap-2">
+					<h2 class="font-semibold">{$i18n.t('Transcription tasks')}</h2>
+					<span class="task-count">{jobs.length}{more ? '+' : ''}</span>
+				</div>
+				<p class="section-caption">
+					{$i18n.t(
+						'Deleting audio keeps its task and documents. Delete the task separately to remove it from this list.'
+					)}
+				</p>
+				<label class="block"
+					><span class="sr-only">{$i18n.t('Filter recording tasks')}</span><select
+						class="field w-full"
+						aria-label={$i18n.t('Filter recording tasks')}
+						bind:value={taskFilter}
+						><option value="all">{$i18n.t('All tasks')}</option><option value="audio"
+							>{$i18n.t('Audio available')}</option
+						><option value="removed">{$i18n.t('Audio deleted')}</option></select
+					></label
+				>
+				{#each visibleJobs as job (job.id)}<button
+						class="task w-full text-left rounded-xl border p-4"
+						aria-pressed={selected?.id === job.id}
 						class:chosen={selected?.id === job.id}
 						disabled={busy}
 						on:click={() => execute(() => selectJob(job))}
 						><span class="block truncate font-medium">{job.title}</span><span
 							class="text-xs text-gray-500"
 							>{$i18n.t(stateNames[job.state] ?? job.state)} · {timeLabel(job.duration)} · {job.completed_chunks}/{job.total_chunks}</span
-						></button
-					>{/each}
-				{#if !jobs.length}<p class="text-sm text-gray-500">{$i18n.t('No recordings yet.')}</p>{/if}
+						>
+						<span class="audio-badge" class:audio-removed={!job.source_present}
+							>{$i18n.t(job.source_present ? 'Audio available' : 'Audio deleted')}</span
+						>
+					</button>{/each}
+				{#if !visibleJobs.length}<p class="empty-tasks text-sm">
+						{$i18n.t(jobs.length ? 'No tasks match this filter.' : 'No recordings yet.')}
+					</p>{/if}
 				{#if more && jobs.length}<button
 						class="secondary"
 						disabled={busy}
@@ -554,7 +622,7 @@
 					>{/if}
 			</section>
 			{#if selected}
-				<section class="min-w-0 space-y-4" aria-label={$i18n.t('Recording details')}>
+				<section class="document-panel min-w-0 space-y-4" aria-label={$i18n.t('Recording details')}>
 					<h2 class="text-lg font-semibold break-words">{selected.title}</h2>
 					<p role="status" class="text-sm">
 						{$i18n.t(stateNames[selected.state] ?? selected.state)} · {$i18n.t(
@@ -691,12 +759,12 @@
 										})}>{$i18n.t('Confirm deletion')}</button
 								>
 							</div>{/if}
-					{:else}<p class="text-xs text-gray-500">
+					{:else}<p class="audio-deletion-notice text-sm">
 							{$i18n.t('Original audio deleted. Text documents remain available.')}
 						</p>{/if}
 					{#if !selected.source_present && !active(selected) && configuration?.can_delete_tasks}
 						<button
-							class="secondary text-red-600"
+							class="secondary text-red-600 dark:text-red-400"
 							disabled={busy}
 							data-testid="remove-recording-task"
 							on:click={() => (deleteTaskConfirm = !deleteTaskConfirm)}
@@ -1022,8 +1090,148 @@
 </div>
 
 <style>
+	.recording-header a {
+		color: var(--recording-muted);
+		text-decoration: none;
+	}
+	.recording-header a:hover {
+		text-decoration: underline;
+	}
+	.recordings-page {
+		--recording-muted: #526174;
+		--recording-border: #dbe1e8;
+		--recording-card: #fff;
+		--recording-soft: #f4f7fb;
+		color: #172334;
+	}
+	:global(.dark) .recordings-page {
+		--recording-muted: #b6c1ce;
+		--recording-border: #384454;
+		--recording-card: #1c2939;
+		--recording-soft: #223145;
+		color: #edf2f7;
+	}
+	.recordings-page :global(.text-gray-500) {
+		color: var(--recording-muted);
+	}
+	.section-heading {
+		display: flex;
+		align-items: center;
+		gap: 0.85rem;
+	}
+	.step-number {
+		display: grid;
+		place-items: center;
+		flex-shrink: 0;
+		width: 2.5rem;
+		height: 2.5rem;
+		border-radius: 0.85rem;
+		background: #2563eb;
+		color: white;
+		font-size: 0.8rem;
+		font-weight: 600;
+	}
+	.section-caption {
+		display: block;
+		margin-top: 0.25rem;
+		color: var(--recording-muted);
+		font-size: 0.78rem;
+		line-height: 1.6;
+	}
+	.upload-panel,
+	.document-panel {
+		background: var(--recording-card);
+		border: 1px solid var(--recording-border);
+		box-shadow: 0 3px 16px rgb(0 0 0 / 0.025);
+	}
+	.document-panel {
+		padding: 1.5rem;
+		border-radius: 1rem;
+	}
+	.recording-settings {
+		border: 1px solid var(--recording-border);
+		border-radius: 1rem;
+		background: var(--recording-card);
+	}
+	.recording-settings > summary {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 1rem 1.25rem;
+		cursor: pointer;
+		list-style: none;
+	}
+	.recording-settings > summary::-webkit-details-marker {
+		display: none;
+	}
+	.recording-settings[open] > summary {
+		border-bottom: 1px solid var(--recording-border);
+	}
+	.settings-chevron {
+		font-size: 1.4rem;
+		transition: transform 0.15s;
+	}
+	.recording-settings[open] .settings-chevron {
+		transform: rotate(180deg);
+	}
+	.recording-settings > div {
+		padding: 1.25rem;
+	}
+	.task-count {
+		padding: 0.15rem 0.55rem;
+		border-radius: 0.5rem;
+		background: var(--recording-soft);
+		color: var(--recording-muted);
+		font-size: 0.75rem;
+	}
+	.audio-badge {
+		display: table;
+		margin-top: 0.6rem;
+		padding: 0.15rem 0.5rem;
+		border-radius: 0.4rem;
+		font-size: 0.7rem;
+		color: var(--recording-muted);
+		background: var(--recording-soft);
+	}
+	.audio-removed {
+		border: 1px dashed var(--recording-border);
+	}
+	.audio-deletion-notice {
+		padding: 0.8rem 1rem;
+		border-radius: 0.75rem;
+		background: var(--recording-soft);
+		color: var(--recording-muted);
+	}
+	.empty-tasks {
+		padding: 1.25rem;
+		border: 1px dashed var(--recording-border);
+		border-radius: 0.75rem;
+		color: var(--recording-muted);
+	}
+	@media (max-width: 640px) {
+		.document-panel {
+			padding: 1rem;
+		}
+	}
+
 	.recordings-surface {
 		background-color: rgb(var(--mist-surface-rgb, 255 255 255) / 0.96);
+	}
+	.recordings-page :global(button:focus-visible),
+	.recordings-page :global(summary:focus-visible),
+	.recordings-page :global(select:focus-visible),
+	.recordings-page :global(textarea:focus-visible),
+	.recordings-page :global(input:focus-visible) {
+		outline: 2px solid #3b82f6;
+		outline-offset: 3px;
+	}
+	.document-panel :global(h3) {
+		padding-top: 0.35rem;
+	}
+	.field :global(option) {
+		background: var(--recording-card);
+		color: inherit;
 	}
 	.field {
 		display: block;
@@ -1052,7 +1260,14 @@
 		cursor: not-allowed;
 	}
 	.task {
-		border-color: rgb(128 128 128 / 0.25);
+		border-color: var(--recording-border);
+		background: var(--recording-card);
+		transition:
+			border-color 0.15s,
+			background 0.15s;
+	}
+	.task:hover {
+		border-color: #729be1;
 	}
 	.chosen {
 		border-color: #3b82f6;

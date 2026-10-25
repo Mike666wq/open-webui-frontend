@@ -120,7 +120,9 @@
 			? 'md:max-w-[calc(100%-var(--sidebar-width))]'
 			: 'md:max-w-[calc(100%-42px)]'} max-w-full"
 	>
-		<nav class="pb-1 px-2.5 pt-2 backdrop-blur-xl drag-region select-none">
+		<nav
+			class="pb-2 px-2.5 pt-2 border-b border-gray-200 bg-white/95 dark:border-gray-700 dark:bg-gray-900/95 backdrop-blur-xl drag-region select-none"
+		>
 			<div class="flex items-center gap-0.5 md:gap-1">
 				{#if $mobile}
 					<div class="{$showSidebar ? 'md:hidden' : ''} self-center flex flex-none items-center">
@@ -152,14 +154,14 @@
 							<a
 								draggable="false"
 								aria-current={activeWorkspaceSection === 'models' ? 'page' : null}
-								class="min-w-fit px-1 text-sm inline-flex items-center gap-1 {activeWorkspaceSection ===
+								class="min-w-fit rounded-lg px-3 py-2 text-sm inline-flex items-center gap-1 {activeWorkspaceSection ===
 								'models'
-									? 'text-gray-900 dark:text-gray-100'
-									: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition select-none"
+									? 'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white'
+									: 'text-gray-600 dark:text-gray-300 hover:text-gray-950 dark:hover:text-white'} transition select-none"
 								href="/workspace/models"
 							>
 								<span>{$i18n.t('Models')}</span>
-								<span class="text-sm opacity-60">
+								<span class="text-xs font-medium">
 									{formatCount($workspaceCounts.models)}
 								</span>
 							</a>
@@ -169,14 +171,14 @@
 							<a
 								draggable="false"
 								aria-current={activeWorkspaceSection === 'knowledge' ? 'page' : null}
-								class="min-w-fit px-1 text-sm inline-flex items-center gap-1 {activeWorkspaceSection ===
+								class="min-w-fit rounded-lg px-3 py-2 text-sm inline-flex items-center gap-1 {activeWorkspaceSection ===
 								'knowledge'
-									? 'text-gray-900 dark:text-gray-100'
-									: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition select-none"
+									? 'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white'
+									: 'text-gray-600 dark:text-gray-300 hover:text-gray-950 dark:hover:text-white'} transition select-none"
 								href="/workspace/knowledge"
 							>
 								<span>{$i18n.t('Knowledge')}</span>
-								<span class="text-sm opacity-60">
+								<span class="text-xs font-medium">
 									{formatCount($workspaceCounts.knowledge)}
 								</span>
 							</a>
@@ -186,14 +188,14 @@
 							<a
 								draggable="false"
 								aria-current={activeWorkspaceSection === 'prompts' ? 'page' : null}
-								class="min-w-fit px-1 text-sm inline-flex items-center gap-1 {activeWorkspaceSection ===
+								class="min-w-fit rounded-lg px-3 py-2 text-sm inline-flex items-center gap-1 {activeWorkspaceSection ===
 								'prompts'
-									? 'text-gray-900 dark:text-gray-100'
-									: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition select-none"
+									? 'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white'
+									: 'text-gray-600 dark:text-gray-300 hover:text-gray-950 dark:hover:text-white'} transition select-none"
 								href="/workspace/prompts"
 							>
 								<span>{$i18n.t('Prompts')}</span>
-								<span class="text-sm opacity-60">
+								<span class="text-xs font-medium">
 									{formatCount($workspaceCounts.prompts)}
 								</span>
 							</a>
@@ -203,14 +205,14 @@
 							<a
 								draggable="false"
 								aria-current={activeWorkspaceSection === 'skills' ? 'page' : null}
-								class="min-w-fit px-1 text-sm inline-flex items-center gap-1 {activeWorkspaceSection ===
+								class="min-w-fit rounded-lg px-3 py-2 text-sm inline-flex items-center gap-1 {activeWorkspaceSection ===
 								'skills'
-									? 'text-gray-900 dark:text-gray-100'
-									: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition select-none"
+									? 'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white'
+									: 'text-gray-600 dark:text-gray-300 hover:text-gray-950 dark:hover:text-white'} transition select-none"
 								href="/workspace/skills"
 							>
 								<span>{$i18n.t('Skills')}</span>
-								<span class="text-sm opacity-60">
+								<span class="text-xs font-medium">
 									{formatCount($workspaceCounts.skills)}
 								</span>
 							</a>
@@ -220,14 +222,14 @@
 							<a
 								draggable="false"
 								aria-current={activeWorkspaceSection === 'tools' ? 'page' : null}
-								class="min-w-fit px-1 text-sm inline-flex items-center gap-1 {activeWorkspaceSection ===
+								class="min-w-fit rounded-lg px-3 py-2 text-sm inline-flex items-center gap-1 {activeWorkspaceSection ===
 								'tools'
-									? 'text-gray-900 dark:text-gray-100'
-									: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition select-none"
+									? 'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white'
+									: 'text-gray-600 dark:text-gray-300 hover:text-gray-950 dark:hover:text-white'} transition select-none"
 								href="/workspace/tools"
 							>
 								<span>{$i18n.t('Tools')}</span>
-								<span class="text-sm opacity-60">
+								<span class="text-xs font-medium">
 									{formatCount($workspaceCounts.tools)}
 								</span>
 							</a>

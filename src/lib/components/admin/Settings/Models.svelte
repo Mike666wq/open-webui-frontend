@@ -90,6 +90,7 @@
 	let defaultPinnedModelIdSet = new Set<string>();
 
 	let savedModels: ModelListItem[] = [];
+	let togglingModels = new Set<string>();
 	let allModels: ModelListItem[] = [];
 	let availableModelIds = new Set<string>();
 
@@ -522,33 +523,44 @@
 	};
 
 	const toggleModelHandler = async (model) => {
-		if (!savedModels.find((m: ModelListItem) => m.id === model.id) && !isPresetModel(model)) {
-			const res = await createNewModel(localStorage.token, {
-				id: model.id,
-				name: model.name,
-				base_model_id: null,
-				meta: {},
-				params: {},
-				access_grants: [],
-				is_active: model.is_active
-			}).catch((error) => {
-				return null;
-			});
-
-			if (res) {
+		if (togglingModels.has(model.id)) return;
+		togglingModels = new Set([...togglingModels, model.id]);
+		const previousState = !model.is_active;
+		try {
+			if (!savedModels.find((m: ModelListItem) => m.id === model.id) && !isPresetModel(model)) {
+				const res = await createNewModel(localStorage.token, {
+					id: model.id,
+					name: model.name,
+					base_model_id: null,
+					meta: {},
+					params: {},
+					access_grants: [],
+					is_active: model.is_active
+				});
+				if (!res) throw new Error($i18n.t('Failed to update model'));
 				savedModels = [...savedModels, res];
+			} else {
+				await toggleModelById(localStorage.token, model.id);
 			}
-		} else {
-			await toggleModelById(localStorage.token, model.id);
+		} catch (error) {
+			model.is_active = previousState;
+			allModels = [...allModels];
+			toast.error(String(error instanceof Error ? error.message : error));
+			return;
+		} finally {
+			togglingModels.delete(model.id);
+			togglingModels = new Set(togglingModels);
 		}
-
-		// await init();
-		_models.set(
-			await getModels(
-				localStorage.token,
-				$config?.features?.enable_direct_connections && ($settings?.directConnections ?? null)
-			)
-		);
+		try {
+			_models.set(
+				await getModels(
+					localStorage.token,
+					$config?.features?.enable_direct_connections && ($settings?.directConnections ?? null)
+				)
+			);
+		} catch (error) {
+			toast.error(String(error instanceof Error ? error.message : error));
+		}
 	};
 
 	const deleteModelHandler = async (model: ModelListItem) => {
@@ -1283,6 +1295,7 @@
 												: $i18n.t('Disabled')}
 										>
 											<Switch
+												disabled={togglingModels.has(model.id)}
 												bind:state={model.is_active}
 												on:change={async () => {
 													toggleModelHandler(model);
