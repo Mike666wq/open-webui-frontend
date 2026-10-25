@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { RecordingJob } from '$lib/apis/recordings';
-import { timeLabel, transcriptText } from './utils';
+import { timeLabel, transcriptText, snapshotFingerprint, knowledgeSnapshotState } from './utils';
 
 const job: RecordingJob = {
 	id: 'recording',
@@ -22,6 +22,19 @@ const job: RecordingJob = {
 };
 
 describe('recording documents', () => {
+	it('tracks each knowledge snapshot across edits and reloads', () => {
+		const meta = {
+			recording_knowledge: { kb: 'file' },
+			recording_knowledge_sync: { kb: { fingerprint: snapshotFingerprint('title', 'text') } }
+		};
+		expect(knowledgeSnapshotState(meta, 'kb', 'title', 'text')).toBe('synced');
+		expect(knowledgeSnapshotState(meta, 'kb', 'title', 'edited')).toBe('changed');
+		expect(knowledgeSnapshotState(meta, 'kb', 'renamed', 'text')).toBe('changed');
+		expect(knowledgeSnapshotState(meta, 'other-kb', 'title', 'text')).toBe('new');
+		expect(
+			knowledgeSnapshotState({ recording_knowledge: { kb: 'legacy-file' } }, 'kb', 'title', 'text')
+		).toBe('changed');
+	});
 	it('formats class and longer meeting timestamps', () => {
 		expect(timeLabel(3000)).toBe('50:00');
 		expect(timeLabel(7201)).toBe('2:00:01');

@@ -1,4 +1,21 @@
 import type { RecordingJob } from '$lib/apis/recordings';
+import sha256 from 'js-sha256';
+
+export const snapshotFingerprint = (title: string, content: string) =>
+	sha256(JSON.stringify([title, content]));
+
+export function knowledgeSnapshotState(
+	meta: any,
+	knowledgeId: string,
+	title: string,
+	content: string
+) {
+	if (!knowledgeId || !meta?.recording_knowledge?.[knowledgeId]) return 'new';
+	return meta?.recording_knowledge_sync?.[knowledgeId]?.fingerprint ===
+		snapshotFingerprint(title, content)
+		? 'synced'
+		: 'changed';
+}
 
 export const timeLabel = (seconds: number) => {
 	const s = Math.max(0, Math.floor(seconds));

@@ -11,7 +11,7 @@
 		addFileToKnowledgeById,
 		updateFileFromKnowledgeById
 	} from '$lib/apis/knowledge';
-	import { uploadFile, updateFileDataContentById } from '$lib/apis/files';
+	import { uploadFile, updateFileDataContentById, renameFileById } from '$lib/apis/files';
 	import {
 		recordingRequest,
 		uploadRecording,
@@ -19,7 +19,13 @@
 		type RecordingJob,
 		type RecordingConfig
 	} from '$lib/apis/recordings';
-	import { transcriptText, timeLabel, hasCompleteSegments } from './Recordings/utils';
+	import {
+		transcriptText,
+		timeLabel,
+		hasCompleteSegments,
+		snapshotFingerprint,
+		knowledgeSnapshotState
+	} from './Recordings/utils';
 	const i18n = getContext<typeof import('$lib/i18n').default>('i18n');
 	let selectedModelRef = '';
 	let retryModelRef = '';
@@ -27,12 +33,21 @@
 	let selected: RecordingJob | null = null;
 	let configuration: RecordingConfig | null = null;
 	let selectedFile: File | null = null;
+	let fileInput: HTMLInputElement;
 	let uploadKey = '';
 	let progress = 0;
 	let uploading = false;
 	let busy = false;
 	let error = '';
+	let pollingError = '';
+	let audioError = false;
+	let audioReload = 0;
 	let note: any = null;
+	let documentTitle = '';
+	let savedTitle = '';
+	let working = '';
+	let actionErrors: Record<string, string> = {};
+	let knowledgeNotice = '';
 	let content = '';
 	let savedContent = '';
 	let documentId = '';
@@ -47,7 +62,8 @@
 	let knowledgeId = '';
 	let more = true;
 	let deleteConfirm = false;
-	$: dirty = content !== savedContent;
+	$: dirty = content !== savedContent || documentTitle !== savedTitle;
+	$: snapshotState = knowledgeSnapshotState(note?.meta, knowledgeId, documentTitle, content);
 	$: speakerIds = [
 		...new Set((selected?.segments ?? []).map((s) => s.speaker).filter((s): s is string => !!s))
 	];
@@ -73,17 +89,22 @@
 		)
 			cancel();
 	});
-	async function execute(action: () => Promise<void>) {
+	async function execute(action: () => Promise<void>, operation = '') {
 		if (busy) return;
 		busy = true;
+		working = operation;
+		if (operation) actionErrors = { ...actionErrors, [operation]: '' };
 		error = '';
 		try {
 			await action();
 		} catch (e) {
-			error = String(e instanceof Error ? e.message : e);
-			toast.error(error);
+			const message = String(e instanceof Error ? e.message : e);
+			if (operation) actionErrors = { ...actionErrors, [operation]: message };
+			else error = message;
+			toast.error(message);
 		} finally {
 			busy = false;
+			working = '';
 		}
 	}
 	async function loadDocument(id: string) {
@@ -96,18 +117,24 @@
 		note = loaded;
 		documentId = id;
 		content = savedContent = loaded?.data?.content?.md ?? '';
+		documentTitle = savedTitle = loaded.title;
+		knowledgeNotice = '';
+		actionErrors = { knowledgeList: actionErrors.knowledgeList ?? '' };
 	}
 	async function selectJob(job: RecordingJob) {
 		if (dirty && !window.confirm($i18n.t('Discard unsaved changes?'))) return;
 		content = savedContent;
+		documentTitle = savedTitle;
 		selected = await recordingRequest<RecordingJob>(localStorage.token, `/${job.id}`);
 		retryModelRef = selected.config?.model_ref ?? '';
 		speakerNames = { ...selected.speaker_names };
 		summaryKey = '';
 		deleteConfirm = false;
+		audioError = false;
 		note = null;
 		documentId = '';
 		content = savedContent = '';
+		documentTitle = savedTitle = '';
 		if (selected.state === 'completed') await loadDocument(selected.note_id);
 	}
 	async function refresh() {
@@ -121,6 +148,14 @@
 			selected = result;
 			if (!note && result.state === 'completed') await loadDocument(result.note_id);
 		}
+		pollingError = '';
+	}
+	async function loadKnowledge() {
+		const bases = await getKnowledgeBases(localStorage.token);
+		knowledge = (Array.isArray(bases) ? bases : (bases.items ?? [])).filter(
+			(k: any) => k.write_access !== false && k.type !== 'external'
+		);
+		actionErrors = { ...actionErrors, knowledgeList: '' };
 	}
 	onMount(() => {
 		let disposed = false;
@@ -129,18 +164,24 @@
 			try {
 				await refresh();
 			} catch (e) {
-				error = String(e instanceof Error ? e.message : e);
+				pollingError = String(e instanceof Error ? e.message : e);
 			}
 			if (!disposed) timer = setTimeout(poll, 4000);
 		};
 		execute(async () => {
 			configuration = await recordingRequest<RecordingConfig>(localStorage.token, '/config');
 			selectedModelRef = configuration.default_model_ref ?? '';
-			const bases = await getKnowledgeBases(localStorage.token).catch(() => []);
-			knowledge = (Array.isArray(bases) ? bases : (bases.items ?? [])).filter(
-				(k: any) => k.write_access !== false && k.type !== 'external'
-			);
-			await refresh();
+			await loadKnowledge().catch((e) => {
+				actionErrors = {
+					...actionErrors,
+					knowledgeList: String(e instanceof Error ? e.message : e)
+				};
+			});
+			try {
+				await refresh();
+			} catch (e) {
+				pollingError = String(e instanceof Error ? e.message : e);
+			}
 			const id = new URLSearchParams(location.search).get('id');
 			if (id) await selectJob({ id } as RecordingJob);
 		}).finally(() => {
@@ -172,9 +213,16 @@
 				(value) => (progress = value),
 				selectedModelRef
 			);
-			await refresh();
-			await selectJob(job);
 			selectedFile = null;
+			if (fileInput) fileInput.value = '';
+			jobs = [job, ...jobs.filter((item) => item.id !== job.id)];
+			try {
+				await selectJob(job);
+				await refresh();
+			} catch (e) {
+				// Upload acceptance is independent from subsequent status reads.
+				pollingError = String(e instanceof Error ? e.message : e);
+			}
 		} catch (e) {
 			error = String(e instanceof Error ? e.message : e);
 		} finally {
@@ -183,12 +231,14 @@
 	}
 	async function save() {
 		if (!note) return;
+		if (!documentTitle.trim()) throw new Error($i18n.t('Document title is required'));
 		note = await updateNoteById(localStorage.token, note.id, {
-			title: note.title,
+			title: documentTitle.trim(),
 			data: { ...note.data, content: { md: content } },
 			meta: note.meta
 		});
 		savedContent = content;
+		documentTitle = savedTitle = note.title;
 		toast.success($i18n.t('Saved'));
 	}
 	function download(text: string, name: string, extension: string) {
@@ -205,11 +255,13 @@
 	}
 	async function syncKnowledge() {
 		if (!note || !knowledgeId) return;
+		knowledgeNotice = '';
 		if (dirty) await save();
 		const fresh = await getNoteById(localStorage.token, note.id);
 		const mappings = fresh.meta?.recording_knowledge ?? {};
 		let fileId = mappings[knowledgeId];
 		if (fileId) {
+			await renameFileById(localStorage.token, fileId, `${fresh.title}.md`);
 			await updateFileDataContentById(localStorage.token, fileId, content);
 			await updateFileFromKnowledgeById(localStorage.token, knowledgeId, fileId);
 		} else {
@@ -223,12 +275,26 @@
 			if (file.error) throw new Error(file.error);
 			await addFileToKnowledgeById(localStorage.token, knowledgeId, file.id);
 			fileId = file.id;
-			note = await updateNoteById(localStorage.token, fresh.id, {
-				title: fresh.title,
-				data: fresh.data,
-				meta: { ...fresh.meta, recording_knowledge: { ...mappings, [knowledgeId]: fileId } }
-			});
 		}
+		note = await updateNoteById(localStorage.token, fresh.id, {
+			title: fresh.title,
+			data: fresh.data,
+			meta: {
+				...fresh.meta,
+				recording_knowledge: { ...mappings, [knowledgeId]: fileId },
+				recording_knowledge_sync: {
+					...fresh.meta?.recording_knowledge_sync,
+					[knowledgeId]: {
+						fingerprint: snapshotFingerprint(fresh.title, content),
+						updated_at: Date.now()
+					}
+				}
+			}
+		});
+		knowledgeNotice = $i18n.t('Saved {{document}} to {{knowledge}}', {
+			document: fresh.title,
+			knowledge: knowledge.find((base) => base.id === knowledgeId)?.name ?? knowledgeId
+		});
 		toast.success($i18n.t('Knowledge snapshot updated'));
 	}
 </script>
@@ -253,6 +319,17 @@
 		</p>
 		{#if error}<div role="alert" class="rounded-xl bg-red-500/10 p-3 text-sm break-words">
 				{error}
+				<button class="ml-3 underline" on:click={() => (error = '')}>{$i18n.t('Dismiss')}</button>
+			</div>{/if}
+		{#if pollingError}<div
+				data-testid="recording-poll-warning"
+				role="status"
+				class="rounded-xl bg-amber-500/10 p-3 text-sm break-words"
+			>
+				{$i18n.t(
+					'Task status could not be refreshed. Background transcription may still be running; this page will retry automatically.'
+				)}
+				<details><summary>{$i18n.t('Details')}</summary>{pollingError}</details>
 			</div>{/if}
 		{#if configuration && !configuration.configured}<div
 				role="status"
@@ -265,9 +342,7 @@
 			class="rounded-2xl border border-gray-200 dark:border-gray-800 p-4 space-y-3"
 			aria-label={$i18n.t('Upload recording')}
 		>
-			<label class="block text-sm font-medium" for="recording-file"
-				>{$i18n.t('Upload recording')}</label
-			>
+			<h2 class="text-sm font-medium">{$i18n.t('Upload recording')}</h2>
 			{#if $backendConfig?.features?.enable_provider_model_capabilities}<p
 					id="recording-model-label"
 					class="text-sm"
@@ -281,17 +356,48 @@
 					disabled={uploading}
 					on:change={() => (uploadKey = uuidv4())}
 				/>{/if}
-			<input
-				id="recording-file"
-				type="file"
-				accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg,.flac,.aac,.amr"
-				disabled={uploading}
-				on:change={(e) => {
-					selectedFile = e.currentTarget.files?.[0] ?? null;
-					uploadKey = uuidv4();
-				}}
-				class="block max-w-full text-sm"
-			/>
+			<label
+				for="recording-file"
+				class="flex min-w-0 cursor-pointer flex-wrap items-center gap-3 rounded-xl border border-dashed border-gray-400 bg-white/70 p-4 focus-within:ring-2 focus-within:ring-blue-500 dark:border-gray-600 dark:bg-gray-900/70"
+			>
+				<span
+					class="flex min-h-11 shrink-0 items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+				>
+					{$i18n.t(selectedFile ? 'Change recording file' : 'Choose recording file')}
+				</span>
+				<span class="min-w-0 flex-1 text-sm">
+					<span class="block break-all"
+						>{selectedFile?.name ?? $i18n.t('No recording selected')}</span
+					>
+					{#if selectedFile}<span class="text-xs text-gray-500"
+							>{(selectedFile.size / 1024 / 1024).toFixed(1)} MB</span
+						>{:else}<span class="text-xs text-gray-500">M4A · MP3 · WAV · WebM · OGG · FLAC</span
+						>{/if}
+				</span>
+				<input
+					id="recording-file"
+					bind:this={fileInput}
+					aria-label={$i18n.t('Choose recording file')}
+					type="file"
+					accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg,.flac,.aac,.amr"
+					disabled={uploading}
+					on:change={(e) => {
+						selectedFile = e.currentTarget.files?.[0] ?? null;
+						uploadKey = uuidv4();
+					}}
+					class="sr-only"
+				/>
+			</label>
+			{#if selectedFile}<button
+					type="button"
+					class="text-xs underline"
+					disabled={uploading}
+					on:click={() => {
+						selectedFile = null;
+						fileInput.value = '';
+						uploadKey = uuidv4();
+					}}>{$i18n.t('Clear selected recording')}</button
+				>{/if}
 			<p class="text-xs text-gray-500">
 				{$i18n.t('Ordinary Mandarin · original audio is retained until you delete it.')}
 				{#if configuration}{configuration.effective_max_size_mb ?? configuration.max_size_mb} MB · {Math.floor(
@@ -483,14 +589,31 @@
 						</details>
 					{/if}
 					{#if selected.source_present}
-						<audio
-							class="w-full"
-							bind:this={audio}
-							src={`${recordingsUrl}/${selected.id}/audio`}
-							controls
-							preload="metadata"
-							aria-label={$i18n.t('Original recording')}
-						></audio>
+						<p class="text-xs">{$i18n.t('Original recording')} · {timeLabel(selected.duration)}</p>
+						{#key `${selected.id}:${audioReload}`}
+							<audio
+								class="w-full"
+								bind:this={audio}
+								src={`${recordingsUrl}/${selected.id}/audio`}
+								controls
+								preload="metadata"
+								aria-label={$i18n.t('Original recording')}
+								on:error={() => (audioError = true)}
+								on:loadedmetadata={() => (audioError = false)}
+							></audio>
+						{/key}
+						{#if audioError}<p class="text-xs text-amber-700 dark:text-amber-300">
+								{$i18n.t(
+									'Audio playback failed. This does not affect transcription or saved documents.'
+								)}
+								<button
+									class="underline ml-2"
+									on:click={() => {
+										audioError = false;
+										audioReload += 1;
+									}}>{$i18n.t('Reload audio')}</button
+								>
+							</p>{/if}
 						{#if !active(selected)}<button
 								class="text-xs underline"
 								disabled={busy}
@@ -600,6 +723,18 @@
 									>{/each}
 							</div>
 						</details>
+						<div
+							class="rounded-xl border border-green-500/30 bg-green-500/5 p-3 text-sm"
+							role="status"
+						>
+							{$i18n.t(
+								'Transcription is complete. The transcript was saved automatically as a private note.'
+							)}
+							<a class="ml-2 underline" href={`/notes/${selected.note_id}`}
+								>{$i18n.t('Open transcript note')}</a
+							>
+						</div>
+						<h3 class="font-medium">1 · {$i18n.t('Edit and save notes')}</h3>
 						<label class="block text-sm"
 							>{$i18n.t('Document')}<select
 								class="field w-full"
@@ -613,14 +748,33 @@
 									>{/each}</select
 							></label
 						>
-						{#if note}<textarea
+						{#if note}
+							<label class="block text-sm"
+								>{$i18n.t('Document title')}<input
+									class="field w-full"
+									bind:value={documentTitle}
+									disabled={busy}
+									maxlength="255"
+								/></label
+							>
+							<p class="text-xs" role="status">
+								{$i18n.t(dirty ? 'Unsaved changes' : 'Saved to notes')}
+							</p>
+							{#if actionErrors.save}<p role="alert" class="text-sm text-red-600">
+									{actionErrors.save}
+								</p>{/if}
+							<textarea
 								aria-label={$i18n.t('Document content')}
 								class="field w-full min-h-80 font-mono text-sm"
 								bind:value={content}
+								disabled={busy}
 							></textarea>
 							<div class="flex flex-wrap items-center gap-2">
-								<button class="primary" disabled={busy || !dirty} on:click={() => execute(save)}
-									>{$i18n.t('Save')}</button
+								<button
+									class="primary"
+									disabled={busy || !dirty}
+									on:click={() => execute(save, 'save')}
+									>{$i18n.t(working === 'save' ? 'Saving document' : 'Save')}</button
 								><a class="secondary" href={`/notes/${note.id}`}>{$i18n.t('Open in notes')}</a
 								>{#each ['txt', 'md'] as ext}<button
 										class="secondary"
@@ -629,12 +783,21 @@
 									>{/each}
 							</div>{/if}
 						<div class="border-t dark:border-gray-800 pt-3 space-y-2">
-							<h3 class="font-medium text-sm">{$i18n.t('Create organized notes')}</h3>
+							<h3 class="font-medium text-sm">2 · {$i18n.t('Create organized notes')}</h3>
+							<p class="text-xs text-gray-500">
+								{$i18n.t(
+									'Uses the transcript note as source and saves a separate new note. The original stays available.'
+								)}
+							</p>
+							{#if actionErrors.summary}<p role="alert" class="text-sm text-red-600">
+									{actionErrors.summary}
+								</p>{/if}
 							<div class="flex flex-wrap gap-2">
 								<select
 									class="field min-w-0 max-w-full"
 									aria-label={$i18n.t('Text model')}
 									bind:value={model}
+									disabled={busy}
 									on:change={() => (summaryKey = '')}
 									><option value="">{$i18n.t('Select a model')}</option
 									>{#each $models.filter((m) => !m.info?.meta?.hidden) as m}<option value={m.id}
@@ -644,6 +807,7 @@
 									class="field"
 									aria-label={$i18n.t('Template')}
 									bind:value={template}
+									disabled={busy}
 									on:change={() => (summaryKey = '')}
 									><option value="class">{$i18n.t('Class notes')}</option><option value="meeting"
 										>{$i18n.t('Meeting minutes')}</option
@@ -664,7 +828,10 @@
 											summaryKey = '';
 											await refresh();
 											await loadDocument(result.note_id);
-										})}>{busy ? $i18n.t('Processing') : $i18n.t('Generate')}</button
+										}, 'summary')}
+									>{working === 'summary'
+										? $i18n.t('Generating and saving note')
+										: $i18n.t('Generate')}</button
 								>
 							</div>
 							<p class="text-xs text-gray-500">
@@ -674,22 +841,74 @@
 							</p>
 						</div>
 						{#if note}<div class="border-t dark:border-gray-800 pt-3 space-y-2">
-								<h3 class="font-medium text-sm">{$i18n.t('Add or update knowledge snapshot')}</h3>
+								<h3 class="font-medium text-sm">
+									3 · {$i18n.t('Add or update knowledge snapshot')}
+								</h3>
+								<p class="text-sm">
+									{$i18n.t('Selected document')}: <strong>{documentTitle}</strong>
+								</p>
+								{#if actionErrors.knowledge}<p role="alert" class="text-sm text-red-600">
+										{actionErrors.knowledge}<br />{$i18n.t(
+											'Your note is preserved. Check the target knowledge base before retrying an uncertain request.'
+										)}
+									</p>{/if}
+								{#if knowledgeNotice}<p
+										role="status"
+										class="text-sm text-green-700 dark:text-green-300"
+									>
+										{knowledgeNotice}
+									</p>{/if}
+								{#if actionErrors.knowledgeList}<p role="alert" class="text-sm text-red-600">
+										{$i18n.t('Could not load knowledge bases')}: {actionErrors.knowledgeList}
+									</p>
+									<button
+										class="secondary"
+										disabled={busy}
+										on:click={() => execute(loadKnowledge, 'knowledgeList')}
+										>{$i18n.t('Retry')}</button
+									>
+								{:else if !knowledge.length}<p class="text-xs">
+										{$i18n.t(
+											'No writable knowledge bases are available. Create one in Workspace → Knowledge, then reload this page.'
+										)}
+									</p>{/if}
 								<div class="flex flex-wrap gap-2">
 									<select
 										class="field max-w-full"
 										aria-label={$i18n.t('Knowledge base')}
 										bind:value={knowledgeId}
+										disabled={busy}
+										on:change={() => (knowledgeNotice = '')}
 										><option value="">{$i18n.t('Select a knowledge base')}</option
 										>{#each knowledge as base}<option value={base.id}>{base.name}</option
 											>{/each}</select
 									><button
 										class="secondary"
-										disabled={busy || !knowledgeId}
-										on:click={() => execute(syncKnowledge)}
-										>{$i18n.t('Save current document to knowledge')}</button
+										disabled={busy || !knowledgeId || snapshotState === 'synced'}
+										on:click={() => execute(syncKnowledge, 'knowledge')}
+										data-testid="knowledge-sync"
+										>{$i18n.t(
+											working === 'knowledge'
+												? 'Saving knowledge snapshot'
+												: snapshotState === 'synced'
+													? 'Knowledge snapshot is current'
+													: snapshotState === 'changed'
+														? 'Update knowledge snapshot'
+														: 'Save current document to knowledge'
+										)}</button
 									>
 								</div>
+								{#if knowledgeId && snapshotState === 'changed'}<p
+										class="text-xs text-amber-700 dark:text-amber-300"
+									>
+										{$i18n.t(
+											'The knowledge copy differs from this document. Update it manually to publish your edits.'
+										)}
+									</p>{/if}
+								{#if knowledgeNotice}<a
+										class="text-sm underline"
+										href={`/workspace/knowledge/${knowledgeId}`}>{$i18n.t('Open knowledge base')}</a
+									>{/if}
 								<p class="text-xs text-gray-500">
 									{$i18n.t(
 										'Saves the selected document as a snapshot. Click again to update it after editing; audio is not shared.'
