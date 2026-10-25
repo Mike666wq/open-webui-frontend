@@ -157,6 +157,8 @@
 			return;
 		}
 		retryModelRef = selected.config?.model_ref ?? '';
+		actionErrors = { knowledgeList: actionErrors.knowledgeList ?? '' };
+		knowledgeNotice = '';
 		speakerNames = { ...selected.speaker_names };
 		summaryKey = '';
 		deleteConfirm = false;
