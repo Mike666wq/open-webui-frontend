@@ -4229,5 +4229,10 @@
 	"Update knowledge snapshot": "Update knowledge snapshot",
 	"The knowledge copy differs from this document. Update it manually to publish your edits.": "The knowledge copy differs from this document. Update it manually to publish your edits.",
 	"Open knowledge base": "Open knowledge base",
-	"Could not load knowledge bases": "Could not load knowledge bases"
+	"Could not load knowledge bases": "Could not load knowledge bases",
+	"Task record deleted. Notes and knowledge documents were kept.": "Task record deleted. Notes and knowledge documents were kept.",
+	"Delete task record": "Delete task record",
+	"Permanently delete this task and its ASR snapshot? Existing notes and knowledge documents will be kept. This cannot be undone.": "Permanently delete this task and its ASR snapshot? Existing notes and knowledge documents will be kept. This cannot be undone.",
+	"The linked note was deleted or is unavailable. Transcription is complete and its original snapshot is still available below. Restore the note from Resources & Storage if needed.": "The linked note was deleted or is unavailable. Transcription is complete and its original snapshot is still available below. Restore the note from Resources & Storage if needed.",
+	"Check note again": "Check note again"
 }
