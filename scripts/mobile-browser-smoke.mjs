@@ -154,10 +154,11 @@ class CdpClient {
 
 	async click(expression, label) {
 		const rect = await this.evaluate(`
-			(() => {
+			(async () => {
 				const element = ${expression};
 				if (!element) return null;
-				element.scrollIntoView({ block: 'center', inline: 'nearest' });
+				element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'nearest' });
+				await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 				const bounds = element.getBoundingClientRect();
 				if (bounds.width < 1 || bounds.height < 1) return null;
 				return {
