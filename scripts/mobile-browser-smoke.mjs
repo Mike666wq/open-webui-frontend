@@ -1138,13 +1138,25 @@ async function main() {
 			'generate class notes'
 		);
 		await client.waitForExpression(
+			"document.querySelector('.recordings-page [role=alert]')?.textContent.includes('Synthetic summary failure')",
+			'summary failure is visible'
+		);
+		assert.equal(
+			await client.evaluate("document.querySelector('.recordings-page textarea').value"),
+			'修改后的课堂原文'
+		);
+		await client.click(
+			`[...document.querySelectorAll('.recordings-page button')].find(b=>['Generate','生成'].includes(b.textContent.trim()))`,
+			'retry summary without overwriting transcript'
+		);
+		await client.waitForExpression(
 			"document.querySelector('.recordings-page textarea').value==='课堂知识点整理'",
 			'separate summary note'
 		);
 		await client.evaluate(
 			`(() => {const e=document.querySelector('select[aria-label="知识库"]');e.value='recording-kb';e.dispatchEvent(new Event('change',{bubbles:true}));})()`
 		);
-		const syncButton = `[...document.querySelectorAll('.recordings-page button')].find(b=>b.textContent.trim()==='将当前文档保存到知识库')`;
+		const syncButton = `document.querySelector('[data-testid=knowledge-sync]')`;
 		await client.click(syncButton, 'save knowledge snapshot');
 		await waitForValue(
 			async () => (await (await fetch(`${origin}/__fixture_provenance`)).json()).events,
@@ -1152,13 +1164,38 @@ async function main() {
 				events.some((e) => e.kind === 'recording-action' && e.path?.endsWith('/file/add')),
 			'knowledge snapshot add'
 		);
-		await client.waitForExpression(`!(${syncButton}).disabled`, 'knowledge action complete');
+		await client.waitForExpression(
+			`(${syncButton}).textContent.includes('知识库副本已是最新')`,
+			'knowledge action complete'
+		);
+		assert.equal(await client.evaluate(`(${syncButton}).disabled`), true);
+		await client.evaluate(
+			`(() => {const e=document.querySelector('.recordings-page textarea');e.value+='\n新增课堂重点';e.dispatchEvent(new Event('input',{bubbles:true}));})()`
+		);
+		await client.waitForExpression(
+			`!(${syncButton}).disabled`,
+			'edited document can update knowledge'
+		);
 		await client.click(syncButton, 'update knowledge snapshot');
+		await client.waitForExpression(
+			"document.querySelector('.recordings-page [role=alert]')?.textContent.includes('Synthetic knowledge update failure')",
+			'knowledge failure preserves note'
+		);
+		assert.ok(
+			await client.evaluate(
+				"document.querySelector('.recordings-page textarea').value.includes('新增课堂重点')"
+			)
+		);
+		await client.click(syncButton, 'retry knowledge update');
 		await waitForValue(
 			async () => (await (await fetch(`${origin}/__fixture_provenance`)).json()).events,
 			(events) =>
 				events.some((e) => e.kind === 'recording-action' && e.path?.endsWith('/file/update')),
 			'knowledge snapshot update'
+		);
+		await client.waitForExpression(
+			`(${syncButton}).textContent.includes('知识库副本已是最新')`,
+			'knowledge retry completed'
 		);
 		await client.screenshot('recording-documents-393x852.png');
 		results.recordings = {

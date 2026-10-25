@@ -19,6 +19,8 @@ const events = [];
 const upgradedSockets = new Set();
 let providerConnection = null;
 let recordingListReads = 0;
+let recordingSummaryAttempts = 0;
+let recordingKnowledgeUpdateAttempts = 0;
 let kimiConnection = null;
 let chatgptConnection = null;
 const chatgptAttempts = [];
@@ -579,6 +581,7 @@ const server = createServer(async (request, response) => {
 				url.pathname.startsWith('/api/v1/notes/recording-') ||
 				url.pathname.startsWith('/api/v1/knowledge/recording-kb/') ||
 				url.pathname === '/api/v1/files/' ||
+				url.pathname === '/api/v1/files/recording-file/rename' ||
 				url.pathname === '/api/v1/files/recording-file/data/content/update')
 		) {
 			const chunks = [];
@@ -600,6 +603,10 @@ const server = createServer(async (request, response) => {
 				return;
 			}
 			if (url.pathname.endsWith('/summary')) {
+				if (++recordingSummaryAttempts === 1) {
+					send(response, 502, { detail: 'Synthetic summary failure' });
+					return;
+				}
 				recordingNotes.set('recording-summary', {
 					...recordingNotes.get('recording-note'),
 					id: 'recording-summary',
@@ -619,6 +626,10 @@ const server = createServer(async (request, response) => {
 			}
 			if (url.pathname === '/api/v1/files/') {
 				send(response, 200, { id: 'recording-file', data: { status: 'completed' } });
+				return;
+			}
+			if (url.pathname.endsWith('/file/update') && ++recordingKnowledgeUpdateAttempts === 1) {
+				send(response, 502, { detail: 'Synthetic knowledge update failure' });
 				return;
 			}
 			send(response, 200, {});
