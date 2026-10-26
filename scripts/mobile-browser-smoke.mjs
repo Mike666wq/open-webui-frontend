@@ -1176,12 +1176,9 @@ async function main() {
 			"[...document.querySelectorAll('.outline-popover > button')].find(e=>e.textContent.includes('重点回顾'))",
 			'jump to second heading'
 		);
-		await sleep(700);
-		assert.ok(
-			await client.evaluate(
-				"(() => {const r=document.querySelector('#note-editor h2').getBoundingClientRect();return r.top >= 0 && r.top < innerHeight / 2;})()"
-			),
-			'outline scrolls the note'
+		await client.waitForExpression(
+			"(() => {const r=document.querySelector('#note-editor h2').getBoundingClientRect();return r.top >= 0 && r.bottom <= innerHeight;})()",
+			'outline brings the selected heading fully into view'
 		);
 		await client.click(
 			"[...document.querySelectorAll('#note-editor button')].find(e=>e.textContent.trim()==='全屏阅读')",

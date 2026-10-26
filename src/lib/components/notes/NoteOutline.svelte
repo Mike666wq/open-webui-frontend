@@ -3,6 +3,7 @@
 	const i18n = getContext<any>('i18n');
 	export let editor: any = null;
 	let open = false;
+	let trigger: HTMLButtonElement;
 	let headings: { level: number; text: string; pos: number }[] = [];
 	let currentEditor: any;
 	function refresh() {
@@ -22,17 +23,17 @@
 	onDestroy(() => currentEditor?.off('update', refresh));
 	function jump(pos: number) {
 		const element = editor?.view.nodeDOM(pos) as HTMLElement;
-		element?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-		if (element) {
-			element.setAttribute('tabindex', '-1');
-			element.focus({ preventScroll: true });
-		}
 		open = false;
+		// Do not focus or modify ProseMirror's heading DOM: that can restore its
+		// previous selection and move the viewport away from the chosen heading.
+		trigger?.focus({ preventScroll: true });
+		element?.scrollIntoView({ block: 'start', behavior: 'auto' });
 	}
 </script>
 
 <div class="outline-control">
 	<button
+		bind:this={trigger}
 		type="button"
 		aria-label={$i18n.t('Note outline')}
 		aria-expanded={open}
