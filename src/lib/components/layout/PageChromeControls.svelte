@@ -10,7 +10,11 @@
 	function apply() {
 		document.documentElement.toggleAttribute('data-topbar-hidden', topHidden);
 		document.documentElement.toggleAttribute('data-sidebar-hidden', sideHidden);
-		if (ready) localStorage.setItem('owui:page-chrome', JSON.stringify({ topHidden, sideHidden }));
+		if (ready)
+			localStorage.setItem(
+				'owui:page-chrome',
+				JSON.stringify({ topHidden, sideHidden, previousSidebar })
+			);
 	}
 	function toggleSidebar() {
 		sideHidden = !sideHidden;
@@ -21,12 +25,14 @@
 		apply();
 	}
 	onMount(() => {
+		previousSidebar = $showSidebar;
 		try {
 			const saved = JSON.parse(localStorage.getItem('owui:page-chrome') || '{}');
 			topHidden = saved.topHidden === true;
 			sideHidden = saved.sideHidden === true;
+			if (sideHidden && typeof saved.previousSidebar === 'boolean')
+				previousSidebar = saved.previousSidebar;
 		} catch {}
-		previousSidebar = $showSidebar;
 		if (sideHidden) showSidebar.set(false);
 		ready = true;
 		apply();

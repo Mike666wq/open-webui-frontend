@@ -1011,7 +1011,14 @@ ${content}
 		}
 	}}
 />
-<div use:focusLayer={expandedNote} class:note-expanded={expandedNote} class="w-full h-full flex">
+<div
+	use:focusLayer={expandedNote}
+	role={expandedNote ? 'dialog' : undefined}
+	aria-modal={expandedNote ? true : undefined}
+	aria-label={expandedNote ? note?.title : undefined}
+	class:note-expanded={expandedNote}
+	class="w-full h-full flex"
+>
 	<div class="h-full flex flex-col min-w-0 flex-1 relative">
 		{#if note?.meta?.recording_id && note?.user_id === $user?.id}
 			<a
