@@ -1033,3 +1033,27 @@ html[data-owui-motion-reduced='true'] .owui-message-listitem {
 		transparent 100%
 	);
 }
+
+/* Reading surfaces must remain legible even over a high-detail wallpaper. */
+.owui-mist-app #workspace-container,
+.owui-mist-app #notes-container,
+.owui-mist-app #collection-container,
+.owui-mist-app #note-editor {
+	background-color: rgb(var(--mist-surface-rgb, 255 255 255) / 0.97) !important;
+	color: var(--mist-ink, #172334) !important;
+	border-radius: 16px;
+}
+.owui-mist-app #workspace-container,
+.owui-mist-app #notes-container {
+	padding: 12px;
+}
+.owui-mist-app #note-content-container .ProseMirror {
+	background-color: rgb(var(--mist-surface-rgb, 255 255 255) / 0.99) !important;
+	color: var(--mist-ink, #172334) !important;
+	padding: 1rem !important;
+}
+.owui-mist-app
+	:is(#workspace-container, #notes-container, #collection-container, #note-editor)
+	:is(.text-gray-400, .text-gray-500, .text-gray-600) {
+	color: var(--mist-muted, #526174) !important;
+}

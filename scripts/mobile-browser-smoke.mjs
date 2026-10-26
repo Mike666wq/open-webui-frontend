@@ -1074,6 +1074,133 @@ async function main() {
 			}
 			await client.screenshot(`workspace-tabs-${dark ? 'dark' : 'light'}.png`);
 		}
+
+		// Collapsed chrome remains reversible and note reading never writes data.
+		await client.navigate(
+			`${origin}/workspace/knowledge`,
+			"document.querySelector('#workspace-container')?.textContent.includes('课堂资料')"
+		);
+		await client.screenshot('knowledge-reading-surface.png');
+		await client.click(
+			"document.querySelector('[data-testid=page-chrome-controls] > button')",
+			'page layout controls'
+		);
+		await client.click(
+			"[...document.querySelectorAll('.chrome-menu button')].find(e=>e.textContent.includes('收起顶部栏'))",
+			'collapse top toolbar'
+		);
+		assert.ok(await client.evaluate("document.documentElement.hasAttribute('data-topbar-hidden')"));
+		await client.click(
+			"[...document.querySelectorAll('.chrome-menu button')].find(e=>e.textContent.includes('收起侧边导航'))",
+			'collapse side navigation'
+		);
+		await sleep(350);
+		assert.ok(
+			await client.evaluate(
+				"document.querySelector('#main-content > div').getBoundingClientRect().left < 2"
+			),
+			'hidden navigation releases content width'
+		);
+		await client.click(
+			"[...document.querySelectorAll('.chrome-menu button')].find(e=>e.textContent.includes('恢复页面布局'))",
+			'restore all navigation'
+		);
+
+		await client.navigate(
+			`${origin}/workspace/knowledge/reading-kb`,
+			"document.querySelector('#collection-container')?.textContent.includes('阅读验收.pdf')"
+		);
+		await client.click(
+			"[...document.querySelectorAll('#collection-container button')].find(e=>e.textContent.includes('阅读验收.pdf'))",
+			'open synthetic PDF'
+		);
+		await client.waitForExpression("document.querySelector('.file-reader canvas')", 'PDF rendered');
+		await client.click(
+			"document.querySelector('.file-reader button[aria-label=全屏阅读]')",
+			'expand PDF reader'
+		);
+		await client.waitForExpression(
+			"document.querySelector('.reader-expanded')?.getBoundingClientRect().width === innerWidth",
+			'PDF fills the viewport'
+		);
+		await client.waitForExpression(
+			"document.querySelector('.reader-expanded canvas')?.getBoundingClientRect().width > innerWidth * .85",
+			'PDF adapts to expanded width'
+		);
+		await client.screenshot('knowledge-pdf-fullscreen.png');
+		await client.send('Input.dispatchKeyEvent', {
+			type: 'keyDown',
+			key: 'Escape',
+			code: 'Escape',
+			windowsVirtualKeyCode: 27
+		});
+		await client.waitForExpression(
+			"!document.querySelector('.reader-expanded') && !document.querySelector('.owui-mist-app').inert",
+			'PDF exits fullscreen'
+		);
+		assert.equal(
+			(await (await fetch(`${origin}/__fixture_provenance`)).json()).events.filter(
+				(e) => e.kind === 'reading-pdf-load'
+			).length,
+			1,
+			'fullscreen keeps the loaded PDF'
+		);
+		await client.navigate(`${origin}/notes`, "document.querySelector('#notes-container')");
+		await client.screenshot('notes-reading-surface.png');
+		await client.navigate(
+			`${origin}/notes/reading-note`,
+			"Boolean(document.querySelector('#note-editor h2'))"
+		);
+		await client.send('Emulation.setDeviceMetricsOverride', {
+			width: 393,
+			height: 852,
+			deviceScaleFactor: 2,
+			mobile: true
+		});
+		await client.click(
+			"document.querySelector('button[aria-label=笔记目录]')",
+			'open heading outline'
+		);
+		await client.waitForExpression(
+			"document.querySelectorAll('.outline-popover > button').length === 2",
+			'outline headings'
+		);
+		assert.ok(
+			await client.evaluate(
+				"(() => {const r=document.querySelector('.outline-popover').getBoundingClientRect();return r.left>=0 && r.right<=innerWidth;})()"
+			),
+			'mobile outline stays inside the viewport'
+		);
+		await client.screenshot('note-outline-mobile.png');
+		await client.click(
+			"[...document.querySelectorAll('.outline-popover > button')].find(e=>e.textContent.includes('重点回顾'))",
+			'jump to second heading'
+		);
+		await client.waitForExpression(
+			"(() => {const r=document.querySelector('#note-editor h2').getBoundingClientRect();return r.top >= 0 && r.bottom <= innerHeight;})()",
+			'outline brings the selected heading fully into view'
+		);
+		await client.click(
+			"[...document.querySelectorAll('#note-editor button')].find(e=>e.textContent.trim()==='全屏阅读')",
+			'expand note'
+		);
+		assert.ok(
+			await client.evaluate(
+				"document.querySelector('.note-expanded')?.getBoundingClientRect().left === 0 && document.querySelector('.owui-mist-app').inert"
+			),
+			'reader expands without remounting the editor'
+		);
+		await client.screenshot('note-fullscreen-outline.png');
+		await client.send('Input.dispatchKeyEvent', {
+			type: 'keyDown',
+			key: 'Escape',
+			code: 'Escape',
+			windowsVirtualKeyCode: 27
+		});
+		await client.waitForExpression(
+			"!document.querySelector('.note-expanded') && !document.querySelector('.owui-mist-app').inert",
+			'escape restores page'
+		);
 		await client.send('Emulation.setDeviceMetricsOverride', {
 			width: 393,
 			height: 852,

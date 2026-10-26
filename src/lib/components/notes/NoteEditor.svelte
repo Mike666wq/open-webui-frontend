@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { focusLayer } from '$lib/components/common/focusLayer';
+	let expandedNote = false;
+	import NoteOutline from './NoteOutline.svelte';
 	import { getContext, onDestroy, onMount, tick } from 'svelte';
 	import { v4 as uuidv4 } from 'uuid';
 	import fileSaver from 'file-saver';
@@ -1000,7 +1003,22 @@ ${content}
 	</div>
 </DeleteConfirmDialog>
 
-<div class="w-full h-full flex">
+<svelte:window
+	on:keydown={(e) => {
+		if (expandedNote && e.key === 'Escape') {
+			e.preventDefault();
+			expandedNote = false;
+		}
+	}}
+/>
+<div
+	use:focusLayer={expandedNote}
+	role={expandedNote ? 'dialog' : undefined}
+	aria-modal={expandedNote ? true : undefined}
+	aria-label={expandedNote ? note?.title : undefined}
+	class:note-expanded={expandedNote}
+	class="w-full h-full flex"
+>
 	<div class="h-full flex flex-col min-w-0 flex-1 relative">
 		{#if note?.meta?.recording_id && note?.user_id === $user?.id}
 			<a
@@ -1018,7 +1036,7 @@ ${content}
 				</div>
 			{:else}
 				<div class=" w-full flex flex-col {loading ? 'opacity-20' : ''}">
-					<div class="shrink-0 w-full flex justify-between items-center px-3">
+					<div data-page-toolbar class="shrink-0 w-full flex justify-between items-center px-3">
 						<div class="w-full min-w-0 flex items-center">
 							{#if $mobile}
 								<Tooltip
@@ -1124,6 +1142,14 @@ ${content}
 									{/if}
 								{/if}
 
+								<NoteOutline {editor} />
+								<button
+									type="button"
+									class="shrink-0 rounded-lg border px-2 py-1 text-xs"
+									aria-pressed={expandedNote}
+									on:click={() => (expandedNote = !expandedNote)}
+									>{$i18n.t(expandedNote ? 'Exit full screen' : 'Full screen')}</button
+								>
 								<Tooltip content={$i18n.t('Chat')} placement="top">
 									<button
 										type="button"
@@ -1530,3 +1556,14 @@ ${content}
 		{/if}
 	</NotePanel>
 </div>
+
+<style>
+	.note-expanded {
+		position: fixed;
+		inset: 0;
+		z-index: 100;
+		height: 100dvh !important;
+		background: rgb(var(--mist-surface-rgb, 255 255 255));
+		color: var(--mist-ink, #172334);
+	}
+</style>

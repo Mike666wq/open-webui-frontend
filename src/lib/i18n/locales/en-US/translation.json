@@ -4248,5 +4248,17 @@
 	"Audio available": "Audio available",
 	"Audio deleted": "Audio deleted",
 	"No tasks match this filter.": "No tasks match this filter.",
-	"Failed to update model": "Failed to update model"
+	"Failed to update model": "Failed to update model",
+	"Page layout": "Page layout",
+	"Layout": "Layout",
+	"Show page toolbar": "Show page toolbar",
+	"Hide page toolbar": "Hide page toolbar",
+	"Show navigation": "Show navigation",
+	"Hide navigation": "Hide navigation",
+	"Restore page layout": "Restore page layout",
+	"Note outline": "Note outline",
+	"Contents": "Contents",
+	"Add headings to create an outline.": "Add headings to create an outline.",
+	"Full screen": "Full screen",
+	"Exit full screen": "Exit full screen"
 }

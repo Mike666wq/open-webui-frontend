@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PageChromeControls from '$lib/components/layout/PageChromeControls.svelte';
 	import { toast } from 'svelte-sonner';
 	import { onMount, tick, getContext } from 'svelte';
 
@@ -51,11 +52,7 @@
 	import UpdateInfoToast from '$lib/components/layout/UpdateInfoToast.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import { AppBackdrop } from '$lib/components/mist';
-	import {
-		AppearanceProvider,
-		appearanceSettings,
-		wallpaperVariant
-	} from '$lib/appearance';
+	import { AppearanceProvider, appearanceSettings, wallpaperVariant } from '$lib/appearance';
 	import { loadKeybindings, matchKeybinding, Shortcut } from '$lib/shortcuts';
 	import { navigatorOpen } from '$lib/stores/navigator';
 
@@ -503,6 +500,7 @@
 				<AccountPending />
 			{:else}
 				<Sidebar />
+				<PageChromeControls />
 
 				{#if loaded}
 					<main id="main-content" class="contents">

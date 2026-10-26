@@ -4251,5 +4251,17 @@
 	"Audio available": "可回听",
 	"Audio deleted": "原音频已删除",
 	"No tasks match this filter.": "没有符合筛选条件的任务。",
-	"Failed to update model": "模型更新失败"
+	"Failed to update model": "模型更新失败",
+	"Page layout": "页面布局",
+	"Layout": "布局",
+	"Show page toolbar": "展开顶部栏",
+	"Hide page toolbar": "收起顶部栏",
+	"Show navigation": "展开侧边导航",
+	"Hide navigation": "收起侧边导航",
+	"Restore page layout": "恢复页面布局",
+	"Note outline": "笔记目录",
+	"Contents": "目录",
+	"Add headings to create an outline.": "添加标题后，即可在这里查看目录。",
+	"Full screen": "全屏阅读",
+	"Exit full screen": "退出全屏"
 }

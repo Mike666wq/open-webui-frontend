@@ -172,6 +172,55 @@ const recordingNotes = new Map([
 		}
 	]
 ]);
+const readingNote = {
+	id: 'reading-note',
+	user_id: userId,
+	title: '目录与全屏验收',
+	write_access: false,
+	data: {
+		content: {
+			html:
+				'<h1>课程概览</h1><p>' +
+				'课堂正文。'.repeat(1200) +
+				'</p><h2>重点回顾</h2><p>本节结论。</p>',
+			md: '# 课程概览\n\n课堂正文。\n\n## 重点回顾\n\n本节结论。'
+		}
+	},
+	meta: {},
+	access_grants: [],
+	created_at: now * 1e9,
+	updated_at: now * 1e9
+};
+recordingNotes.set('reading-note', readingNote);
+const readingFile = {
+	id: 'reading-file',
+	filename: '阅读验收.pdf',
+	meta: { name: '阅读验收.pdf', content_type: 'application/pdf', size: 600 },
+	has_original: true,
+	data: { status: 'completed' }
+};
+function readingPdf() {
+	const stream = 'BT /F1 24 Tf 60 720 Td (Reading preview fixture) Tj ET';
+	const objects = [
+		'<< /Type /Catalog /Pages 2 0 R >>',
+		'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+		'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+		'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+		`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`
+	];
+	let text = '%PDF-1.4\n';
+	const offsets = [0];
+	for (const [index, object] of objects.entries()) {
+		offsets.push(Buffer.byteLength(text));
+		text += `${index + 1} 0 obj\n${object}\nendobj\n`;
+	}
+	const xref = Buffer.byteLength(text);
+	text += `xref\n0 6\n0000000000 65535 f \n${offsets
+		.slice(1)
+		.map((n) => String(n).padStart(10, '0') + ' 00000 n ')
+		.join('\n')}\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+	return Buffer.from(text);
+}
 const recording = {
 	id: 'recording-fixture',
 	title: '课堂录音.wav',
@@ -317,6 +366,36 @@ function api(pathname) {
 	if (pathname === '/api/v1/folders/') return [];
 	if (pathname === '/api/v1/channels/') return [];
 	if (pathname === '/api/v1/notes/pinned') return [];
+	if (pathname === '/api/v1/knowledge/reading-kb')
+		return {
+			id: 'reading-kb',
+			name: '课堂资料',
+			description: '可读性验收',
+			user_id: userId,
+			data: { file_ids: ['reading-file'] },
+			access_grants: [],
+			write_access: false
+		};
+	if (pathname === '/api/v1/knowledge/reading-kb/files')
+		return { items: [readingFile], directories: [], breadcrumbs: [], total: 1 };
+	if (pathname === '/api/v1/knowledge/reading-kb/files/pending') return [];
+
+	if (pathname === '/api/v1/notes/search') return { items: [readingNote], total: 1 };
+	if (pathname === '/api/v1/knowledge/search')
+		return {
+			items: [
+				{
+					id: 'reading-kb',
+					name: '课堂资料',
+					description: '可读性验收',
+					user_id: userId,
+					created_at: now,
+					updated_at: now,
+					file_count: 1
+				}
+			],
+			total: 1
+		};
 	if (pathname === '/api/v1/recordings/config')
 		return {
 			max_size_mb: 500,
@@ -360,6 +439,13 @@ function isPage(pathname) {
 
 const server = createServer(async (request, response) => {
 	const url = new URL(request.url || '/', origin);
+	if (request.method === 'GET' && url.pathname === '/api/v1/files/reading-file/content') {
+		event('reading-pdf-load');
+		response.writeHead(200, { 'Content-Type': 'application/pdf' });
+		response.end(readingPdf());
+		return;
+	}
+
 	try {
 		if (request.method === 'POST' && url.pathname === '/__fixture_missing_recording_note') {
 			recordingNoteMissing = true;
