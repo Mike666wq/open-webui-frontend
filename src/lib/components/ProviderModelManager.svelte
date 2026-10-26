@@ -7,6 +7,11 @@
 	} from '$lib/apis/providers';
 	export let connection: any;
 	export let canManage = true;
+	export let onUpdated: (() => Promise<void>) | undefined = undefined;
+	async function updated() {
+		if (onUpdated) await onUpdated();
+		else dispatch('updated');
+	}
 	const dispatch = createEventDispatcher();
 	const sources: Record<string, string> = {
 		provider: '厂商目录',
@@ -68,7 +73,7 @@
 		try {
 			await setProviderModelUses(connection.id, modelId, uses);
 			message = '能力已保存；手动声明不代表测试通过。';
-			dispatch('updated');
+			await updated();
 		} catch (e) {
 			message = String(e);
 		} finally {
@@ -80,7 +85,7 @@
 		message = '';
 		try {
 			await setProviderModelEnabled(connection.id, model.upstream_id, model.enabled === false);
-			dispatch('updated');
+			await updated();
 		} catch (e) {
 			message = String(e);
 		} finally {
@@ -116,7 +121,7 @@
 				result.status === 'passed'
 					? '本次调用通过；不代表所有参数均兼容。'
 					: `本次调用失败：${result.error?.category ?? '请检查配置或上游状态'}`;
-			dispatch('updated');
+			await updated();
 		} catch (e) {
 			message = String(e);
 		} finally {

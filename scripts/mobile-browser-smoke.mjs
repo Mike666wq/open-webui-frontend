@@ -606,7 +606,7 @@ async function providerSettings(cdp) {
 		'disable provider model'
 	);
 	await cdp.waitForExpression(
-		`document.querySelector('input[aria-label="启用 deepseek-fixture"]')?.checked === false`,
+		`document.querySelector('input[aria-label="启用 deepseek-fixture"]')?.checked === false && document.querySelector('input[aria-label="启用 deepseek-fixture"]')?.disabled === false`,
 		'provider disabled state'
 	);
 	await cdp.click(
@@ -614,7 +614,7 @@ async function providerSettings(cdp) {
 		'enable provider model'
 	);
 	await cdp.waitForExpression(
-		`document.querySelector('input[aria-label="启用 deepseek-fixture"]')?.checked === true`,
+		`document.querySelector('input[aria-label="启用 deepseek-fixture"]')?.checked === true && document.querySelector('input[aria-label="启用 deepseek-fixture"]')?.disabled === false`,
 		'provider enabled state'
 	);
 	const detailWidth = await cdp.evaluate(

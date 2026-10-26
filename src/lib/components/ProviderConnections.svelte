@@ -138,7 +138,7 @@
 			: (connection.config?.model_ids ?? []).map((id: string) => ({ id, upstream_id: id }));
 
 	const load = async () => {
-		loading = true;
+		loading = connections.length === 0;
 		error = '';
 		try {
 			const [catalog, rows] = await Promise.all([getProviderCatalog(), getProviderConnections()]);
@@ -654,7 +654,7 @@
 								<ProviderModelManager
 									{connection}
 									canManage={canManageConnection(connection)}
-									on:updated={async () => {
+									onUpdated={async () => {
 										await load();
 										await refreshGlobalModels();
 									}}
