@@ -1111,6 +1111,12 @@ async function main() {
 			`${origin}/notes/reading-note`,
 			"document.querySelector('#note-editor h2')"
 		);
+		await client.send('Emulation.setDeviceMetricsOverride', {
+			width: 393,
+			height: 852,
+			deviceScaleFactor: 2,
+			mobile: true
+		});
 		await client.click(
 			"document.querySelector('button[aria-label=笔记目录]')",
 			'open heading outline'
@@ -1119,6 +1125,13 @@ async function main() {
 			"document.querySelectorAll('.outline-popover > button').length === 2",
 			'outline headings'
 		);
+		assert.ok(
+			await client.evaluate(
+				"(() => {const r=document.querySelector('.outline-popover').getBoundingClientRect();return r.left>=0 && r.right<=innerWidth;})()"
+			),
+			'mobile outline stays inside the viewport'
+		);
+		await client.screenshot('note-outline-mobile.png');
 		await client.click(
 			"[...document.querySelectorAll('.outline-popover > button')].find(e=>e.textContent.includes('重点回顾'))",
 			'jump to second heading'
