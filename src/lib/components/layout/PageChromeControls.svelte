@@ -66,8 +66,8 @@
 			if (!frame) frame = requestAnimationFrame(measure);
 		}
 		const changes = new MutationObserver(schedule);
-		const content = document.getElementById('main-content');
-		if (content) changes.observe(content, { childList: true, subtree: true });
+		const content = document.querySelector('.owui-app-shell') ?? document.body;
+		changes.observe(content, { childList: true, subtree: true });
 		window.addEventListener('resize', schedule);
 		window.visualViewport?.addEventListener('resize', schedule);
 		schedule();
