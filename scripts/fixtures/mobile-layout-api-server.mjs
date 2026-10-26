@@ -333,6 +333,10 @@ function api(pathname) {
 			{ id: 'kimi', name: 'Kimi Code', auth_types: ['oauth'], default_base_url: '' },
 			{ id: 'chatgpt', name: 'ChatGPT', auth_types: ['oauth'], default_base_url: '' }
 		];
+	if (pathname === '/api/v1/providers/calls/history')
+		return { data: [], summary: [], retention_days: 30 };
+	if (pathname === '/api/v1/providers/legacy-migration/preview')
+		return { sources: [], conflicts: {} };
 	if (pathname === '/api/v1/providers/connections')
 		return [providerConnection, kimiConnection, chatgptConnection].filter(Boolean);
 	if (pathname === '/api/v1/providers/models')
@@ -628,6 +632,31 @@ const server = createServer(async (request, response) => {
 				model_ids: payload.config.model_ids,
 				visibility: payload.visibility
 			});
+			send(response, 200, providerConnection);
+			return;
+		}
+		if (url.pathname.endsWith('/models/refresh') && request.method === 'POST') {
+			if (providerConnection)
+				providerConnection.models = [
+					{
+						id: 'provider:fixture-provider-connection:deepseek-fixture',
+						upstream_id: 'deepseek-fixture',
+						name: 'Fixture DeepSeek',
+						uses: { chat: 'openai-chat' },
+						enabled: true,
+						capability_source: 'provider-adapter'
+					}
+				];
+			send(response, 200, { models: providerConnection?.models ?? [], status: 'connected' });
+			return;
+		}
+		if (url.pathname.endsWith('/model-enabled') && request.method === 'PUT') {
+			const chunks = [];
+			for await (const chunk of request) chunks.push(chunk);
+			const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+			const model = providerConnection?.models.find((m) => m.upstream_id === payload.upstream_id);
+			if (model) model.enabled = payload.enabled;
+			event('provider-model-enabled', payload);
 			send(response, 200, providerConnection);
 			return;
 		}

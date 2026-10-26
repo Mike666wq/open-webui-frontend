@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { updateUserSettings } from '$lib/apis/users';
+	import ProviderCallHistory from '$lib/components/ProviderCallHistory.svelte';
+	import ProviderLegacyMigration from '$lib/components/ProviderLegacyMigration.svelte';
 	import ProviderModelManager from '$lib/components/ProviderModelManager.svelte';
 	import { getContext, onMount, onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
@@ -32,6 +35,7 @@
 	type Provider = { id: string; name: string; auth_types?: string[]; default_base_url?: string };
 	type Model = { id: string; name?: string; owned_by?: string; upstream_id?: string };
 	type Connection = {
+		catalog?: any;
 		id: string;
 		provider_id: string;
 		name: string;
@@ -47,6 +51,11 @@
 
 	let providers: Provider[] = [];
 	let connections: Connection[] = [];
+	let selectedConnectionId = '';
+	let detailTab = 'models';
+	let mobileDetail = false;
+	$: if (connections.length && !connections.some((c) => c.id === selectedConnectionId))
+		selectedConnectionId = connections[0].id;
 	let loading = true;
 	let saving = false;
 	let workingId = '';
@@ -79,12 +88,19 @@
 	let editRegion = '';
 	let editWorkspaceId = '';
 	let editApiType = 'openai';
-	let editModelIds: string[] = [];
-	let editModelOptions: Model[] = [];
 	let manualModelInput = '';
 	let manualMode = false;
 	let draftStatus = 'connected';
 	let revealApiKey = false;
+	async function dismissAuxiliaryNotice() {
+		try {
+			await updateUserSettings(localStorage.token, { ui: { auxiliaryModelNoticeV1: true } });
+		} catch (e) {
+			toast.error(String(e));
+			return;
+		}
+		settings.set({ ...$settings, auxiliaryModelNoticeV1: true });
+	}
 
 	$: provider = providers.find((item) => item.id === providerId);
 	$: chatGPT = providerId === 'chatgpt';
@@ -122,7 +138,7 @@
 			: (connection.config?.model_ids ?? []).map((id: string) => ({ id, upstream_id: id }));
 
 	const load = async () => {
-		loading = true;
+		loading = connections.length === 0;
 		error = '';
 		try {
 			const [catalog, rows] = await Promise.all([getProviderCatalog(), getProviderConnections()]);
@@ -357,19 +373,9 @@
 			connection.config?.region ?? (connection.provider_id === 'bailian' ? 'cn-beijing' : '');
 		editWorkspaceId = connection.config?.workspace_id ?? '';
 		editApiType = connection.config?.api_type ?? 'openai';
-		editModelOptions = connectionModelOptions(connection);
-		editModelIds = editModelOptions.map((model) => model.upstream_id ?? model.id);
 	};
 
 	const saveEdit = async (connection: Connection) => {
-		if (
-			!isOAuthConnection(connection) &&
-			editModelOptions.length > 0 &&
-			editModelIds.length === 0
-		) {
-			toast.error($i18n.t('Select at least one model'));
-			return;
-		}
 		workingId = connection.id;
 		try {
 			const payload: Record<string, unknown> = { name: editName.trim() };
@@ -379,21 +385,14 @@
 					...(editRegion.trim() ? { region: editRegion.trim() } : {}),
 					...(editWorkspaceId.trim() ? { workspace_id: editWorkspaceId.trim() } : {}),
 					...(connection.provider_id === 'custom' ? { api_type: editApiType } : {}),
-					model_ids: editModelIds
+					model_ids: connection.config?.model_ids ?? []
 				};
 				const oldConfig = connection.config ?? {};
 				const configChanged =
 					(editBaseUrl.trim() || undefined) !== (oldConfig.base_url || undefined) ||
 					(editRegion.trim() || undefined) !== (oldConfig.region || undefined) ||
 					(editWorkspaceId.trim() || undefined) !== (oldConfig.workspace_id || undefined) ||
-					(connection.provider_id === 'custom' &&
-						editApiType !== (oldConfig.api_type ?? 'openai')) ||
-					JSON.stringify(editModelIds) !==
-						JSON.stringify(
-							connection.models?.length
-								? connection.models.map((model) => model.upstream_id ?? model.id)
-								: (oldConfig.model_ids ?? [])
-						);
+					(connection.provider_id === 'custom' && editApiType !== (oldConfig.api_type ?? 'openai'));
 				if (editApiKey.trim()) payload.api_key = editApiKey.trim();
 				if (configChanged || editApiKey.trim()) payload.config = nextConfig;
 			}
@@ -562,7 +561,7 @@
 			type="button"
 			data-testid="provider-add"
 			disabled={loading || providers.length === 0}
-			class="rounded-lg bg-gray-900 px-3 py-2 text-xs text-white hover:bg-black dark:bg-gray-100 dark:text-gray-900"
+			class="shrink-0 whitespace-nowrap rounded-lg bg-gray-900 px-3 py-2 text-xs text-white hover:bg-black dark:bg-gray-100 dark:text-gray-900"
 			on:click={() => {
 				wizard = true;
 			}}
@@ -570,6 +569,15 @@
 			{$i18n.t('Add provider')}
 		</button>
 	</div>
+
+	{#if !$settings.auxiliaryModelNoticeV1}<div
+			class="mt-3 rounded-xl border border-blue-300 bg-blue-50/80 p-3 text-xs text-blue-900 dark:bg-blue-950/60 dark:text-blue-100"
+		>
+			<p>
+				辅助任务现在需要独立选择模型。未配置时不再自动使用当前聊天模型生成标题、标签或后续建议；搜索查询等辅助功能也需要明确配置。可在管理员「界面」设置中选择任务模型。
+			</p>
+			<button type="button" class="mt-2 underline" on:click={dismissAuxiliaryNotice}>知道了</button>
+		</div>{/if}
 
 	{#if error && !wizard}<p
 			class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300"
@@ -595,230 +603,274 @@
 			</p>
 		</div>
 	{:else}
-		<div class="mt-4 space-y-2">
-			{#each connections as connection (connection.id)}
-				<div class="rounded-lg border border-gray-100 p-3 dark:border-gray-800">
-					{#if editingId === connection.id}
-						<div class="space-y-3">
-							<label class="block text-xs text-gray-600 dark:text-gray-300"
-								>{$i18n.t('Account name')}
-								<input
-									class="mt-1 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-2 text-sm dark:border-gray-700"
-									bind:value={editName}
-									maxlength="80"
+		<div class="mt-4 grid min-w-0 gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
+			<nav class:hidden={mobileDetail} class="space-y-2 md:!block" aria-label="供应商列表">
+				{#each connections as item}<button
+						type="button"
+						class="w-full rounded-xl border p-3 text-left text-gray-900 dark:border-gray-700 dark:text-gray-100 {selectedConnectionId ===
+						item.id
+							? 'bg-blue-50 dark:bg-blue-950/40 border-blue-400'
+							: 'border-gray-200'}"
+						on:click={() => {
+							selectedConnectionId = item.id;
+							mobileDetail = true;
+							editingId = '';
+						}}
+						><span class="block truncate text-sm font-medium">{item.name}</span><span
+							class="text-xs"
+							>{item.models?.length ?? 0} 个模型 · {item.auth_type === 'oauth'
+								? '账号登录'
+								: 'API Key'}</span
+						></button
+					>{/each}
+			</nav>
+			<div class:hidden={!mobileDetail} class="min-w-0 md:!block">
+				<button
+					type="button"
+					class="mb-3 text-sm text-blue-600 dark:text-blue-300 md:hidden"
+					on:click={() => (mobileDetail = false)}>← 供应商列表</button
+				>
+				<div class="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="供应商详情">
+					{#each [['settings', '连接设置'], ['models', '模型'], ['calls', '调用记录']] as [id, label]}<button
+							type="button"
+							role="tab"
+							aria-selected={detailTab === id}
+							class="rounded-lg px-3 py-2 text-sm {detailTab === id
+								? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+								: 'text-gray-700 dark:text-gray-200'}"
+							on:click={() => {
+								detailTab = id;
+								editingId = '';
+							}}>{label}</button
+						>{/each}
+				</div>
+				{#each connections as connection (connection.id)}
+					{#if connection.id === selectedConnectionId}
+						<div class="rounded-lg border border-gray-100 p-3 dark:border-gray-800">
+							{#if detailTab === 'models'}
+								<h4 class="mb-3 break-all font-medium text-gray-900 dark:text-white">
+									{connection.name}
+								</h4>
+								<ProviderModelManager
+									{connection}
+									canManage={canManageConnection(connection)}
+									onUpdated={async () => {
+										await load();
+										await refreshGlobalModels();
+									}}
+									on:refresh={() => refreshModels(connection)}
 								/>
-							</label>
-							{#if !isOAuthConnection(connection)}
-								<label class="block text-xs text-gray-600 dark:text-gray-300">
-									{$i18n.t('Replace API key (optional)')}
-									<input
-										class="mt-1 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-2 text-sm dark:border-gray-700"
-										type="password"
-										bind:value={editApiKey}
-										autocomplete="new-password"
-										placeholder={$i18n.t('Leave blank to keep the current key')}
-									/>
-								</label>
-								{#if ['openai', 'deepseek', 'bailian', 'custom'].includes(connection.provider_id)}
-									<label class="block text-xs text-gray-600 dark:text-gray-300">
-										{$i18n.t('Base URL')}
+							{:else if detailTab === 'calls'}
+								{#key connection.id}<ProviderCallHistory connectionId={connection.id} />{/key}
+							{:else if editingId === connection.id}
+								<div class="space-y-3">
+									<label class="block text-xs text-gray-600 dark:text-gray-300"
+										>{$i18n.t('Account name')}
 										<input
 											class="mt-1 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-2 text-sm dark:border-gray-700"
-											bind:value={editBaseUrl}
-											placeholder={providers.find((item) => item.id === connection.provider_id)
-												?.default_base_url ?? 'https://api.example.com/v1'}
+											bind:value={editName}
+											maxlength="80"
 										/>
 									</label>
-								{/if}
-								{#if connection.provider_id === 'bailian'}
-									<div class="grid gap-2 sm:grid-cols-2">
-										<label class="block text-xs text-gray-600 dark:text-gray-300"
-											>{$i18n.t('Region')}<select
-												class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
-												bind:value={editRegion}
-												><option value="cn-beijing">China (Beijing)</option><option
-													value="ap-southeast-1">Asia Pacific (Singapore)</option
-												><option value="cn-hongkong">China (Hong Kong)</option><option
-													value="eu-central-1">Europe (Frankfurt)</option
-												><option value="us-east-1">US (Virginia)</option><option
-													value="ap-northeast-1">Asia Pacific (Tokyo)</option
-												></select
-											></label
-										><label class="block text-xs text-gray-600 dark:text-gray-300"
-											>{$i18n.t(
-												bailianNeedsWorkspace(editRegion)
-													? 'Workspace ID (required in this region)'
-													: 'Workspace ID (optional)'
-											)}<input
+									{#if !isOAuthConnection(connection)}
+										<label class="block text-xs text-gray-600 dark:text-gray-300">
+											{$i18n.t('Replace API key (optional)')}
+											<input
 												class="mt-1 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-2 text-sm dark:border-gray-700"
-												bind:value={editWorkspaceId}
-											/></label
-										>
+												type="password"
+												bind:value={editApiKey}
+												autocomplete="new-password"
+												placeholder={$i18n.t('Leave blank to keep the current key')}
+											/>
+										</label>
+										{#if ['openai', 'deepseek', 'bailian', 'custom'].includes(connection.provider_id)}
+											<label class="block text-xs text-gray-600 dark:text-gray-300">
+												{$i18n.t('Base URL')}
+												<input
+													class="mt-1 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-2 text-sm dark:border-gray-700"
+													bind:value={editBaseUrl}
+													placeholder={providers.find((item) => item.id === connection.provider_id)
+														?.default_base_url ?? 'https://api.example.com/v1'}
+												/>
+											</label>
+										{/if}
+										{#if connection.provider_id === 'bailian'}
+											<div class="grid gap-2 sm:grid-cols-2">
+												<label class="block text-xs text-gray-600 dark:text-gray-300"
+													>{$i18n.t('Region')}<select
+														class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+														bind:value={editRegion}
+														><option value="cn-beijing">China (Beijing)</option><option
+															value="ap-southeast-1">Asia Pacific (Singapore)</option
+														><option value="cn-hongkong">China (Hong Kong)</option><option
+															value="eu-central-1">Europe (Frankfurt)</option
+														><option value="us-east-1">US (Virginia)</option><option
+															value="ap-northeast-1">Asia Pacific (Tokyo)</option
+														></select
+													></label
+												><label class="block text-xs text-gray-600 dark:text-gray-300"
+													>{$i18n.t(
+														bailianNeedsWorkspace(editRegion)
+															? 'Workspace ID (required in this region)'
+															: 'Workspace ID (optional)'
+													)}<input
+														class="mt-1 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-2 text-sm dark:border-gray-700"
+														bind:value={editWorkspaceId}
+													/></label
+												>
+											</div>
+										{/if}
+										{#if connection.provider_id === 'custom'}
+											<label class="block text-xs text-gray-600 dark:text-gray-300"
+												>{$i18n.t('API type')}<select
+													class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+													bind:value={editApiType}
+													><option value="openai">Chat Completions</option><option value="responses"
+														>Responses API</option
+													></select
+												></label
+											>
+										{/if}
+										<p class="text-xs text-gray-600 dark:text-gray-300">
+											模型选择和启停统一在「模型」标签管理。
+										</p>
+									{/if}
+									{#if isAdmin && !isOAuthConnection(connection)}
+										<label class="block text-xs text-gray-600 dark:text-gray-300"
+											>{$i18n.t('Who can use this account?')}
+											<select
+												class="mt-1 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-2 text-sm dark:border-gray-700"
+												bind:value={editVisibility}
+											>
+												<option value="private">{$i18n.t('Only me')}</option><option value="shared"
+													>{$i18n.t('Share with selected people')}</option
+												>
+											</select>
+										</label>
+										{#if editVisibility === 'shared'}<AccessControl
+												bind:accessGrants={editGrants}
+												accessRoles={['read']}
+												sharePublic={false}
+												shareOpen={false}
+											/>{/if}
+									{/if}
+									<div class="flex justify-end gap-2">
+										{#if canManageConnection(connection)}<button
+												type="button"
+												class="rounded-lg px-3 py-1.5 text-xs text-gray-500"
+												on:click={() => (editingId = '')}>{$i18n.t('Cancel')}</button
+											><button
+												type="button"
+												class="rounded-lg bg-gray-900 px-3 py-1.5 text-xs text-white dark:bg-gray-100 dark:text-gray-900"
+												disabled={workingId === connection.id}
+												on:click={() => saveEdit(connection)}>{$i18n.t('Save')}</button
+											>
+										{/if}
 									</div>
-								{/if}
-								{#if connection.provider_id === 'custom'}
-									<label class="block text-xs text-gray-600 dark:text-gray-300"
-										>{$i18n.t('API type')}<select
-											class="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
-											bind:value={editApiType}
-											><option value="openai">Chat Completions</option><option value="responses"
-												>Responses API</option
-											></select
-										></label
-									>
-								{/if}
-								{#if editModelOptions.length}
-									<div>
-										<p class="mb-1 text-xs text-gray-500">{$i18n.t('Available models')}</p>
-										<div
-											class="max-h-36 space-y-1 overflow-y-auto rounded-lg border border-gray-100 p-2 dark:border-gray-800"
-										>
-											{#each editModelOptions as model (model.upstream_id ?? model.id)}<label
-													class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300"
-													><input
-														type="checkbox"
-														value={model.upstream_id ?? model.id}
-														bind:group={editModelIds}
-													/>{model.name ?? model.upstream_id ?? model.id}</label
-												>{/each}
-										</div>
-									</div>
-								{/if}
-							{/if}
-							{#if isAdmin && !isOAuthConnection(connection)}
-								<label class="block text-xs text-gray-600 dark:text-gray-300"
-									>{$i18n.t('Who can use this account?')}
-									<select
-										class="mt-1 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-2 text-sm dark:border-gray-700"
-										bind:value={editVisibility}
-									>
-										<option value="private">{$i18n.t('Only me')}</option><option value="shared"
-											>{$i18n.t('Share with selected people')}</option
-										>
-									</select>
-								</label>
-								{#if editVisibility === 'shared'}<AccessControl
-										bind:accessGrants={editGrants}
-										accessRoles={['read']}
-										sharePublic={false}
-										shareOpen={false}
-									/>{/if}
-							{/if}
-							<div class="flex justify-end gap-2">
-								{#if canManageConnection(connection)}<button
-										type="button"
-										class="rounded-lg px-3 py-1.5 text-xs text-gray-500"
-										on:click={() => (editingId = '')}>{$i18n.t('Cancel')}</button
-									><button
-										type="button"
-										class="rounded-lg bg-gray-900 px-3 py-1.5 text-xs text-white dark:bg-gray-100 dark:text-gray-900"
-										disabled={workingId === connection.id ||
-											(!isOAuthConnection(connection) &&
-												editModelOptions.length > 0 &&
-												editModelIds.length === 0)}
-										on:click={() => saveEdit(connection)}>{$i18n.t('Save')}</button
-									>
-								{/if}
-							</div>
-						</div>
-					{:else}
-						<div
-							class="flex flex-col items-start justify-between gap-3 sm:flex-row"
-							data-testid="provider-account-row"
-						>
-							<div class="min-w-0 w-full sm:w-auto sm:flex-1" data-testid="provider-account-info">
-								<div class="flex flex-wrap items-center gap-2">
-									<p class="truncate text-sm font-medium text-gray-900 dark:text-white">
-										{connection.name}
-									</p>
-									<span
-										class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-800"
-										>{connection.provider_id}</span
-									>
-									<span
-										class="rounded-full px-2 py-0.5 text-[10px] {connection.status === 'connected'
-											? 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300'
-											: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'}"
-										>{statusLabel(connection)}</span
-									>
-									<span class="text-[10px] text-gray-400"
-										>{connection.visibility === 'shared'
-											? $i18n.t('Shared')
-											: $i18n.t('Private')}</span
-									>
 								</div>
-								<p class="mt-1 text-xs text-gray-500">
-									{connectionModelOptions(connection).length}
-									{$i18n.t('models')} · {connection.auth_type === 'oauth'
-										? $i18n.t('Account sign-in')
-										: $i18n.t('API key')}
-								</p>
-								{#if canManageConnection(connection) && $backendConfig?.features?.enable_provider_model_capabilities}<ProviderModelManager
-										{connection}
-										on:updated={async () => {
-											await load();
-											await refreshGlobalModels();
-										}}
-									/>{/if}
-							</div>
-							<div
-								class="flex w-full shrink-0 flex-wrap justify-end gap-1 sm:w-auto"
-								data-testid="provider-account-actions"
-							>
-								{#if canManageConnection(connection)}
-									<button
-										type="button"
-										class="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
-										disabled={workingId === connection.id}
-										on:click={() => beginEdit(connection)}>{$i18n.t('Edit')}</button
-									>{/if}
-								<button
-									type="button"
-									class="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
-									disabled={workingId === connection.id}
-									on:click={() => verifySaved(connection)}>{$i18n.t('Verify')}</button
+							{:else}
+								<div
+									class="flex flex-col items-start justify-between gap-3 sm:flex-row"
+									data-testid="provider-account-row"
 								>
-								{#if canManageConnection(connection) && isOAuthConnection(connection)}
-									<button
-										type="button"
-										class="rounded-md px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 disabled:opacity-50"
-										disabled={workingId === connection.id}
-										on:click={() => {
-											providerId = connection.provider_id;
-											beginOAuth(connection.id);
-										}}>{$i18n.t('Reconnect')}</button
+									<div
+										class="min-w-0 w-full sm:w-auto sm:flex-1"
+										data-testid="provider-account-info"
 									>
+										<div class="flex flex-wrap items-center gap-2">
+											<p class="truncate text-sm font-medium text-gray-900 dark:text-white">
+												{connection.name}
+											</p>
+											<span
+												class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-800"
+												>{connection.provider_id}</span
+											>
+											<span
+												class="rounded-full px-2 py-0.5 text-[10px] {connection.status ===
+												'connected'
+													? 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300'
+													: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'}"
+												>{statusLabel(connection)}</span
+											>
+											<span class="text-[10px] text-gray-400"
+												>{connection.visibility === 'shared'
+													? $i18n.t('Shared')
+													: $i18n.t('Private')}</span
+											>
+										</div>
+										<p class="mt-1 text-xs text-gray-500">
+											{connectionModelOptions(connection).length}
+											{$i18n.t('models')} · {connection.auth_type === 'oauth'
+												? $i18n.t('Account sign-in')
+												: $i18n.t('API key')}
+										</p>
+									</div>
+									<div
+										class="flex w-full shrink-0 flex-wrap justify-end gap-1 sm:w-auto"
+										data-testid="provider-account-actions"
+									>
+										{#if canManageConnection(connection)}
+											<button
+												type="button"
+												class="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
+												disabled={workingId === connection.id}
+												on:click={() => beginEdit(connection)}>{$i18n.t('Edit')}</button
+											>{/if}
+										<button
+											type="button"
+											class="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
+											disabled={workingId === connection.id}
+											on:click={() => verifySaved(connection)}>{$i18n.t('Verify')}</button
+										>
+										{#if canManageConnection(connection) && isOAuthConnection(connection)}
+											<button
+												type="button"
+												class="rounded-md px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 disabled:opacity-50"
+												disabled={workingId === connection.id}
+												on:click={() => {
+													providerId = connection.provider_id;
+													beginOAuth(connection.id);
+												}}>{$i18n.t('Reconnect')}</button
+											>
+										{/if}
+										{#if canManageConnection(connection)}<button
+												type="button"
+												class="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
+												disabled={workingId === connection.id}
+												on:click={() => refreshModels(connection)}>{$i18n.t('Refresh')}</button
+											>
+											<button
+												type="button"
+												class="rounded-md px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50"
+												disabled={workingId === connection.id}
+												on:click={() => removeConnection(connection)}>{$i18n.t('Remove')}</button
+											>{/if}
+									</div>
+								</div>
+								{#if connectionModelOptions(connection).length}
+									<div class="mt-2 flex flex-wrap gap-1">
+										{#each connectionModelOptions(connection).slice(0, 8) as model (model.upstream_id ?? model.id)}<span
+												class="rounded bg-gray-50 px-2 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800"
+												>{model.name ?? model.id}</span
+											>{/each}{#if connectionModelOptions(connection).length > 8}<span
+												class="px-1 py-0.5 text-[10px] text-gray-400"
+												>+{connectionModelOptions(connection).length - 8}</span
+											>{/if}
+									</div>
 								{/if}
-								{#if canManageConnection(connection)}<button
-										type="button"
-										class="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
-										disabled={workingId === connection.id}
-										on:click={() => refreshModels(connection)}>{$i18n.t('Refresh')}</button
-									>
-									<button
-										type="button"
-										class="rounded-md px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50"
-										disabled={workingId === connection.id}
-										on:click={() => removeConnection(connection)}>{$i18n.t('Remove')}</button
-									>{/if}
-							</div>
+							{/if}
 						</div>
-						{#if connectionModelOptions(connection).length}
-							<div class="mt-2 flex flex-wrap gap-1">
-								{#each connectionModelOptions(connection).slice(0, 8) as model (model.upstream_id ?? model.id)}<span
-										class="rounded bg-gray-50 px-2 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800"
-										>{model.name ?? model.id}</span
-									>{/each}{#if connectionModelOptions(connection).length > 8}<span
-										class="px-1 py-0.5 text-[10px] text-gray-400"
-										>+{connectionModelOptions(connection).length - 8}</span
-									>{/if}
-							</div>
-						{/if}
 					{/if}
-				</div>
-			{/each}
+				{/each}
+			</div>
 		</div>
 	{/if}
+	{#if isAdmin}<ProviderLegacyMigration
+			on:updated={async () => {
+				await load();
+				await refreshGlobalModels();
+			}}
+		/>{/if}
 </section>
 
 {#if wizard}

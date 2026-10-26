@@ -1,5 +1,5 @@
 import { get } from 'svelte/store';
-import { config } from '$lib/stores';
+import { config, providerCatalogs } from '$lib/stores';
 import { WEBUI_BASE_URL } from '$lib/constants';
 import { convertOpenApiToToolPayload, resolveSchema } from '$lib/utils';
 import { normalizeTags } from '$lib/utils/tags';
@@ -59,6 +59,7 @@ export const getModels = async (
 		throw error;
 	}
 
+	if (!base) providerCatalogs.set(res?.catalogs ?? []);
 	let models = res?.data ?? [];
 
 	if (connections && !base) {

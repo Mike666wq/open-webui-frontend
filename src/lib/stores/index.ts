@@ -12,6 +12,7 @@ import emojiShortCodes from '$lib/emoji-shortcodes.json';
 // When it changes, let every room hear at once.
 // Backend
 export const WEBUI_NAME = writable(APP_NAME);
+export const providerCatalogs = writable<any[]>([]);
 
 export const WEBUI_VERSION = writable(null);
 export const WEBUI_DEPLOYMENT_ID = writable(null);
@@ -242,6 +243,7 @@ type OllamaModelDetails = {
 };
 
 type Settings = {
+	auxiliaryModelNoticeV1?: boolean;
 	pinnedModels?: string[];
 	toolServers?: never[];
 	detectArtifacts?: boolean;
