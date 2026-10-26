@@ -1084,6 +1084,22 @@ async function main() {
 			`${origin}/workspace/knowledge`,
 			"document.querySelector('#workspace-container')?.textContent.includes('课堂资料')"
 		);
+
+		for (const dark of [false, true]) {
+			await client.evaluate(
+				`(() => {const key='owui-appearance:v3:'+location.origin;const v=JSON.parse(localStorage.getItem(key));v.theme='${dark ? 'dark' : 'light'}';v.enabled=true;localStorage.setItem(key,JSON.stringify(v));window.dispatchEvent(new StorageEvent('storage',{key,newValue:JSON.stringify(v),storageArea:localStorage}));})()`
+			);
+			await sleep(300);
+			const surface = await client.evaluate(
+				`(() => {const e=document.querySelector('#workspace-container');const c=getComputedStyle(e);return {background:c.backgroundColor,shadow:c.textShadow,color:c.color};})()`
+			);
+			assert.ok(
+				surface.background === 'rgba(0, 0, 0, 0)' || surface.background === 'transparent',
+				'workspace must keep the wallpaper visible'
+			);
+			assert.notEqual(surface.shadow, 'none', 'text has local contrast protection');
+			await client.screenshot(`knowledge-wallpaper-${dark ? 'dark' : 'light'}.png`);
+		}
 		await client.screenshot('knowledge-reading-surface.png');
 		await client.click(
 			"document.querySelector('[data-testid=page-chrome-controls] > button')",
@@ -1163,6 +1179,13 @@ async function main() {
 		);
 		await client.send('Emulation.setScrollbarsHidden', { hidden: true });
 		await client.navigate(`${origin}/notes`, "document.querySelector('#notes-container')");
+		assert.equal(
+			await client.evaluate(
+				"getComputedStyle(document.querySelector('#notes-container')).backgroundColor"
+			),
+			'rgba(0, 0, 0, 0)',
+			'notes list must keep the wallpaper visible'
+		);
 		await client.screenshot('notes-reading-surface.png');
 		await client.navigate(
 			`${origin}/notes/reading-note`,
