@@ -992,6 +992,10 @@ async function main() {
 			results.viewports[viewport.name] = {
 				chat: await chatGeometry(client, viewport.width)
 			};
+			await client.waitForExpression(
+				"(() => {const a=document.querySelector('[data-testid=page-chrome-controls]')?.getBoundingClientRect();const b=document.querySelector('#message-input-container')?.getBoundingClientRect();return a && b && (a.right<=b.left || a.left>=b.right || a.bottom<=b.top || a.top>=b.bottom);})()",
+				'layout control clears the composer'
+			);
 			await client.screenshot(`chat-${viewport.name}.png`);
 			await dismissUpdateDialog(client);
 		}
