@@ -1076,6 +1076,11 @@ async function main() {
 		}
 
 		// Collapsed chrome remains reversible and note reading never writes data.
+		await client.navigate(
+			`${origin}/workspace/knowledge`,
+			"document.querySelector('#workspace-container')?.textContent.includes('课堂资料')"
+		);
+		await client.screenshot('knowledge-reading-surface.png');
 		await client.click(
 			"document.querySelector('[data-testid=page-chrome-controls] > button')",
 			'page layout controls'

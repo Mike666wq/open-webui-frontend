@@ -78,7 +78,7 @@
 		position: fixed;
 		bottom: calc(4rem + env(safe-area-inset-bottom));
 		left: 0.6rem;
-		z-index: 45;
+		z-index: 70;
 	}
 	.chrome-trigger,
 	.chrome-menu {
