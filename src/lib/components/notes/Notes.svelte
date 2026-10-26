@@ -402,7 +402,7 @@
 			</div>
 		</DeleteConfirmDialog>
 
-		<div class="flex items-center gap-0.5 md:gap-1 mb-1">
+		<div data-page-toolbar class="flex items-center gap-0.5 md:gap-1 mb-1">
 			{#if $mobile}
 				<div class="{$showSidebar ? 'md:hidden' : ''} flex flex-none items-center">
 					<Tooltip

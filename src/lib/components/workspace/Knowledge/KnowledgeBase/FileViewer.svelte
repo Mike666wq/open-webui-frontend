@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { focusLayer } from '$lib/components/common/focusLayer';
+	let expanded = false;
 	import { getContext, onDestroy, onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import DOMPurify from 'dompurify';
@@ -219,7 +221,23 @@
 	});
 </script>
 
-<div class="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-white dark:bg-gray-900">
+<svelte:window
+	on:keydown={(e) => {
+		if (expanded && e.key === 'Escape') {
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			expanded = false;
+		}
+	}}
+/>
+<div
+	use:focusLayer={expanded}
+	class:reader-expanded={expanded}
+	role={expanded ? 'dialog' : undefined}
+	aria-modal={expanded ? true : undefined}
+	aria-label={expanded ? name : undefined}
+	class="file-reader flex h-full min-h-0 min-w-0 flex-1 flex-col bg-white dark:bg-gray-900"
+>
 	<div class="flex h-8 shrink-0 items-center gap-1 px-2.5 text-xs dark:bg-black">
 		{#if mobile}<button
 				type="button"
@@ -228,6 +246,14 @@
 				on:click={onClose}><ChevronLeft className="size-3.5" />{$i18n.t('Back')}</button
 			>{/if}
 		<span class="min-w-0 flex-1 truncate text-gray-500" title={name}>{name}</span>
+		<button
+			type="button"
+			class="shrink-0 rounded px-2 py-1"
+			aria-label={$i18n.t(expanded ? 'Exit full screen' : 'Full screen')}
+			aria-pressed={expanded}
+			on:click={() => (expanded = !expanded)}
+			>{$i18n.t(expanded ? 'Exit full screen' : 'Full screen')}</button
+		>
 		{#if !noOriginal && (originalLoaded || previewError)}<button
 				type="button"
 				class="shrink-0 px-1 py-0.5 {state.mode === 'preview' ? '' : 'text-gray-400'}"
@@ -325,3 +351,15 @@
 			</p>{/if}
 	{/if}
 </div>
+
+<style>
+	.reader-expanded {
+		position: fixed;
+		inset: 0;
+		width: 100vw;
+		height: 100dvh !important;
+		z-index: 100;
+		background: rgb(var(--mist-surface-rgb, 255 255 255));
+		color: var(--mist-ink, #172334);
+	}
+</style>

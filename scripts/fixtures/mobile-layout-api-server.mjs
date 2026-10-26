@@ -172,6 +172,26 @@ const recordingNotes = new Map([
 		}
 	]
 ]);
+const readingNote = {
+	id: 'reading-note',
+	user_id: userId,
+	title: '目录与全屏验收',
+	write_access: false,
+	data: {
+		content: {
+			html:
+				'<h1>课程概览</h1><p>' +
+				'课堂正文。'.repeat(1200) +
+				'</p><h2>重点回顾</h2><p>本节结论。</p>',
+			md: '# 课程概览\n\n课堂正文。\n\n## 重点回顾\n\n本节结论。'
+		}
+	},
+	meta: {},
+	access_grants: [],
+	created_at: now * 1e9,
+	updated_at: now * 1e9
+};
+recordingNotes.set('reading-note', readingNote);
 const recording = {
 	id: 'recording-fixture',
 	title: '课堂录音.wav',
@@ -317,6 +337,22 @@ function api(pathname) {
 	if (pathname === '/api/v1/folders/') return [];
 	if (pathname === '/api/v1/channels/') return [];
 	if (pathname === '/api/v1/notes/pinned') return [];
+	if (pathname === '/api/v1/notes/search') return { items: [readingNote], total: 1 };
+	if (pathname === '/api/v1/knowledge/search')
+		return {
+			items: [
+				{
+					id: 'reading-kb',
+					name: '课堂资料',
+					description: '可读性验收',
+					user_id: userId,
+					created_at: now,
+					updated_at: now,
+					file_count: 1
+				}
+			],
+			total: 1
+		};
 	if (pathname === '/api/v1/recordings/config')
 		return {
 			max_size_mb: 500,

@@ -1074,6 +1074,76 @@ async function main() {
 			}
 			await client.screenshot(`workspace-tabs-${dark ? 'dark' : 'light'}.png`);
 		}
+
+		// Collapsed chrome remains reversible and note reading never writes data.
+		await client.click(
+			"document.querySelector('[data-testid=page-chrome-controls] > button')",
+			'page layout controls'
+		);
+		await client.click(
+			"[...document.querySelectorAll('.chrome-menu button')].find(e=>e.textContent.includes('收起顶部栏'))",
+			'collapse top toolbar'
+		);
+		assert.ok(await client.evaluate("document.documentElement.hasAttribute('data-topbar-hidden')"));
+		await client.click(
+			"[...document.querySelectorAll('.chrome-menu button')].find(e=>e.textContent.includes('收起侧边导航'))",
+			'collapse side navigation'
+		);
+		await sleep(350);
+		assert.ok(
+			await client.evaluate(
+				"document.querySelector('#main-content > div').getBoundingClientRect().left < 2"
+			),
+			'hidden navigation releases content width'
+		);
+		await client.click(
+			"[...document.querySelectorAll('.chrome-menu button')].find(e=>e.textContent.includes('恢复页面布局'))",
+			'restore all navigation'
+		);
+		await client.navigate(`${origin}/notes`, "document.querySelector('#notes-container')");
+		await client.screenshot('notes-reading-surface.png');
+		await client.navigate(
+			`${origin}/notes/reading-note`,
+			"document.querySelector('#note-editor h2')"
+		);
+		await client.click(
+			"document.querySelector('button[aria-label=笔记目录]')",
+			'open heading outline'
+		);
+		await client.waitForExpression(
+			"document.querySelectorAll('.outline-popover > button').length === 2",
+			'outline headings'
+		);
+		await client.click(
+			"[...document.querySelectorAll('.outline-popover > button')].find(e=>e.textContent.includes('重点回顾'))",
+			'jump to second heading'
+		);
+		await sleep(700);
+		assert.ok(
+			await client.evaluate("document.querySelector('#note-content-container').scrollTop > 0"),
+			'outline scrolls the note'
+		);
+		await client.click(
+			"[...document.querySelectorAll('#note-editor button')].find(e=>e.textContent.trim()==='全屏阅读')",
+			'expand note'
+		);
+		assert.ok(
+			await client.evaluate(
+				"document.querySelector('.note-expanded')?.getBoundingClientRect().left === 0 && document.querySelector('.owui-mist-app').inert"
+			),
+			'reader expands without remounting the editor'
+		);
+		await client.screenshot('note-fullscreen-outline.png');
+		await client.send('Input.dispatchKeyEvent', {
+			type: 'keyDown',
+			key: 'Escape',
+			code: 'Escape',
+			windowsVirtualKeyCode: 27
+		});
+		await client.waitForExpression(
+			"!document.querySelector('.note-expanded') && !document.querySelector('.owui-mist-app').inert",
+			'escape restores page'
+		);
 		await client.send('Emulation.setDeviceMetricsOverride', {
 			width: 393,
 			height: 852,
