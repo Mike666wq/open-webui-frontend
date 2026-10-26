@@ -9,9 +9,11 @@
 	let previousSidebar = false;
 	let dock: HTMLDivElement;
 	let dockBottom = 'calc(4rem + env(safe-area-inset-bottom))';
+	let reposition = () => {};
 	function apply() {
 		document.documentElement.toggleAttribute('data-topbar-hidden', topHidden);
 		document.documentElement.toggleAttribute('data-sidebar-hidden', sideHidden);
+		reposition();
 		if (ready)
 			localStorage.setItem(
 				'owui:page-chrome',
@@ -65,6 +67,7 @@
 		function schedule() {
 			if (!frame) frame = requestAnimationFrame(measure);
 		}
+		reposition = schedule;
 		const changes = new MutationObserver(schedule);
 		const content = document.querySelector('.owui-app-shell') ?? document.body;
 		changes.observe(content, { childList: true, subtree: true });
@@ -72,6 +75,7 @@
 		window.visualViewport?.addEventListener('resize', schedule);
 		schedule();
 		return () => {
+			reposition = () => {};
 			changes.disconnect();
 			resize.disconnect();
 			if (frame) cancelAnimationFrame(frame);
