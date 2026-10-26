@@ -153,21 +153,29 @@ class CdpClient {
 	}
 
 	async click(expression, label) {
-		const rect = await this.evaluate(`
-			(async () => {
-				const element = ${expression};
-				if (!element) return null;
-				element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'nearest' });
-				await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-				const bounds = element.getBoundingClientRect();
-				if (bounds.width < 1 || bounds.height < 1) return null;
-				return {
-					x: bounds.left + bounds.width / 2,
-					y: bounds.top + bounds.height / 2
-				};
-			})()
-		`);
-		assert.ok(rect, `Missing clickable control: ${label}`);
+		const rect = await waitForValue(
+			() =>
+				this.evaluate(`
+                (async () => {
+                    const element = ${expression};
+                    if (!element || element.disabled) return null;
+                    element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+                    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                    const before = element.getBoundingClientRect();
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    const bounds = element.getBoundingClientRect();
+                    if (bounds.width < 1 || bounds.height < 1 || Math.abs(before.left - bounds.left) > 0.5 || Math.abs(before.top - bounds.top) > 0.5) return null;
+                    const x = bounds.left + bounds.width / 2;
+                    const y = bounds.top + bounds.height / 2;
+                    const hit = document.elementFromPoint(x, y);
+                    if (!hit || (hit !== element && !element.contains(hit))) return null;
+                    return { x, y };
+                })()
+            `),
+			(value) => Boolean(value),
+			`visible, unobstructed control: ${label}`,
+			15_000
+		);
 		await this.send('Input.dispatchMouseEvent', {
 			type: 'mousePressed',
 			x: rect.x,
