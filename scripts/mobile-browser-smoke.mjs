@@ -1105,6 +1105,42 @@ async function main() {
 			"[...document.querySelectorAll('.chrome-menu button')].find(e=>e.textContent.includes('恢复页面布局'))",
 			'restore all navigation'
 		);
+
+		await client.navigate(
+			`${origin}/workspace/knowledge/reading-kb`,
+			"document.querySelector('#collection-container')?.textContent.includes('阅读验收.pdf')"
+		);
+		await client.click(
+			"[...document.querySelectorAll('#collection-container button')].find(e=>e.textContent.includes('阅读验收.pdf'))",
+			'open synthetic PDF'
+		);
+		await client.waitForExpression("document.querySelector('.file-reader canvas')", 'PDF rendered');
+		await client.click(
+			"document.querySelector('.file-reader button[aria-label=全屏阅读]')",
+			'expand PDF reader'
+		);
+		await client.waitForExpression(
+			"document.querySelector('.reader-expanded')?.getBoundingClientRect().width === innerWidth",
+			'PDF fills the viewport'
+		);
+		await client.screenshot('knowledge-pdf-fullscreen.png');
+		await client.send('Input.dispatchKeyEvent', {
+			type: 'keyDown',
+			key: 'Escape',
+			code: 'Escape',
+			windowsVirtualKeyCode: 27
+		});
+		await client.waitForExpression(
+			"!document.querySelector('.reader-expanded') && !document.querySelector('.owui-mist-app').inert",
+			'PDF exits fullscreen'
+		);
+		assert.equal(
+			(await (await fetch(`${origin}/__fixture_provenance`)).json()).events.filter(
+				(e) => e.kind === 'reading-pdf-load'
+			).length,
+			1,
+			'fullscreen keeps the loaded PDF'
+		);
 		await client.navigate(`${origin}/notes`, "document.querySelector('#notes-container')");
 		await client.screenshot('notes-reading-surface.png');
 		await client.navigate(
