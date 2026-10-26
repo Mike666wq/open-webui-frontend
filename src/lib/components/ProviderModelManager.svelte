@@ -34,6 +34,7 @@
 		speech: ['openai-speech'],
 		image: ['openai-image', 'siliconflow-image']
 	};
+	let adding = false;
 	let query = '';
 	let purpose = 'all';
 	let availability = 'all';
@@ -47,6 +48,7 @@
 	let previousConnection = '';
 	$: if (connection.id !== previousConnection) {
 		previousConnection = connection.id;
+		adding = false;
 		modelId = '';
 		uses = {};
 		message = '';
@@ -61,6 +63,7 @@
 				(availability === 'enabled' ? m.enabled !== false : m.enabled === false))
 	);
 	function select(id: string) {
+		adding = false;
 		modelId = id;
 		uses = { ...(connection.models?.find((m: any) => m.upstream_id === id)?.uses ?? {}) };
 		message = '';
@@ -161,7 +164,7 @@
 		</div>{/if}
 	<div class="flex flex-wrap gap-2">
 		<input
-			class="min-w-0 flex-1 rounded-lg border bg-transparent p-2 dark:border-gray-700"
+			class="min-w-0 basis-full rounded-lg border bg-transparent p-2 dark:border-gray-700 sm:basis-0 sm:flex-1"
 			aria-label="搜索模型"
 			placeholder="搜索名称或模型 ID"
 			bind:value={query}
@@ -220,6 +223,7 @@
 			type="button"
 			class="rounded-lg border px-3 py-2 dark:border-gray-700"
 			on:click={() => {
+				adding = true;
 				modelId = '';
 				uses = {};
 				message = '';
@@ -228,7 +232,7 @@
 	{#if message}<p role="status" class="rounded-lg bg-gray-100 p-3 text-xs dark:bg-gray-800">
 			{message}
 		</p>{/if}
-	{#if canManage}
+	{#if canManage && (selectedModel || adding)}
 		<div class="space-y-3 rounded-xl border p-3 dark:border-gray-700">
 			<h5 class="font-medium">{selectedModel ? '模型详情与测试' : '手动模型配置'}</h5>
 			<label class="block text-xs"
