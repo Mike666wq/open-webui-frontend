@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { providerCatalogs } from '$lib/stores';
 	import { marked } from 'marked';
 	import Fuse from 'fuse.js';
 	import { autoUpdate, computePosition, flip, offset, shift, size } from '@floating-ui/dom';
@@ -931,6 +932,16 @@
 					'w-[20rem]'} max-w-[calc(100vw-1rem)] justify-start rounded-xl border border-gray-100 bg-white p-0.5 shadow-lg outline-hidden dark:border-gray-800 dark:bg-gray-850 dark:text-white flex flex-col overflow-hidden"
 				transition:flyAndScale
 			>
+				{#if $providerCatalogs.some((c) => c.stale || c.error)}<div
+						class="m-2 rounded-lg border border-amber-400 bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100"
+						role="status"
+					>
+						{#each $providerCatalogs.filter((c) => c.stale || c.error) as catalog}<p>
+								{catalog.connection_name}：{catalog.error
+									? `目录刷新失败（${catalog.error.category}），保留上次模型`
+									: '目录待刷新，显示保存结果'}。可在外部连接中检查。
+							</p>{/each}
+					</div>{/if}
 				<slot>
 					{#if searchEnabled}
 						<div class="my-0.5 flex ml-2 mr-0.5 h-[1.6875rem] shrink-0 items-center gap-2">

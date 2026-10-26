@@ -584,28 +584,87 @@ async function providerSettings(cdp) {
 		'ChatGPT connected without helper'
 	);
 
-	const accountLayout = await cdp.evaluate(`
-        [...document.querySelectorAll('[data-testid="provider-account-row"]')].map(row => {
-            const info = row.querySelector('[data-testid="provider-account-info"]').getBoundingClientRect();
-            const actions = row.querySelector('[data-testid="provider-account-actions"]').getBoundingClientRect();
-            const buttons = [...row.querySelectorAll('button')].map(button => { const r=button.getBoundingClientRect(); return {left:r.left,right:r.right}; });
-            return {infoWidth:info.width, infoBottom:info.bottom, actionsTop:actions.top, buttons};
-        })
-    `);
-	assert.equal(accountLayout.length, 3);
-	for (const account of accountLayout) {
-		assert.ok(account.infoWidth >= 200, 'Provider information must have enough width on mobile');
-		assert.ok(
-			account.actionsTop >= account.infoBottom - 1,
-			'Mobile actions must sit below provider information'
-		);
-		for (const button of account.buttons) {
-			assert.ok(
-				button.left >= 0 && button.right <= 394,
-				'Provider action must stay inside the viewport'
+	const providerList = '[aria-label="供应商列表"]';
+	const listCount = await cdp.evaluate(
+		`document.querySelector(${JSON.stringify(providerList)})?.querySelectorAll('button').length`
+	);
+	assert.equal(listCount, 3);
+	await cdp.click(
+		`document.querySelector('[aria-label="供应商列表"] button')`,
+		'open provider detail'
+	);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[aria-label="模型管理"]'))`,
+		'provider models detail'
+	);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('input[aria-label="启用 deepseek-fixture"]'))`,
+		'enabled provider model'
+	);
+	await cdp.click(
+		`document.querySelector('input[aria-label="启用 deepseek-fixture"]')`,
+		'disable provider model'
+	);
+	await cdp.waitForExpression(
+		`document.querySelector('input[aria-label="启用 deepseek-fixture"]')?.checked === false`,
+		'provider disabled state'
+	);
+	await cdp.click(
+		`document.querySelector('input[aria-label="启用 deepseek-fixture"]')`,
+		'enable provider model'
+	);
+	await cdp.waitForExpression(
+		`document.querySelector('input[aria-label="启用 deepseek-fixture"]')?.checked === true`,
+		'provider enabled state'
+	);
+	const detailWidth = await cdp.evaluate(
+		`document.querySelector('[aria-label="模型管理"]').getBoundingClientRect().right`
+	);
+	assert.ok(detailWidth <= 394, 'Provider detail must stay inside mobile viewport');
+	await cdp.screenshot('provider-models-393x852.png');
+	for (const dark of [false, true]) {
+		await cdp.evaluate(`document.documentElement.classList.toggle('dark', ${dark})`);
+		for (const width of [393, 1256]) {
+			await cdp.send('Emulation.setDeviceMetricsOverride', {
+				width,
+				height: 852,
+				deviceScaleFactor: 1,
+				mobile: width < 768
+			});
+			await sleep(200);
+			const rect = await cdp.evaluate(
+				`(() => {const r=document.querySelector('[aria-label="模型管理"]').getBoundingClientRect();return {left:r.left,right:r.right};})()`
 			);
+			assert.ok(
+				rect.left >= 0 && rect.right <= width,
+				'Provider model workspace stays inside viewport'
+			);
+			await cdp.screenshot(`provider-models-${dark ? 'dark' : 'light'}-${width}.png`);
 		}
 	}
+	await cdp.send('Emulation.setDeviceMetricsOverride', {
+		width: 393,
+		height: 852,
+		deviceScaleFactor: 2,
+		mobile: true
+	});
+
+	await cdp.click(
+		`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '调用记录')`,
+		'provider calls tab'
+	);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[aria-label="调用记录"]'))`,
+		'provider calls empty state'
+	);
+	await cdp.click(
+		`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '连接设置')`,
+		'provider connection tab'
+	);
+	const accountLayout = await cdp.evaluate(
+		`(() => { const row=document.querySelector('[data-testid="provider-account-row"]'); const r=row?.getBoundingClientRect(); return r ? {left:r.left,right:r.right} : null; })()`
+	);
+	assert.ok(accountLayout && accountLayout.left >= 0 && accountLayout.right <= 394);
 
 	await cdp.screenshot('provider-accounts-393x852.png');
 	await cdp.click(
@@ -626,7 +685,9 @@ async function providerSettings(cdp) {
 		kimiDeviceCode: true,
 		kimiCancelAndDenied: true,
 		kimiConnected: true,
-		accountActionsBelowInfo: true
+		responsiveProviderDetail: true,
+		providerModelEnableToggle: true,
+		providerCallsTab: true
 	};
 }
 

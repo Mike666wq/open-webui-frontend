@@ -1,4 +1,7 @@
 <script lang="ts">
+	import ProviderCallHistory from '$lib/components/ProviderCallHistory.svelte';
+	import ProviderCallModal from '$lib/components/common/Modal.svelte';
+	let showProviderCalls = false;
 	import { resolveLocalizedFunction } from '$lib/utils/localizedContent';
 	import { functions as localizedFunctions } from '$lib/stores';
 	import { toast } from 'svelte-sonner';
@@ -1272,6 +1275,13 @@
 									</Tooltip>
 								{/if}
 
+								{#if $user && message.done && !readOnly}<button
+										type="button"
+										class="rounded-lg p-1.5 text-xs hover:bg-black/5 dark:hover:bg-white/5"
+										aria-label="本轮调用明细"
+										on:click={() => (showProviderCalls = true)}>调用明细</button
+									>{/if}
+
 								{#if $user && message.done && forkHandler && ($user?.role === 'admin' || ($user?.permissions?.chat?.import ?? true))}
 									<Tooltip content={$i18n.t('Fork chat')} placement="bottom">
 										<button
@@ -1675,6 +1685,15 @@
 		</div>
 	</div>
 {/key}
+
+<ProviderCallModal bind:show={showProviderCalls} size="lg"
+	><div class="max-h-[80vh] overflow-y-auto rounded-xl bg-white p-5 dark:bg-gray-900">
+		<div class="mb-3 flex justify-end">
+			<button type="button" on:click={() => (showProviderCalls = false)}>关闭</button>
+		</div>
+		{#if showProviderCalls}<ProviderCallHistory {chatId} messageId={message.id} />{/if}
+	</div></ProviderCallModal
+>
 
 <style>
 	.buttons::-webkit-scrollbar {

@@ -200,7 +200,7 @@
 							{$i18n.t('settings.admin.interface.taskModel.label')}
 						</div>
 						<div class="mt-1.5 text-[0.6875rem] text-gray-400 dark:text-gray-600">
-							{$i18n.t('settings.admin.interface.taskModel.description')}
+							辅助任务独立使用所选模型；未配置时不生成标题、标签或后续建议，搜索查询等辅助功能会提示配置，不再回退到聊天模型。
 						</div>
 					</div>
 
@@ -214,7 +214,9 @@
 									taskConfig.TASK_MODEL = normalizeModelSelection(taskConfig.TASK_MODEL);
 								}}
 							>
-								<option value="" selected>{$i18n.t('Current Model')}</option>
+								<option value="" selected
+									>{$i18n.t('Disabled — select a dedicated auxiliary model')}</option
+								>
 								{#each modelOptions as model}
 									<option value={model.id} class="bg-gray-100 dark:bg-gray-700">
 										{model.name}
@@ -235,7 +237,9 @@
 									);
 								}}
 							>
-								<option value="" selected>{$i18n.t('Current Model')}</option>
+								<option value="" selected
+									>{$i18n.t('Disabled — select a dedicated auxiliary model')}</option
+								>
 								{#each modelOptions as model}
 									<option value={model.id} class="bg-gray-100 dark:bg-gray-700">
 										{model.name}
@@ -311,7 +315,9 @@
 								);
 							}}
 						>
-							<option value="" selected>{$i18n.t('Current Model')}</option>
+							<option value="" selected
+								>{$i18n.t('Disabled — select a dedicated auxiliary model')}</option
+							>
 							{#each modelOptions as model}
 								<option value={model.id} class="bg-gray-100 dark:bg-gray-700">
 									{model.name}

@@ -101,3 +101,14 @@ export const cancelKimiLogin = (attemptId: string) =>
 	request(`/auth/kimi/${encodeURIComponent(attemptId)}`, { method: 'DELETE' });
 export const disconnectKimiConnection = (connectionId: string) =>
 	request(`/auth/kimi/connection/${encodeURIComponent(connectionId)}`, { method: 'DELETE' });
+
+export const setProviderModelEnabled = (id: string, upstream_id: string, enabled: boolean) =>
+	request(`/connections/${encodeURIComponent(id)}/model-enabled`, {
+		method: 'PUT',
+		body: JSON.stringify({ upstream_id, enabled })
+	});
+export const getProviderCalls = (filters: Record<string, string> = {}) =>
+	request(`/calls/history?${new URLSearchParams(filters)}`);
+export const previewLegacyMigration = () => request('/legacy-migration/preview');
+export const applyLegacyMigration = (payload: Record<string, unknown>) =>
+	request('/legacy-migration/apply', { method: 'POST', body: JSON.stringify(payload) });
