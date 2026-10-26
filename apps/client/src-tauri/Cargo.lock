@@ -2352,7 +2352,7 @@ dependencies = [
 
 [[package]]
 name = "open-webui-client"
-version = "0.2.46"
+version = "0.2.47"
 dependencies = [
  "base64 0.22.1",
  "serde",
