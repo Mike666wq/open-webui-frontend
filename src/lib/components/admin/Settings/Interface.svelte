@@ -5,6 +5,7 @@
 	import { toast } from 'svelte-sonner';
 
 	import { getBaseModels } from '$lib/apis/models';
+	import { AUXILIARY_PURPOSES } from '$lib/utils/auxiliary-models';
 
 	import Switch from '$lib/components/common/Switch.svelte';
 	import Textarea from '$lib/components/common/Textarea.svelte';
@@ -21,10 +22,18 @@
 
 	const i18n: any = getContext('i18n');
 
-	let taskConfig = {
+	let taskConfig: Record<string, any> = {
 		TASK_MODEL: '',
 		TASK_MODEL_EXTERNAL: '',
 		TASK_MODEL_PARAMS: {},
+		TASK_MODEL_TITLE: '',
+		TASK_MODEL_TITLE_EXTERNAL: '',
+		TASK_MODEL_TAGS: '',
+		TASK_MODEL_TAGS_EXTERNAL: '',
+		TASK_MODEL_FOLLOWUP: '',
+		TASK_MODEL_FOLLOWUP_EXTERNAL: '',
+		TASK_MODEL_QUERY: '',
+		TASK_MODEL_QUERY_EXTERNAL: '',
 		ENABLE_TITLE_GENERATION: true,
 		TITLE_GENERATION_PROMPT_TEMPLATE: '',
 		ENABLE_FOLLOW_UP_GENERATION: true,
@@ -110,6 +119,10 @@
 
 	let models: any[] | null = null;
 	$: modelOptions = models ?? [];
+	$: auxiliaryPurposes = AUXILIARY_PURPOSES.map((purpose) => ({
+		...purpose,
+		label: $i18n.t(`settings.admin.interface.auxiliaryPurpose.${purpose.key}`)
+	}));
 	const normalizeModelSelection = (modelId: string | null | undefined) => {
 		if (!modelId) {
 			return '';
@@ -200,7 +213,7 @@
 							{$i18n.t('settings.admin.interface.taskModel.label')}
 						</div>
 						<div class="mt-1.5 text-[0.6875rem] text-gray-400 dark:text-gray-600">
-							辅助任务独立使用所选模型；未配置时不生成标题、标签或后续建议，搜索查询等辅助功能会提示配置，不再回退到聊天模型。
+							{$i18n.t('settings.admin.interface.taskModel.hint')}
 						</div>
 					</div>
 
@@ -248,6 +261,67 @@
 								{/each}
 							</SettingsSelect>
 						</AdminSettingField>
+					</div>
+
+					<div class="mt-3 border-t border-gray-100/50 pt-3 dark:border-white/[0.04]">
+						<div class="text-xs text-gray-600 dark:text-gray-400">
+							{$i18n.t('settings.admin.interface.auxiliaryPurpose.section')}
+						</div>
+						<div class="mt-1 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+							{$i18n.t('settings.admin.interface.auxiliaryPurpose.hint')}
+						</div>
+
+						<div class="mt-2 space-y-2">
+							{#each auxiliaryPurposes as purpose (purpose.key)}
+								<div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+									<div class="flex items-center text-xs text-gray-600 dark:text-gray-400">
+										{purpose.label}
+									</div>
+									<SettingsSelect
+										bind:value={taskConfig[purpose.localField]}
+										className="w-full"
+										ariaLabel={`${purpose.label} - ${$i18n.t('settings.admin.interface.localTaskModel.label')}`}
+										placeholder={$i18n.t('Select a model')}
+										on:change={() => {
+											taskConfig[purpose.localField] = normalizeModelSelection(
+												taskConfig[purpose.localField]
+											);
+										}}
+									>
+										<option value="" selected
+											>{$i18n.t('settings.admin.interface.auxiliaryPurpose.followDefault')}</option
+										>
+										{#each modelOptions as model}
+											<option value={model.id} class="bg-gray-100 dark:bg-gray-700">
+												{model.name}
+												{model?.connection_type === 'local' ? `(${$i18n.t('Local')})` : ''}
+											</option>
+										{/each}
+									</SettingsSelect>
+									<SettingsSelect
+										bind:value={taskConfig[purpose.externalField]}
+										className="w-full"
+										ariaLabel={`${purpose.label} - ${$i18n.t('settings.admin.interface.externalTaskModel.label')}`}
+										placeholder={$i18n.t('Select a model')}
+										on:change={() => {
+											taskConfig[purpose.externalField] = normalizeModelSelection(
+												taskConfig[purpose.externalField]
+											);
+										}}
+									>
+										<option value="" selected
+											>{$i18n.t('settings.admin.interface.auxiliaryPurpose.followDefault')}</option
+										>
+										{#each modelOptions as model}
+											<option value={model.id} class="bg-gray-100 dark:bg-gray-700">
+												{model.name}
+												{model?.connection_type === 'local' ? `(${$i18n.t('Local')})` : ''}
+											</option>
+										{/each}
+									</SettingsSelect>
+								</div>
+							{/each}
+						</div>
 					</div>
 
 					<div class="mt-2.5">
