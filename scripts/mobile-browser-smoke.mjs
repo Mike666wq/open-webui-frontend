@@ -1106,6 +1106,7 @@ async function main() {
 			'restore all navigation'
 		);
 
+		await client.send('Emulation.setScrollbarsHidden', { hidden: false });
 		await client.navigate(
 			`${origin}/workspace/knowledge/reading-kb`,
 			"document.querySelector('#collection-container')?.textContent.includes('阅读验收.pdf')"
@@ -1127,6 +1128,17 @@ async function main() {
 			"document.querySelector('.reader-expanded canvas')?.getBoundingClientRect().width > innerWidth * .85",
 			'PDF adapts to expanded width'
 		);
+		await sleep(750);
+		await client.evaluate(
+			"window.__stablePdfCanvas=document.querySelector('.reader-expanded canvas')"
+		);
+		await sleep(750);
+		assert.ok(
+			await client.evaluate(
+				"window.__stablePdfCanvas === document.querySelector('.reader-expanded canvas')"
+			),
+			'visible scrollbars do not repeatedly recreate PDF canvases'
+		);
 		await client.screenshot('knowledge-pdf-fullscreen.png');
 		await client.send('Input.dispatchKeyEvent', {
 			type: 'keyDown',
@@ -1145,6 +1157,7 @@ async function main() {
 			1,
 			'fullscreen keeps the loaded PDF'
 		);
+		await client.send('Emulation.setScrollbarsHidden', { hidden: true });
 		await client.navigate(`${origin}/notes`, "document.querySelector('#notes-container')");
 		await client.screenshot('notes-reading-surface.png');
 		await client.navigate(
