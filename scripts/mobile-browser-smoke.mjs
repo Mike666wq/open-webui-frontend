@@ -1145,7 +1145,7 @@ async function main() {
 		await client.screenshot('notes-reading-surface.png');
 		await client.navigate(
 			`${origin}/notes/reading-note`,
-			"document.querySelector('#note-editor h2')"
+			"Boolean(document.querySelector('#note-editor h2'))"
 		);
 		await client.send('Emulation.setDeviceMetricsOverride', {
 			width: 393,
