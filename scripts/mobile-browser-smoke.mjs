@@ -1123,6 +1123,10 @@ async function main() {
 			"document.querySelector('.reader-expanded')?.getBoundingClientRect().width === innerWidth",
 			'PDF fills the viewport'
 		);
+		await client.waitForExpression(
+			"document.querySelector('.reader-expanded canvas')?.getBoundingClientRect().width > innerWidth * .85",
+			'PDF adapts to expanded width'
+		);
 		await client.screenshot('knowledge-pdf-fullscreen.png');
 		await client.send('Input.dispatchKeyEvent', {
 			type: 'keyDown',
@@ -1174,7 +1178,9 @@ async function main() {
 		);
 		await sleep(700);
 		assert.ok(
-			await client.evaluate("document.querySelector('#note-content-container').scrollTop > 0"),
+			await client.evaluate(
+				"(() => {const r=document.querySelector('#note-editor h2').getBoundingClientRect();return r.top >= 0 && r.top < innerHeight / 2;})()"
+			),
 			'outline scrolls the note'
 		);
 		await client.click(

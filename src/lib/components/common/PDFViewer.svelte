@@ -34,6 +34,8 @@
 	let renderToken = 0;
 	let scrollFrame: number | null = null;
 	let mounted = false;
+	let resizeObserver: ResizeObserver | null = null;
+	let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 	let loadedSource: ArrayBuffer | Uint8Array | string | null = null;
 	let wheelDelta = 0;
 	let lastWheelNavigationAt = 0;
@@ -439,6 +441,25 @@
 
 	onMount(() => {
 		mounted = true;
+		let width = outerContainer.clientWidth;
+		let height = outerContainer.clientHeight;
+		resizeObserver = new ResizeObserver(() => {
+			const nextWidth = outerContainer.clientWidth;
+			const nextHeight = outerContainer.clientHeight;
+			const changed =
+				Math.abs(nextWidth - width) > 1 || (singlePage && Math.abs(nextHeight - height) > 1);
+			width = nextWidth;
+			height = nextHeight;
+			if (!changed || !nextWidth || loading || !pdfDoc) return;
+			if (resizeTimer) clearTimeout(resizeTimer);
+			resizeTimer = setTimeout(() => {
+				targetPage = activePage;
+				void renderAllPages().catch((error) => {
+					if (mounted) console.warn('PDF resize failed', error);
+				});
+			}, 150);
+		});
+		resizeObserver.observe(outerContainer);
 		loadPdf();
 	});
 
@@ -455,6 +476,9 @@
 	}
 
 	onDestroy(() => {
+		mounted = false;
+		resizeObserver?.disconnect();
+		if (resizeTimer) clearTimeout(resizeTimer);
 		loadToken++;
 		renderToken++;
 		if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
