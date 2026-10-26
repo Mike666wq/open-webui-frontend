@@ -1016,6 +1016,8 @@ async function main() {
 		]);
 		await client.send('Page.addScriptToEvaluateOnNewDocument', {
 			source: `
+				// Establish the synthetic session before app hydration can capture an empty token.
+				if (location.origin === ${JSON.stringify(origin)}) localStorage.setItem('token', 'fixture-token');
 				window.__mobileSmokeErrors = [];
 				addEventListener('error', (event) => {
 					window.__mobileSmokeErrors.push(String(event.error?.stack || event.message));
@@ -1036,8 +1038,10 @@ async function main() {
 			maxTouchPoints: 5
 		});
 
-		await client.navigate(origin);
-		await client.evaluate("localStorage.setItem('token', 'fixture-token')");
+		await client.navigate(
+			origin,
+			"document.readyState === 'complete' && document.querySelector('.owui-mist-app')"
+		);
 		await client.navigate(
 			chatUrl,
 			"document.readyState === 'complete' && document.querySelector('.owui-mist-app')"
