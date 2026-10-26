@@ -1034,26 +1034,44 @@ html[data-owui-motion-reduced='true'] .owui-message-listitem {
 	);
 }
 
-/* Reading surfaces must remain legible even over a high-detail wallpaper. */
-.owui-mist-app #workspace-container,
-.owui-mist-app #notes-container,
-.owui-mist-app #collection-container,
-.owui-mist-app #note-editor {
-	background-color: rgb(var(--mist-surface-rgb, 255 255 255) / 0.97) !important;
-	color: var(--mist-ink, #172334) !important;
-	border-radius: 16px;
+/* Improve the text, without replacing the configured wallpaper or glass. */
+html[data-owui-appearance='on'] {
+	--mist-document-ink: #142235;
+	--mist-document-muted: #243b55;
+	--mist-document-shadow: 0 1px 1px rgb(255 255 255 / 0.95), 0 0 3px rgb(255 255 255 / 0.9);
 }
-.owui-mist-app #workspace-container,
-.owui-mist-app #notes-container {
-	padding: 12px;
+html.dark[data-owui-appearance='on'] {
+	--mist-document-ink: #f7faff;
+	--mist-document-muted: #e2ebf7;
+	--mist-document-shadow: 0 1px 2px rgb(0 0 0 / 0.95), 0 0 3px rgb(0 0 0 / 0.85);
 }
-.owui-mist-app #note-content-container .ProseMirror {
-	background-color: rgb(var(--mist-surface-rgb, 255 255 255) / 0.99) !important;
-	color: var(--mist-ink, #172334) !important;
-	padding: 1rem !important;
+html[data-owui-appearance='on'] :is(#workspace-container, #notes-container, #note-editor) {
+	color: var(--mist-document-ink) !important;
+	text-shadow: var(--mist-document-shadow);
 }
-.owui-mist-app
-	:is(#workspace-container, #notes-container, #collection-container, #note-editor)
-	:is(.text-gray-400, .text-gray-500, .text-gray-600) {
-	color: var(--mist-muted, #526174) !important;
+html[data-owui-appearance='on']
+	:is(#workspace-container, #notes-container, #note-editor)
+	:is(.text-gray-300, .text-gray-400, .text-gray-500, .text-gray-600) {
+	color: var(--mist-document-muted) !important;
+}
+html[data-owui-appearance='on']
+	:is(#workspace-container, #notes-container)
+	:is(a, [data-knowledge-entry]) {
+	font-weight: 550;
+}
+/* Invisible PDF selection text and source editors must not acquire a shadow. */
+html[data-owui-appearance='on']
+	:is(#workspace-container, #notes-container, #note-editor)
+	:is(
+		.pdf-page-wrapper,
+		.textLayer,
+		.cm-editor,
+		pre,
+		code,
+		input,
+		textarea,
+		canvas,
+		.outline-popover
+	) {
+	text-shadow: none;
 }

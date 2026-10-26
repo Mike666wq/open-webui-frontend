@@ -1563,7 +1563,8 @@ ${content}
 		inset: 0;
 		z-index: 100;
 		height: 100dvh !important;
-		background: rgb(var(--mist-surface-rgb, 255 255 255));
+		background: rgb(var(--mist-surface-rgb, 255 255 255) / var(--mist-reading-alpha, 0.5));
+		backdrop-filter: blur(var(--mist-reading-blur, 12px));
 		color: var(--mist-ink, #172334);
 	}
 </style>
