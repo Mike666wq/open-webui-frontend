@@ -153,21 +153,32 @@ class CdpClient {
 	}
 
 	async click(expression, label) {
-		const rect = await this.evaluate(`
-			(async () => {
-				const element = ${expression};
-				if (!element) return null;
-				element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'nearest' });
-				await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-				const bounds = element.getBoundingClientRect();
-				if (bounds.width < 1 || bounds.height < 1) return null;
-				return {
-					x: bounds.left + bounds.width / 2,
-					y: bounds.top + bounds.height / 2
-				};
-			})()
-		`);
-		assert.ok(rect, `Missing clickable control: ${label}`);
+		// Settings tabs sit in a clipped, scrolling rail with overlay arrows.
+		const checkHit = expression.includes('aria-controls');
+		const rect = await waitForValue(
+			() =>
+				this.evaluate(`
+                (async () => {
+                    const element = ${expression};
+                    if (!element || element.disabled) return null;
+                    element.scrollIntoView({ behavior: 'instant', block: 'center', inline: ${JSON.stringify(checkHit ? 'center' : 'nearest')} });
+                    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                    const before = element.getBoundingClientRect();
+                    if (${checkHit}) await new Promise(resolve => setTimeout(resolve, 100));
+                    const bounds = element.getBoundingClientRect();
+                    if (bounds.width < 1 || bounds.height < 1) return null;
+                    if (${checkHit} && (Math.abs(before.left - bounds.left) > 0.5 || Math.abs(before.top - bounds.top) > 0.5)) return null;
+                    const x = bounds.left + bounds.width / 2;
+                    const y = bounds.top + bounds.height / 2;
+                    const hit = document.elementFromPoint(x, y);
+                    if (${checkHit} && (!hit || (hit !== element && !element.contains(hit)))) return null;
+                    return { x, y };
+                })()
+            `),
+			(value) => Boolean(value),
+			`visible, unobstructed control: ${label}`,
+			15_000
+		);
 		await this.send('Input.dispatchMouseEvent', {
 			type: 'mousePressed',
 			x: rect.x,
@@ -1005,6 +1016,8 @@ async function main() {
 		]);
 		await client.send('Page.addScriptToEvaluateOnNewDocument', {
 			source: `
+				// Establish the synthetic session before app hydration can capture an empty token.
+				if (location.origin === ${JSON.stringify(origin)}) localStorage.setItem('token', 'fixture-token');
 				window.__mobileSmokeErrors = [];
 				addEventListener('error', (event) => {
 					window.__mobileSmokeErrors.push(String(event.error?.stack || event.message));
@@ -1025,8 +1038,10 @@ async function main() {
 			maxTouchPoints: 5
 		});
 
-		await client.navigate(origin);
-		await client.evaluate("localStorage.setItem('token', 'fixture-token')");
+		await client.navigate(
+			origin,
+			"document.readyState === 'complete' && document.querySelector('.owui-mist-app')"
+		);
 		await client.navigate(
 			chatUrl,
 			"document.readyState === 'complete' && document.querySelector('.owui-mist-app')"
