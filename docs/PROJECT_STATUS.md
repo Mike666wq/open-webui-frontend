@@ -73,3 +73,18 @@
 契约见 [接口契约](PROVIDER_CONTRACT.md)，恢复步骤见 [恢复手册](PROVIDER_RECOVERY.md)。
 
 自动化覆盖错误分类回退、建议动作与认证方式的对应、恢复入口的转交、模型选择器的告警渲染（不堆长错误、保留搜索框与模型操作）以及手机浏览器冒烟里的 390×844 / 489×550 / 桌面与浅深主题下的告警可达性。真实厂商凭据下的连通性检查与真机验收**尚未人工验收**。
+
+### 本轮发布记录（2026-10-27）
+
+| 产物 | 标识 | 校验 |
+|---|---|---|
+| 前端发布 | `frontend-ba1105d168cb` | 目标 commit `ba1105d168cbe87b58fb9149c45f84d5d1c97fde`（PR #31 squash 合并） |
+| `open-webui-frontend.zip` | 103,071,206 B | SHA256 `6116d8a6e49b270e99a21c14cd262c709bd5c0de56c694d23d8224ab23fa0cc6` |
+| `frontend-manifest.json` | 1,140,050 B | SHA256 `e56096b710db5e163f50912444c03a33628cdc980ed5434947622fa814573bb0` |
+| Android APK | `v0.2.52` / `Open-WebUI-Client-0.2.52-android-arm64-vc200106.apk` | 118,229,516 B，SHA256 `3bd19f9db48c04d0d179f4406ff10bbd5a76db349f09e5ba94d4fddf5241cfaf`，versionCode `200106` = `200000 + frontend workflow run_number`，沿用旧签名身份 |
+
+来源 run：[`40531896396`](https://github.com/Mike666wq/open-webui-frontend/actions/runs/40531896396)（main 发布流水线）。客户端前端锁 `apps/client/frontend.lock.json` 与后端 `frontend.lock.json` 都锁定同一个 `sourceCommit=ba1105d168cb`，两个 SHA-256 与上表逐字一致。
+
+发布过程中 main 流水线 attempt 1 曾因 `checks` job 撞 25 分钟硬上限失败（`Prepare Chinese fonts` 步骤被取消，代码步骤全部通过，`release` 与 `android` 因此跳过），attempt 2 重跑通过。修复见 PR #32（把上限放宽到 45 分钟），**尚未合并**。
+
+线上 CI 证明的是自动化检查通过，**不等于**真机验收、真实厂商凭据下的连通性检查，也不等于生产已部署。
