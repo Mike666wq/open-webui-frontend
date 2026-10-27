@@ -11,6 +11,7 @@
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import { flyAndScale } from '$lib/utils/transitions';
+	import { providerErrorHint, providerErrorTitle } from '$lib/utils/provider-errors';
 
 	import { createEventDispatcher, onMount, getContext, tick } from 'svelte';
 
@@ -938,7 +939,7 @@
 					>
 						{#each $providerCatalogs.filter((c) => c.stale || c.error) as catalog}<p>
 								{catalog.connection_name}：{catalog.error
-									? `目录刷新失败（${catalog.error.category}），保留上次模型`
+									? `获取模型列表失败（${providerErrorTitle(catalog.error)}）：${providerErrorHint(catalog.error)}`
 									: '目录待刷新，显示保存结果'}。可在外部连接中检查。
 							</p>{/each}
 					</div>{/if}

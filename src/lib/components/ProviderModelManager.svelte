@@ -5,6 +5,7 @@
 		testProviderModel,
 		setProviderModelEnabled
 	} from '$lib/apis/providers';
+	import { providerErrorHint, providerErrorTitle } from '$lib/utils/provider-errors';
 	export let connection: any;
 	export let canManage = true;
 	export let onUpdated: (() => Promise<void>) | undefined = undefined;
@@ -157,7 +158,7 @@
 			role="status"
 		>
 			{connection.catalog?.error
-				? `目录刷新失败（${connection.catalog.error.category} / HTTP ${connection.catalog.error.status}），保留上次目录。`
+				? `获取模型列表失败（${providerErrorTitle(connection.catalog.error)}）：${providerErrorHint(connection.catalog.error)}`
 				: '目录已过期，后台刷新中；显示上次保存结果。'} 最后成功：{connection.catalog?.updated_at
 				? new Date(connection.catalog.updated_at * 1000).toLocaleString()
 				: '尚无成功记录'}。目录状态不代表模型调用结果。
