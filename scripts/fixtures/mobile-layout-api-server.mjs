@@ -317,22 +317,80 @@ function event(kind, details = {}) {
 
 function api(pathname) {
 	if (pathname === '/api/v1/providers')
-		return [
-			{
-				id: 'deepseek',
-				name: 'DeepSeek',
-				auth_types: ['api_key'],
-				default_base_url: 'https://api.deepseek.com/v1'
-			},
-			{
-				id: 'openai',
-				name: 'OpenAI',
-				auth_types: ['api_key'],
-				default_base_url: 'https://api.openai.com/v1'
-			},
-			{ id: 'kimi', name: 'Kimi Code', auth_types: ['oauth'], default_base_url: '' },
-			{ id: 'chatgpt', name: 'ChatGPT', auth_types: ['oauth'], default_base_url: '' }
-		];
+		return {
+			object: 'list',
+			data: [
+				{
+					id: 'openai',
+					name: 'OpenAI',
+					protocol: 'openai-compatible',
+					protocol_label: 'OpenAI 兼容',
+					group: 'official',
+					group_label: '官方',
+					auth_types: ['api_key'],
+					default_base_url: 'https://api.openai.com/v1',
+					docs_url: '',
+					supported: true,
+					unsupported_reason: null
+				},
+				{
+					id: 'deepseek',
+					name: 'DeepSeek',
+					protocol: 'openai-compatible',
+					protocol_label: 'OpenAI 兼容',
+					group: 'cn',
+					group_label: '国产',
+					auth_types: ['api_key'],
+					default_base_url: 'https://api.deepseek.com/v1',
+					docs_url: '',
+					supported: true,
+					unsupported_reason: null
+				},
+				{
+					id: 'kimi',
+					name: 'Kimi Code',
+					protocol: 'openai-compatible',
+					protocol_label: 'OpenAI 兼容',
+					group: 'cn',
+					group_label: '国产',
+					auth_types: ['oauth'],
+					default_base_url: '',
+					docs_url: '',
+					supported: true,
+					unsupported_reason: null
+				},
+				{
+					id: 'chatgpt',
+					name: 'ChatGPT',
+					protocol: 'openai-responses',
+					protocol_label: 'OpenAI Responses',
+					group: 'official',
+					group_label: '官方',
+					auth_types: ['oauth'],
+					default_base_url: '',
+					docs_url: '',
+					supported: true,
+					unsupported_reason: null
+				},
+				{
+					id: 'anthropic',
+					name: 'Anthropic',
+					protocol: 'anthropic-messages',
+					protocol_label: 'Anthropic Messages',
+					group: 'official',
+					group_label: '官方',
+					auth_types: ['api_key'],
+					default_base_url: '',
+					docs_url: '',
+					supported: false,
+					unsupported_reason: '该提供商类型暂未实装。'
+				}
+			],
+			groups: [
+				{ id: 'official', label: '官方', order: 0 },
+				{ id: 'cn', label: '国产', order: 1 }
+			]
+		};
 	if (pathname === '/api/v1/providers/calls/history')
 		return { data: [], summary: [], retention_days: 30 };
 	if (pathname === '/api/v1/providers/legacy-migration/preview')
@@ -617,46 +675,105 @@ const server = createServer(async (request, response) => {
 			}
 			providerConnection = {
 				id: 'fixture-provider-connection',
-				provider_id: payload.provider_id,
+				provider_id: payload.provider_id ?? payload.provider_template,
+				provider_template: payload.provider_template ?? payload.provider_id,
+				protocol: 'openai-compatible',
 				name: payload.name,
-				auth_type: 'api_key',
-				visibility: 'private',
+				auth_type: payload.auth_type ?? 'api_key',
+				visibility: payload.visibility ?? 'private',
 				owner_id: userId,
 				config: payload.config,
 				status: 'configured',
 				configured: true,
-				models: []
+				is_enabled: true,
+				// The models picked in the wizard become the curated whitelist.
+				models: (payload.config?.model_ids ?? []).map((upstreamId) => ({
+					id: `provider:fixture-provider-connection:${upstreamId}`,
+					upstream_id: upstreamId,
+					name: upstreamId === 'deepseek-fixture' ? 'Fixture DeepSeek' : upstreamId,
+					uses: { chat: 'openai-chat' },
+					enabled: true,
+					capability_source: 'provider-adapter'
+				}))
 			};
 			event('provider-saved', {
-				provider_id: payload.provider_id,
+				provider_id: payload.provider_id ?? payload.provider_template,
 				model_ids: payload.config.model_ids,
 				visibility: payload.visibility
 			});
 			send(response, 200, providerConnection);
 			return;
 		}
-		if (url.pathname.endsWith('/models/refresh') && request.method === 'POST') {
-			if (providerConnection)
-				providerConnection.models = [
-					{
-						id: 'provider:fixture-provider-connection:deepseek-fixture',
-						upstream_id: 'deepseek-fixture',
-						name: 'Fixture DeepSeek',
-						uses: { chat: 'openai-chat' },
-						enabled: true,
-						capability_source: 'provider-adapter'
-					}
-				];
-			send(response, 200, { models: providerConnection?.models ?? [], status: 'connected' });
+		if (url.pathname.endsWith('/models/fetch') && request.method === 'POST') {
+			// Fetching only refreshes the candidate pool; the whitelist is untouched.
+			const candidates = (providerConnection?.models ?? []).map((model) => ({
+				upstream_id: model.upstream_id,
+				display_name: model.name,
+				capabilities: ['TG']
+			}));
+			send(response, 200, { candidates, error: null, fetched_at: now });
 			return;
 		}
-		if (url.pathname.endsWith('/model-enabled') && request.method === 'PUT') {
+		if (url.pathname.endsWith('/models') && request.method === 'GET') {
+			send(response, 200, { models: providerConnection?.models ?? [] });
+			return;
+		}
+		if (url.pathname.endsWith('/models') && request.method === 'POST') {
 			const chunks = [];
 			for await (const chunk of request) chunks.push(chunk);
 			const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-			const model = providerConnection?.models.find((m) => m.upstream_id === payload.upstream_id);
-			if (model) model.enabled = payload.enabled;
-			event('provider-model-enabled', payload);
+			for (const upstreamId of payload.upstream_ids ?? []) {
+				if (
+					providerConnection &&
+					!providerConnection.models.some((model) => model.upstream_id === upstreamId)
+				) {
+					providerConnection.models.push({
+						id: `provider:${providerConnection.id}:${upstreamId}`,
+						upstream_id: upstreamId,
+						name: upstreamId,
+						uses: { chat: 'openai-chat' },
+						enabled: true
+					});
+				}
+			}
+			event('provider-models-added', { upstream_ids: payload.upstream_ids ?? [] });
+			send(response, 200, providerConnection);
+			return;
+		}
+		const whitelistModel = url.pathname.match(/\/models\/([^/]+)$/);
+		if (whitelistModel) {
+			const upstreamId = decodeURIComponent(whitelistModel[1]);
+			if (request.method === 'PUT') {
+				const chunks = [];
+				for await (const chunk of request) chunks.push(chunk);
+				const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+				const model = providerConnection?.models.find((m) => m.upstream_id === upstreamId);
+				if (model) {
+					if (payload.enabled !== undefined) model.enabled = payload.enabled;
+					if (payload.uses !== undefined) model.uses = payload.uses;
+					if (payload.display_name !== undefined) model.name = payload.display_name;
+				}
+				event('provider-model-updated', { upstream_id: upstreamId, ...payload });
+				send(response, 200, providerConnection);
+				return;
+			}
+			if (request.method === 'DELETE') {
+				if (providerConnection) {
+					providerConnection.models = providerConnection.models.filter(
+						(m) => m.upstream_id !== upstreamId
+					);
+				}
+				event('provider-model-removed', { upstream_id: upstreamId });
+				send(response, 200, providerConnection);
+				return;
+			}
+		}
+		if (url.pathname.endsWith('/enabled') && request.method === 'PUT') {
+			const chunks = [];
+			for await (const chunk of request) chunks.push(chunk);
+			const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+			if (providerConnection) providerConnection.is_enabled = payload.enabled;
+			event('provider-connection-enabled', { enabled: payload.enabled });
 			send(response, 200, providerConnection);
 			return;
 		}

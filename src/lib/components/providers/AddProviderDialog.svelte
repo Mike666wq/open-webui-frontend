@@ -413,6 +413,7 @@
 					<button
 						type="button"
 						class="rounded-lg border px-3 py-2 text-sm dark:border-gray-700"
+						data-testid="provider-back"
 						on:click={() => (step = 'template')}
 					>
 						{$i18n.t('Back')}
@@ -484,6 +485,7 @@
 					<button
 						type="button"
 						class="rounded-lg border px-3 py-2 text-sm dark:border-gray-700"
+						data-testid="provider-back"
 						on:click={() => (step = 'setup')}
 					>
 						{$i18n.t('Back')}

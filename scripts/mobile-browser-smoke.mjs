@@ -398,16 +398,17 @@ async function providerSettings(cdp) {
 	);
 	await cdp.click(`document.querySelector('[data-testid="provider-add"]')`, 'add provider');
 	await cdp.waitForExpression(
-		`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] select'))`,
+		`Boolean(document.querySelector('[data-testid="provider-template-deepseek"]'))`,
 		'provider wizard'
 	);
 	const choose = async (id) => {
 		await cdp.waitForExpression(
-			`Boolean([...document.querySelectorAll('[aria-labelledby="provider-wizard-title"] select option')].find(option => option.value === ${JSON.stringify(id)}))`,
+			`Boolean(document.querySelector('[data-testid="provider-template-${id}"]'))`,
 			`loaded provider option ${id}`
 		);
-		await cdp.evaluate(
-			`(() => { const select=document.querySelector('[aria-labelledby="provider-wizard-title"] select'); select.value=${JSON.stringify(id)}; select.dispatchEvent(new Event('change',{bubbles:true})); })()`
+		await cdp.click(
+			`document.querySelector('[data-testid="provider-template-${id}"]')`,
+			`choose provider ${id}`
 		);
 	};
 	const enterKey = async () => {
@@ -415,17 +416,37 @@ async function providerSettings(cdp) {
 			`(() => { const input=document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="password"]'); input.value='synthetic-fixture-key'; input.dispatchEvent(new Event('input',{bubbles:true})); })()`
 		);
 	};
+	const backToTemplates = async () => {
+		await cdp.click(
+			`document.querySelector('[aria-labelledby="provider-wizard-title"] [data-testid="provider-back"]')`,
+			'back to provider templates'
+		);
+		await cdp.waitForExpression(
+			`Boolean(document.querySelector('[data-testid="provider-template-deepseek"]'))`,
+			'provider template grid'
+		);
+	};
+	// Provider types that are not implemented are listed but cannot be added.
+	assert.equal(
+		await cdp.evaluate(
+			`document.querySelector('[data-testid="provider-template-anthropic"]')?.disabled === true`
+		),
+		true
+	);
 	await choose('deepseek');
 	await cdp.waitForExpression(
 		`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="password"]'))`,
 		'provider key input'
 	);
 	await enterKey();
+	// Switching the provider clears the key that was typed for the previous one.
+	await backToTemplates();
 	await choose('openai');
 	await cdp.waitForExpression(
 		`document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="password"]')?.value === ''`,
 		'key cleared after provider change'
 	);
+	await backToTemplates();
 	await choose('deepseek');
 	await enterKey();
 	await cdp.waitForExpression(
@@ -465,7 +486,7 @@ async function providerSettings(cdp) {
 	const startKimi = async () => {
 		await cdp.click(`document.querySelector('[data-testid="provider-add"]')`, 'add Kimi provider');
 		await cdp.waitForExpression(
-			`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] select'))`,
+			`Boolean(document.querySelector('[data-testid="provider-template-kimi"]'))`,
 			'Kimi provider select'
 		);
 		await choose('kimi');
@@ -525,7 +546,7 @@ async function providerSettings(cdp) {
 	const startChatGPT = async () => {
 		await cdp.click(`document.querySelector('[data-testid="provider-add"]')`, 'add ChatGPT');
 		await cdp.waitForExpression(
-			`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] select'))`,
+			`Boolean(document.querySelector('[data-testid="provider-template-chatgpt"]'))`,
 			'ChatGPT select'
 		);
 		await choose('chatgpt');
@@ -595,17 +616,17 @@ async function providerSettings(cdp) {
 		'ChatGPT connected without helper'
 	);
 
-	const providerList = '[aria-label="供应商列表"]';
+	const providerList = '[data-testid="provider-list"]';
 	const listCount = await cdp.evaluate(
 		`document.querySelector(${JSON.stringify(providerList)})?.querySelectorAll('button').length`
 	);
 	assert.equal(listCount, 3);
 	await cdp.click(
-		`document.querySelector('[aria-label="供应商列表"] button')`,
+		`document.querySelector('[data-testid="provider-list"] button')`,
 		'open provider detail'
 	);
 	await cdp.waitForExpression(
-		`Boolean(document.querySelector('[aria-label="模型管理"]'))`,
+		`Boolean(document.querySelector('[data-testid="provider-models"]'))`,
 		'provider models detail'
 	);
 	await cdp.waitForExpression(
@@ -629,7 +650,7 @@ async function providerSettings(cdp) {
 		'provider enabled state'
 	);
 	const detailWidth = await cdp.evaluate(
-		`document.querySelector('[aria-label="模型管理"]').getBoundingClientRect().right`
+		`document.querySelector('[data-testid="provider-models"]').getBoundingClientRect().right`
 	);
 	assert.ok(detailWidth <= 394, 'Provider detail must stay inside mobile viewport');
 	await cdp.screenshot('provider-models-393x852.png');
@@ -644,7 +665,7 @@ async function providerSettings(cdp) {
 			});
 			await sleep(200);
 			const rect = await cdp.evaluate(
-				`(() => {const r=document.querySelector('[aria-label="模型管理"]').getBoundingClientRect();return {left:r.left,right:r.right};})()`
+				`(() => {const r=document.querySelector('[data-testid="provider-models"]').getBoundingClientRect();return {left:r.left,right:r.right};})()`
 			);
 			assert.ok(
 				rect.left >= 0 && rect.right <= width,

@@ -71,11 +71,6 @@ export const verifyProviderConnection = (id: string) =>
 	request(`/connections/${encodeURIComponent(id)}/verify`, { method: 'POST', body: '{}' });
 export const verifyProviderDraft = (payload: Record<string, unknown>) =>
 	request('/connections/verify', { method: 'POST', body: JSON.stringify(payload) });
-export const refreshProviderModels = (id: string) =>
-	request(`/connections/${encodeURIComponent(id)}/models/refresh`, {
-		method: 'POST',
-		body: '{}'
-	});
 export const getProviderModels = (purpose = 'chat') =>
 	request(`/models?purpose=${encodeURIComponent(purpose)}`);
 export const setProviderModelUses = (
