@@ -15,7 +15,12 @@
 		startKimiLogin
 	} from '$lib/apis/providers';
 	import type { ProviderTemplate } from '$lib/apis/providers';
-	import { providerErrorHint, providerErrorTitle } from '$lib/utils/provider-errors';
+	import type { ProviderError } from '$lib/utils/provider-errors';
+	import {
+		providerErrorActionLabelKey,
+		providerErrorHint,
+		providerErrorSummary
+	} from '$lib/utils/provider-errors';
 	import { PURPOSE_LABEL_KEYS, purposesOfCandidate } from '$lib/utils/provider-models';
 
 	const i18n: any = getContext('i18n');
@@ -40,6 +45,7 @@
 	let picked: string[] = [];
 	let saving = false;
 	let error = '';
+	let errorDetail: ProviderError | null = null;
 	let revealApiKey = false;
 	let oauthAttempt: any = null;
 	let callbackUrl = '';
@@ -57,12 +63,24 @@
 
 	const readableError = (err: unknown) => String(err).replace(/^Error:\s*/, '');
 
+	/**
+	 * Show a failure with its taxonomy when the backend sent one.
+	 *
+	 * A rejected sign-in and an unreachable provider need different actions, so
+	 * the stage and the reason travel with the message.
+	 */
+	const showError = (err: unknown) => {
+		errorDetail = (err as { providerError?: ProviderError | null })?.providerError ?? null;
+		error = errorDetail ? providerErrorSummary(errorDetail) : readableError(err);
+	};
+
 	const bailianNeedsWorkspace = (value: string) =>
 		['eu-central-1', 'us-east-1', 'ap-northeast-1'].includes(value);
 
 	function selectTemplate(item: ProviderTemplate) {
 		if (!item.supported) {
 			error = item.unsupported_reason ?? $i18n.t('This provider type is not available yet.');
+			errorDetail = null;
 			return;
 		}
 		templateId = item.id;
@@ -75,6 +93,7 @@
 		candidates = [];
 		picked = [];
 		error = '';
+		errorDetail = null;
 		step = 'setup';
 	}
 
@@ -102,6 +121,7 @@
 		candidates = [];
 		picked = [];
 		error = '';
+		errorDetail = null;
 	}
 
 	function stopPolling() {
@@ -116,6 +136,7 @@
 
 	async function checkConnection() {
 		error = '';
+		errorDetail = null;
 		saving = true;
 		try {
 			const result = await verifyProviderDraft({
@@ -134,7 +155,7 @@
 			picked = candidates.map((model: any) => model.upstream_id ?? model.id);
 			step = 'models';
 		} catch (err) {
-			error = readableError(err);
+			showError(err);
 		} finally {
 			saving = false;
 		}
@@ -148,6 +169,7 @@
 
 	async function saveConnection() {
 		error = '';
+		errorDetail = null;
 		saving = true;
 		try {
 			await createProviderConnection({
@@ -169,7 +191,7 @@
 			toast.success($i18n.t('Provider connection saved'));
 			close();
 		} catch (err) {
-			error = readableError(err);
+			showError(err);
 		} finally {
 			saving = false;
 		}
@@ -179,6 +201,7 @@
 		if (saving) return;
 		saving = true;
 		error = '';
+		errorDetail = null;
 		stopPolling();
 		const generation = pollGeneration;
 		const signingProvider = templateId;
@@ -235,7 +258,7 @@
 					} catch (err) {
 						if (generation === pollGeneration) {
 							stopPolling();
-							error = readableError(err);
+							showError(err);
 						}
 					} finally {
 						polling = false;
@@ -244,7 +267,7 @@
 				Math.max(2, attempt.interval ?? 2) * 1000
 			);
 		} catch (err) {
-			if (generation === pollGeneration) error = readableError(err);
+			if (generation === pollGeneration) showError(err);
 		} finally {
 			saving = false;
 		}
@@ -254,6 +277,7 @@
 		if (!oauthAttempt || submittingCallback || !callbackUrl.trim()) return;
 		submittingCallback = true;
 		error = '';
+		errorDetail = null;
 		const attemptId = oauthAttempt.attempt_id;
 		try {
 			await completeChatGPTLogin(attemptId, callbackUrl.trim());
@@ -265,7 +289,7 @@
 			toast.success($i18n.t('{{provider}} account connected', { provider: template?.name }));
 			close();
 		} catch (err) {
-			if (oauthAttempt?.attempt_id === attemptId) error = readableError(err);
+			if (oauthAttempt?.attempt_id === attemptId) showError(err);
 		} finally {
 			if (oauthAttempt?.attempt_id === attemptId) callbackUrl = '';
 			submittingCallback = false;
@@ -556,12 +580,25 @@
 		{/if}
 
 		{#if error}
-			<p
+			<div
 				role="status"
 				class="rounded-lg bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300"
+				data-testid="provider-dialog-error"
 			>
-				{error}
-			</p>
+				<p class="break-words">{error}</p>
+				{#if errorDetail}
+					<p class="mt-1">
+						{$i18n.t('Suggested action: {{action}}', {
+							action: $i18n.t(
+								providerErrorActionLabelKey(errorDetail, {
+									authType: isOAuth ? 'oauth' : 'api_key'
+								})
+							)
+						})}
+					</p>
+					<p class="mt-1 leading-relaxed">{providerErrorHint(errorDetail)}</p>
+				{/if}
+			</div>
 		{/if}
 
 		{#if step !== 'template'}

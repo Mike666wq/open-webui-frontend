@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, getContext } from 'svelte';
 
-	const i18n = getContext('i18n');
+	const i18n: any = getContext('i18n');
 
 	import { config as backendConfig, settings, user } from '$lib/stores';
 
@@ -66,7 +66,17 @@
 
 <div id="tab-connections">
 	{#if $backendConfig?.features?.enable_provider_connections}
-		<ProviderConnections mode="personal" />
+		<section class="space-y-3" aria-labelledby="provider-connections-heading">
+			<h3 id="provider-connections-heading" class="text-xs text-gray-600 dark:text-gray-400">
+				{$i18n.t('Server-managed provider connections')}
+			</h3>
+			<p class="text-[0.6875rem] leading-relaxed text-gray-400 dark:text-gray-600">
+				{$i18n.t(
+					'These connections are kept by the server. The browser direct connections below are a different thing: they run from this browser and are not part of the server configuration.'
+				)}
+			</p>
+			<ProviderConnections mode="personal" />
+		</section>
 	{/if}
 
 	{#if $backendConfig?.features?.enable_direct_connections || $user?.role === 'admin'}

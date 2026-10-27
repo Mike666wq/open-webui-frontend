@@ -620,7 +620,7 @@ async function providerSettings(cdp) {
 	const listCount = await cdp.evaluate(
 		`document.querySelector(${JSON.stringify(providerList)})?.querySelectorAll('button').length`
 	);
-	assert.equal(listCount, 3);
+	assert.equal(listCount, 4);
 	await cdp.click(
 		`document.querySelector('[data-testid="provider-list"] button')`,
 		'open provider detail'
@@ -720,6 +720,164 @@ async function providerSettings(cdp) {
 		responsiveProviderDetail: true,
 		providerModelEnableToggle: true,
 		providerCallsTab: true
+	};
+}
+
+async function catalogWarning(cdp) {
+	// A8: the model selector names the failing connection, keeps the long
+	// explanation in the details and offers a reachable way into the
+	// connection. The warning must not push the search field or the model
+	// actions out of the viewport.
+	const sizes = [
+		{ name: '390x844', width: 390, height: 844 },
+		{ name: '489x550', width: 489, height: 550 },
+		{ name: '1280x800', width: 1280, height: 800 }
+	];
+	const measured = {};
+	for (const size of sizes) {
+		await cdp.send('Emulation.setDeviceMetricsOverride', {
+			width: size.width,
+			height: size.height,
+			deviceScaleFactor: 1,
+			mobile: size.width < 768
+		});
+		await sleep(300);
+		for (const dark of [false, true]) {
+			await cdp.evaluate(`document.documentElement.classList.toggle('dark', ${dark})`);
+			await cdp.click(`document.querySelector('button[id^="model-selector-"]')`, 'model selector');
+			await cdp.waitForExpression(
+				`Boolean(document.querySelector('[data-testid="provider-catalog-warnings"]'))`,
+				'catalog warning'
+			);
+			const state = await cdp.evaluate(`
+				(() => {
+					const rect = (element) => {
+						const box = element?.getBoundingClientRect();
+						return box
+							? { left: box.left, top: box.top, right: box.right, bottom: box.bottom, width: box.width, height: box.height }
+							: null;
+					};
+					const warning = document.querySelector('[data-testid="provider-catalog-warnings"]');
+					const action = document.querySelector('[data-testid="provider-catalog-open-connection"]');
+					return {
+						text: warning?.textContent ?? '',
+						warning: rect(warning),
+						action: rect(action),
+						actionText: action?.textContent ?? '',
+						search: rect(document.querySelector('#model-search-input')),
+						viewport: { width: innerWidth, height: innerHeight }
+					};
+				})()
+			`);
+			assert.match(state.text, /SiliconFlow/);
+			assert.match(state.text, /获取模型列表时地址被本地安全策略拦截/);
+			// The long deployment explanation stays in the connection details.
+			assert.doesNotMatch(state.text, /请检查地址解析结果与代理配置/);
+			assert.ok(state.action && state.action.width >= 1, 'the warning offers an action');
+			assert.ok(
+				state.action.right <= state.viewport.width + 1,
+				`the warning action stays inside the viewport: ${JSON.stringify(state)}`
+			);
+			assert.ok(
+				state.search && state.search.bottom <= size.height + 1,
+				`the search field stays inside the viewport: ${JSON.stringify(state)}`
+			);
+			await cdp.screenshot(`catalog-warning-${dark ? 'dark' : 'light'}-${size.name}.png`);
+			await cdp.send('Input.dispatchKeyEvent', {
+				type: 'keyDown',
+				key: 'Escape',
+				code: 'Escape',
+				windowsVirtualKeyCode: 27
+			});
+			await sleep(250);
+		}
+		measured[size.name] = true;
+	}
+
+	// The action is reachable with the keyboard alone and lands on the
+	// connection that failed.
+	await cdp.send('Emulation.setDeviceMetricsOverride', {
+		width: 390,
+		height: 844,
+		deviceScaleFactor: 1,
+		mobile: true
+	});
+	await sleep(300);
+	await cdp.click(`document.querySelector('button[id^="model-selector-"]')`, 'model selector');
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[data-testid="provider-catalog-open-connection"]'))`,
+		'catalog warning action'
+	);
+	await cdp.evaluate(`
+		(() => {
+			const action = document.querySelector('[data-testid="provider-catalog-open-connection"]');
+			action?.focus();
+			return document.activeElement === action;
+		})()
+	`);
+	// A key event with its text activates the focused button; a keydown
+	// without text does not.
+	await cdp.send('Input.dispatchKeyEvent', {
+		type: 'keyDown',
+		key: 'Enter',
+		code: 'Enter',
+		windowsVirtualKeyCode: 13,
+		nativeVirtualKeyCode: 13,
+		text: '\r',
+		unmodifiedText: '\r'
+	});
+	await cdp.send('Input.dispatchKeyEvent', {
+		type: 'keyUp',
+		key: 'Enter',
+		code: 'Enter',
+		windowsVirtualKeyCode: 13,
+		nativeVirtualKeyCode: 13
+	});
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[data-testid="provider-connection-error"]'))`,
+		'the failing connection in the connection settings'
+	);
+	const focused = await cdp.evaluate(`
+		(() => {
+			const banner = document.querySelector('[data-testid="provider-connection-error"]');
+			return {
+				text: banner?.textContent ?? '',
+				action: banner?.querySelector('[data-testid="provider-recovery-action"]')?.textContent ?? ''
+			};
+		})()
+	`);
+	assert.match(focused.text, /SiliconFlow|获取模型列表时地址被本地安全策略拦截/);
+	assert.ok(focused.action.length > 0, 'the connection offers a recovery action');
+	await cdp.screenshot('catalog-warning-connection-details.png');
+
+	// Leave the settings the way the next scenario expects to find them: the
+	// escape closes the model list, the back button closes the settings.
+	await cdp.send('Input.dispatchKeyEvent', {
+		type: 'keyDown',
+		key: 'Escape',
+		code: 'Escape',
+		windowsVirtualKeyCode: 27,
+		nativeVirtualKeyCode: 27
+	});
+	await cdp.send('Input.dispatchKeyEvent', {
+		type: 'keyUp',
+		key: 'Escape',
+		code: 'Escape',
+		windowsVirtualKeyCode: 27,
+		nativeVirtualKeyCode: 27
+	});
+	await sleep(300);
+	await cdp.click(`document.querySelector('#settings-tabs-container button')`, 'settings back');
+	await cdp.waitForExpression(
+		`!document.querySelector('.settings-content-scroll')`,
+		'the connection settings are closed again'
+	);
+	return {
+		perConnectionReason: true,
+		longExplanationInDetails: true,
+		reachableAction: true,
+		keyboardReachable: true,
+		viewports: Object.keys(measured)
 	};
 }
 
@@ -1104,6 +1262,7 @@ async function main() {
 			mobile: true
 		});
 		results.wallpaperPan = await wallpaperPanning(client);
+		results.catalogWarning = await catalogWarning(client);
 		await openSettings(client);
 		results.providers = await providerSettings(client);
 		results.settings = await settingsGeometry(client, 393, 852);
@@ -1590,6 +1749,7 @@ async function main() {
 				sourceCommit: fixture.sourceCommit,
 				viewports: viewports.map(({ name }) => name),
 				wallpaperPan: results.wallpaperPan.swipes,
+				catalogWarning: results.catalogWarning,
 				settingsScrollable: true,
 				editorActionsReachable: true
 			})
