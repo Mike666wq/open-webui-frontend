@@ -73,15 +73,6 @@ export const verifyProviderDraft = (payload: Record<string, unknown>) =>
 	request('/connections/verify', { method: 'POST', body: JSON.stringify(payload) });
 export const getProviderModels = (purpose = 'chat') =>
 	request(`/models?purpose=${encodeURIComponent(purpose)}`);
-export const setProviderModelUses = (
-	id: string,
-	upstream_id: string,
-	uses: Record<string, string>
-) =>
-	request(`/connections/${encodeURIComponent(id)}/model-uses`, {
-		method: 'PUT',
-		body: JSON.stringify({ upstream_id, uses })
-	});
 export const testProviderModel = (id: string, payload: Record<string, unknown>) =>
 	request(`/connections/${encodeURIComponent(id)}/model-test`, {
 		method: 'POST',

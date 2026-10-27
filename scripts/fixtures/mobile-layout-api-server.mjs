@@ -499,6 +499,15 @@ function isPage(pathname) {
 	return routes.some((route) => route.test(pathname));
 }
 
+// The provider routes are matched exactly: a page route such as /workspace/models
+// must never be answered with an API payload.
+const PROVIDER_CONNECTION_MODELS = /^\/api\/v1\/providers\/connections\/[^/]+\/models$/;
+const PROVIDER_CONNECTION_MODELS_FETCH =
+	/^\/api\/v1\/providers\/connections\/[^/]+\/models\/fetch$/;
+const PROVIDER_CONNECTION_MODEL_ITEM =
+	/^\/api\/v1\/providers\/connections\/[^/]+\/models\/([^/]+)$/;
+const PROVIDER_CONNECTION_ENABLED = /^\/api\/v1\/providers\/connections\/[^/]+\/enabled$/;
+
 const server = createServer(async (request, response) => {
 	const url = new URL(request.url || '/', origin);
 	if (request.method === 'GET' && url.pathname === '/api/v1/files/reading-file/content') {
@@ -704,7 +713,7 @@ const server = createServer(async (request, response) => {
 			send(response, 200, providerConnection);
 			return;
 		}
-		if (url.pathname.endsWith('/models/fetch') && request.method === 'POST') {
+		if (PROVIDER_CONNECTION_MODELS_FETCH.test(url.pathname) && request.method === 'POST') {
 			// Fetching only refreshes the candidate pool; the whitelist is untouched.
 			const candidates = (providerConnection?.models ?? []).map((model) => ({
 				upstream_id: model.upstream_id,
@@ -714,11 +723,11 @@ const server = createServer(async (request, response) => {
 			send(response, 200, { candidates, error: null, fetched_at: now });
 			return;
 		}
-		if (url.pathname.endsWith('/models') && request.method === 'GET') {
+		if (PROVIDER_CONNECTION_MODELS.test(url.pathname) && request.method === 'GET') {
 			send(response, 200, { models: providerConnection?.models ?? [] });
 			return;
 		}
-		if (url.pathname.endsWith('/models') && request.method === 'POST') {
+		if (PROVIDER_CONNECTION_MODELS.test(url.pathname) && request.method === 'POST') {
 			const chunks = [];
 			for await (const chunk of request) chunks.push(chunk);
 			const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
@@ -740,7 +749,7 @@ const server = createServer(async (request, response) => {
 			send(response, 200, providerConnection);
 			return;
 		}
-		const whitelistModel = url.pathname.match(/\/models\/([^/]+)$/);
+		const whitelistModel = url.pathname.match(PROVIDER_CONNECTION_MODEL_ITEM);
 		if (whitelistModel) {
 			const upstreamId = decodeURIComponent(whitelistModel[1]);
 			if (request.method === 'PUT') {
@@ -768,7 +777,7 @@ const server = createServer(async (request, response) => {
 				return;
 			}
 		}
-		if (url.pathname.endsWith('/enabled') && request.method === 'PUT') {
+		if (PROVIDER_CONNECTION_ENABLED.test(url.pathname) && request.method === 'PUT') {
 			const chunks = [];
 			for await (const chunk of request) chunks.push(chunk);
 			const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
