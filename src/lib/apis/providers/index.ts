@@ -27,7 +27,36 @@ const request = async (path: string, options: RequestInit = {}) => {
 	return body;
 };
 
-export const getProviderCatalog = () => request('');
+export interface ProviderTemplate {
+	id: string;
+	name: string;
+	protocol: string;
+	protocol_label?: string;
+	group: string;
+	group_label?: string;
+	auth_types: string[];
+	default_base_url: string;
+	docs_url?: string;
+	supported: boolean;
+	unsupported_reason?: string | null;
+}
+
+export interface ProviderTemplateGroup {
+	id: string;
+	label: string;
+	order: number;
+}
+
+/**
+ * The catalog endpoint answers with the grouped template list. Older backends
+ * answer with a bare array, so both shapes are accepted here.
+ */
+export const getProviderCatalog = async () => {
+	const body = await request('');
+	const data = Array.isArray(body) ? body : (body?.data ?? []);
+	const groups = Array.isArray(body?.groups) ? body.groups : [];
+	return { data: data as ProviderTemplate[], groups: groups as ProviderTemplateGroup[] };
+};
 export const getProviderConnections = () => request('/connections');
 export const createProviderConnection = (payload: Record<string, unknown>) =>
 	request('/connections', { method: 'POST', body: JSON.stringify(payload) });
@@ -102,10 +131,40 @@ export const cancelKimiLogin = (attemptId: string) =>
 export const disconnectKimiConnection = (connectionId: string) =>
 	request(`/auth/kimi/connection/${encodeURIComponent(connectionId)}`, { method: 'DELETE' });
 
-export const setProviderModelEnabled = (id: string, upstream_id: string, enabled: boolean) =>
-	request(`/connections/${encodeURIComponent(id)}/model-enabled`, {
+export const setProviderConnectionEnabled = (id: string, enabled: boolean) =>
+	request(`/connections/${encodeURIComponent(id)}/enabled`, {
 		method: 'PUT',
-		body: JSON.stringify({ upstream_id, enabled })
+		body: JSON.stringify({ enabled })
+	});
+export const fetchProviderModels = (id: string) =>
+	request(`/connections/${encodeURIComponent(id)}/models/fetch`, {
+		method: 'POST',
+		body: '{}'
+	});
+export const addProviderModels = (
+	id: string,
+	payload: {
+		upstream_ids: string[];
+		display_names?: Record<string, string>;
+		uses?: Record<string, string>;
+	}
+) =>
+	request(`/connections/${encodeURIComponent(id)}/models`, {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+export const updateProviderModel = (
+	id: string,
+	upstream_id: string,
+	payload: { display_name?: string; uses?: Record<string, string>; enabled?: boolean }
+) =>
+	request(`/connections/${encodeURIComponent(id)}/models/${encodeURIComponent(upstream_id)}`, {
+		method: 'PUT',
+		body: JSON.stringify(payload)
+	});
+export const removeProviderModel = (id: string, upstream_id: string) =>
+	request(`/connections/${encodeURIComponent(id)}/models/${encodeURIComponent(upstream_id)}`, {
+		method: 'DELETE'
 	});
 export const getProviderCalls = (filters: Record<string, string> = {}) =>
 	request(`/calls/history?${new URLSearchParams(filters)}`);
