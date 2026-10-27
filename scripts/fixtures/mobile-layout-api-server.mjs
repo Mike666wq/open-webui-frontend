@@ -1004,6 +1004,7 @@ const server = createServer(async (request, response) => {
 			createReadStream(path.join(manifestRoot, manifest.entry)).pipe(response);
 			return;
 		}
+		event('not-found', { path: url.pathname });
 		send(response, 404, { detail: 'Not found' });
 	} catch (error) {
 		event('server-error', { message: String(error) });

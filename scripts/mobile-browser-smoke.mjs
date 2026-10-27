@@ -815,12 +815,16 @@ async function catalogWarning(cdp) {
 			return document.activeElement === action;
 		})()
 	`);
+	// A key event with its text activates the focused button; a keydown
+	// without text does not.
 	await cdp.send('Input.dispatchKeyEvent', {
 		type: 'keyDown',
 		key: 'Enter',
 		code: 'Enter',
 		windowsVirtualKeyCode: 13,
-		nativeVirtualKeyCode: 13
+		nativeVirtualKeyCode: 13,
+		text: '\r',
+		unmodifiedText: '\r'
 	});
 	await cdp.send('Input.dispatchKeyEvent', {
 		type: 'keyUp',
@@ -845,6 +849,29 @@ async function catalogWarning(cdp) {
 	assert.match(focused.text, /SiliconFlow|获取模型列表时地址被本地安全策略拦截/);
 	assert.ok(focused.action.length > 0, 'the connection offers a recovery action');
 	await cdp.screenshot('catalog-warning-connection-details.png');
+
+	// Leave the settings the way the next scenario expects to find them: the
+	// escape closes the model list, the back button closes the settings.
+	await cdp.send('Input.dispatchKeyEvent', {
+		type: 'keyDown',
+		key: 'Escape',
+		code: 'Escape',
+		windowsVirtualKeyCode: 27,
+		nativeVirtualKeyCode: 27
+	});
+	await cdp.send('Input.dispatchKeyEvent', {
+		type: 'keyUp',
+		key: 'Escape',
+		code: 'Escape',
+		windowsVirtualKeyCode: 27,
+		nativeVirtualKeyCode: 27
+	});
+	await sleep(300);
+	await cdp.click(`document.querySelector('#settings-tabs-container button')`, 'settings back');
+	await cdp.waitForExpression(
+		`!document.querySelector('.settings-content-scroll')`,
+		'the connection settings are closed again'
+	);
 	return {
 		perConnectionReason: true,
 		longExplanationInDetails: true,
@@ -1722,6 +1749,7 @@ async function main() {
 				sourceCommit: fixture.sourceCommit,
 				viewports: viewports.map(({ name }) => name),
 				wallpaperPan: results.wallpaperPan.swipes,
+				catalogWarning: results.catalogWarning,
 				settingsScrollable: true,
 				editorActionsReachable: true
 			})
