@@ -32,6 +32,29 @@ For the backend API contract, provider adapters, credential storage and security
 
 原有 OpenAI、Ollama 和浏览器直连设置继续可用，已保存的连接和聊天无需迁移。更多 API 契约、适配器和凭据安全说明见[后端提供商连接指南](https://github.com/Mike666wq/open-webui-backend/blob/main/docs/provider-connections.md)。
 
+## When a connection fails
+
+A failure is shown with its **stage** and its **reason**, not as a generic error:
+
+| What you see                                       | Stage                  | Reason                             | Action offered                |
+| -------------------------------------------------- | ---------------------- | ---------------------------------- | ----------------------------- |
+| a domain resolves into `198.18.x.x` and is blocked | fetching models        | `address_blocked`                  | check the server network      |
+| the sign-in expired                                | refreshing the sign-in | `token_expired`                    | sign in again                 |
+| the account lacks a permission                     | fetching models        | `insufficient_permissions`         | check the account permissions |
+| the key was rejected                               | fetching models        | `invalid_credentials`              | replace the API key           |
+| the provider throttles or the quota is gone        | calling the model      | `rate_limited` / `quota_exhausted` | try again later               |
+
+What to keep in mind:
+
+- **A failed model list does not mean inference is broken.** A provider can refuse the model list and still answer requests. Real requests keep their own credential check.
+- **A 403 is not a wrong key.** It means the account lacks a permission; replacing the key does not help.
+- Signing in again **reuses the same connection**; it never creates a second one, and cancelling keeps the saved credentials.
+- Replacing a key **does not** clear the whitelist, the names, the purposes, the enabled switches or the model references in your chats.
+
+In the chat model selector, a failing connection shows a short reason and a **View connection** action that opens that connection. The long explanation and the deployment notes stay in the connection details; administrators see the DNS and proxy notes, other users see only what applies to them.
+
+The network side (fake-ip, reserved ranges) is documented in the [recovery runbook](https://github.com/Mike666wq/open-webui-backend/blob/main/docs/PROVIDER_RECOVERY.md).
+
 ## Unified models and media
 
 Chat, transcription, speech synthesis and image generation use the same server

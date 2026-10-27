@@ -25,6 +25,7 @@ let recordingNoteMissing = false;
 let recordingRemoved = false;
 let kimiConnection = null;
 let chatgptConnection = null;
+
 const chatgptAttempts = [];
 const kimiAttempts = [];
 
@@ -42,6 +43,46 @@ const routes = manifest.pageRoutes.map((pattern) => new RegExp(pattern));
 
 const now = Math.floor(Date.now() / 1000);
 const userId = 'fixture-user';
+
+// A connection whose model list could not be fetched: the address of the
+// provider resolves into a reserved range and the local policy blocks it.
+// The catalog carries the same taxonomy the backend sends.
+const blockedCatalogError = {
+	category: 'provider_network',
+	status: 502,
+	http_status: 502,
+	upstream_status: null,
+	retryable: true,
+	at: now,
+	hint: '连接被服务器的安全策略拦截，请检查地址解析结果与代理配置。',
+	stage: 'catalog',
+	reason: 'address_blocked',
+	suggested_action: 'check_server_network'
+};
+const blockedConnection = {
+	id: 'fixture-blocked-connection',
+	provider_id: 'siliconflow',
+	provider_template: 'siliconflow',
+	protocol: 'openai-compatible',
+	name: 'SiliconFlow',
+	auth_type: 'api_key',
+	visibility: 'private',
+	owner_id: userId,
+	config: { base_url: 'https://api.siliconflow.cn/v1' },
+	models: [
+		{
+			id: 'provider:fixture-blocked-connection:fixture-model',
+			upstream_id: 'fixture-model',
+			name: 'Fixture model',
+			uses: { chat: 'openai-chat' },
+			enabled: true
+		}
+	],
+	status: 'configured',
+	configured: true,
+	is_enabled: true,
+	catalog: { updated_at: null, stale: true, error: blockedCatalogError, request_path: 'server' }
+};
 const assistantId = 'fixture-assistant';
 const conversationId = 'layout-fixture';
 const socketSid = 'fixture-socket';
@@ -396,7 +437,9 @@ function api(pathname) {
 	if (pathname === '/api/v1/providers/legacy-migration/preview')
 		return { sources: [], conflicts: {} };
 	if (pathname === '/api/v1/providers/connections')
-		return [providerConnection, kimiConnection, chatgptConnection].filter(Boolean);
+		return [providerConnection, kimiConnection, chatgptConnection, blockedConnection].filter(
+			Boolean
+		);
 	if (pathname === '/api/v1/providers/models')
 		return { object: 'list', data: [transcriptionModel] };
 	if (pathname === '/api/config') return config;
@@ -406,7 +449,20 @@ function api(pathname) {
 		return userSettings;
 	}
 	if (pathname === '/api/models') {
-		return { object: 'list', data: [model] };
+		return {
+			object: 'list',
+			data: [model],
+			catalogs: [
+				{
+					connection_id: blockedConnection.id,
+					connection_name: blockedConnection.name,
+					updated_at: null,
+					stale: true,
+					error: blockedCatalogError,
+					request_path: 'server'
+				}
+			]
+		};
 	}
 	if (pathname === '/api/usage') return usage;
 	if (pathname === '/api/v1/tools/') return [];

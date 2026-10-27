@@ -1,4 +1,31 @@
 import { WEBUI_API_BASE_URL } from '$lib/constants';
+import type { ProviderError } from '$lib/utils/provider-errors';
+
+/**
+ * A failed provider request.
+ *
+ * The backend keeps the stage, the reason and the suggested action next to the
+ * message. They travel with the error so the interface can offer a recovery
+ * instead of only repeating what went wrong.
+ */
+export class ProviderApiError extends Error {
+	providerError: ProviderError | null;
+
+	constructor(message: string, providerError: ProviderError | null = null) {
+		super(message);
+		this.name = 'ProviderApiError';
+		this.providerError = providerError;
+	}
+}
+
+/** The taxonomy of a failed request, when the backend sent one. */
+const providerErrorOf = (body: any): ProviderError | null => {
+	const candidate = body?.error ?? body?.detail?.error ?? null;
+	if (candidate && typeof candidate === 'object' && typeof candidate.category === 'string') {
+		return candidate as ProviderError;
+	}
+	return null;
+};
 
 const request = async (path: string, options: RequestInit = {}) => {
 	const token = typeof localStorage !== 'undefined' ? localStorage.token : '';
@@ -22,7 +49,10 @@ const request = async (path: string, options: RequestInit = {}) => {
 		const message = [detail?.message, detail?.error?.message, detail, body?.message].find(
 			(value) => typeof value === 'string'
 		);
-		throw new Error(message ?? `Request failed (${response.status})`);
+		throw new ProviderApiError(
+			message ?? `Request failed (${response.status})`,
+			providerErrorOf(body)
+		);
 	}
 	return body;
 };

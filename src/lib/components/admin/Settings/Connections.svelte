@@ -79,7 +79,20 @@
 	<div class="flex-1 min-h-0 overflow-y-auto scrollbar-hover pr-1.5">
 		{#if connectionsConfig !== null}
 			{#if $config?.features?.enable_provider_connections}
-				<ProviderConnections mode="admin" />
+				<section class="space-y-3" aria-labelledby="admin-provider-connections-heading">
+					<h3
+						id="admin-provider-connections-heading"
+						class="text-xs text-gray-600 dark:text-gray-400"
+					>
+						{$i18n.t('Server-managed provider connections')}
+					</h3>
+					<p class="text-[0.6875rem] leading-relaxed text-gray-400 dark:text-gray-600">
+						{$i18n.t(
+							'These connections are kept by the server and shown next to the legacy OpenAI connections that still wait for a migration.'
+						)}
+					</p>
+					<ProviderConnections mode="admin" />
+				</section>
 				<div class="mt-5"></div>
 			{/if}
 

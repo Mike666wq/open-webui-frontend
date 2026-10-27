@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getContext, onMount } from 'svelte';
+	import { getContext, onMount, tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import ProviderCallHistory from '$lib/components/ProviderCallHistory.svelte';
 	import ProviderLegacyMigration from '$lib/components/ProviderLegacyMigration.svelte';
@@ -21,6 +21,14 @@
 		verifyProviderConnection
 	} from '$lib/apis/providers';
 	import type { ProviderTemplate } from '$lib/apis/providers';
+	import {
+		PROVIDER_RECOVERY_FOCUS_EVENT,
+		providerErrorAction,
+		providerErrorActionLabelKey,
+		providerErrorSummary,
+		providerErrorUpstreamStatus,
+		takeProviderRecoveryFocus
+	} from '$lib/utils/provider-errors';
 
 	const i18n: any = getContext('i18n');
 
@@ -37,6 +45,7 @@
 	let workingId = '';
 	let error = '';
 	let addOpen = false;
+	let showDetails = false;
 
 	let editingId = '';
 	let editName = '';
@@ -59,6 +68,18 @@
 	$: templateFor = (connection: any) =>
 		templates.find(
 			(item) => item.id === (connection?.provider_template ?? connection?.provider_id)
+		);
+	$: selectedError = selected?.catalog?.error ?? null;
+	$: selectedAction = selectedError
+		? providerErrorAction(selectedError, { authType: selected?.auth_type })
+		: null;
+	// The deployment notes name configuration files and environment variables.
+	// They belong to the operator of the server, not to every account.
+	$: showDeploymentNotes =
+		Boolean(selectedError) &&
+		$user?.role === 'admin' &&
+		['address_blocked', 'dns_failure', 'tls_failure', 'timeout'].includes(
+			selectedError?.reason ?? ''
 		);
 
 	const readableError = (err: unknown) => String(err).replace(/^Error:\s*/, '');
@@ -198,6 +219,44 @@
 		editApiType = connection.config?.api_type ?? 'openai';
 	};
 
+	/**
+	 * The recovery the backend asked for, carried out here.
+	 *
+	 * A sign-in is repeated for an OAuth account; a key is replaced for an API
+	 * key account. Neither of them touches the whitelist, the sharing rules or
+	 * the chat references of the connection.
+	 */
+	const runRecovery = async (connection: any, action: string) => {
+		if (action === 'reconnect') {
+			await reconnect(connection);
+			return;
+		}
+		if (action === 'replace_key') {
+			beginEdit(connection);
+			detailTab = 'settings';
+			mobileDetail = true;
+			await tick();
+			(
+				document.querySelector('[data-testid="provider-api-key-input"]') as HTMLElement | null
+			)?.focus();
+			return;
+		}
+		if (action === 'retry_later') {
+			await verifySaved(connection);
+			return;
+		}
+		// The remaining actions are explained in the details; there is nothing
+		// to run from the browser.
+		showDetails = true;
+	};
+
+	const focusConnection = (connectionId: string) => {
+		if (!connectionId) return;
+		selectedConnectionId = connectionId;
+		mobileDetail = true;
+		editingId = '';
+	};
+
 	const saveEdit = async (connection: any) => {
 		workingId = connection.id;
 		try {
@@ -236,7 +295,19 @@
 		}
 	};
 
-	onMount(load);
+	onMount(() => {
+		// The model selector hands over the connection that failed. The pending
+		// focus is read once; the event covers a panel that is already open.
+		const pending = takeProviderRecoveryFocus();
+		if (pending) focusConnection(pending);
+		const onFocus = (event: Event) => {
+			const connectionId = (event as CustomEvent<{ connectionId?: string }>)?.detail?.connectionId;
+			if (connectionId) focusConnection(connectionId);
+		};
+		window.addEventListener(PROVIDER_RECOVERY_FOCUS_EVENT, onFocus);
+		load();
+		return () => window.removeEventListener(PROVIDER_RECOVERY_FOCUS_EVENT, onFocus);
+	});
 </script>
 
 <section
@@ -300,6 +371,7 @@
 								selectedConnectionId = item.id;
 								mobileDetail = true;
 								editingId = '';
+								showDetails = false;
 							}}
 						>
 							<span class="block truncate text-sm font-medium">{item.name}</span>
@@ -308,6 +380,14 @@
 								· {item.models?.length ?? 0}
 								{$i18n.t('models')}
 							</span>
+							{#if item.catalog?.error}
+								<span
+									class="mt-0.5 block truncate text-xs text-amber-700 dark:text-amber-300"
+									data-testid="provider-list-error"
+								>
+									{providerErrorSummary(item.catalog.error)}
+								</span>
+							{/if}
 						</button>
 						{#if canManageConnection(item)}
 							<input
@@ -333,6 +413,84 @@
 				</button>
 
 				{#if selected}
+					{#if selectedError}
+						<div
+							class="mb-3 rounded-xl border border-amber-400 bg-amber-50/70 p-3 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+							role="status"
+							data-testid="provider-connection-error"
+						>
+							<div class="flex flex-wrap items-start justify-between gap-2">
+								<p class="min-w-0 flex-1 break-words">
+									{providerErrorSummary(selectedError)}
+								</p>
+								{#if canManageConnection(selected)}
+									<button
+										type="button"
+										class="shrink-0 rounded-lg border border-amber-500 px-2 py-1"
+										disabled={workingId === selected.id}
+										data-testid="provider-recovery-action"
+										on:click={() => runRecovery(selected, selectedAction ?? 'inspect_connection')}
+									>
+										{$i18n.t(
+											providerErrorActionLabelKey(selectedError, { authType: selected.auth_type })
+										)}
+									</button>
+								{/if}
+							</div>
+							<div class="mt-1 flex flex-wrap items-center gap-2 text-[0.6875rem]">
+								{#if providerErrorUpstreamStatus(selectedError) !== null}
+									<span>
+										{$i18n.t('Upstream status {{status}}', {
+											status: providerErrorUpstreamStatus(selectedError)
+										})}
+									</span>
+								{/if}
+								<button
+									type="button"
+									class="underline underline-offset-2"
+									data-testid="provider-error-details"
+									on:click={() => (showDetails = !showDetails)}
+								>
+									{showDetails ? $i18n.t('Hide the details') : $i18n.t('Show the details')}
+								</button>
+							</div>
+							{#if showDetails}
+								<div class="mt-2 space-y-2" data-testid="provider-error-detail-body">
+									<p class="break-words leading-relaxed">
+										{selectedError.hint ?? ''}
+									</p>
+									{#if showDeploymentNotes}
+										<div
+											class="rounded-lg border border-amber-400/70 p-2 leading-relaxed"
+											data-testid="provider-deployment-notes"
+										>
+											<p class="font-medium">{$i18n.t('Deployment notes')}</p>
+											<ul class="mt-1 list-disc space-y-1 pl-4">
+												<li>
+													{$i18n.t(
+														'Route one: check the DNS of the proxy in the deployment network (real resolution instead of fake-ip) and the egress of the backend container.'
+													)}
+												</li>
+												<li>
+													{$i18n.t(
+														'Route two: when the proxy is trusted to take over that range, set PROVIDER_ALLOWED_IP_RANGES=198.18.0.0/15 explicitly and rebuild or restart the backend the way this deployment does it.'
+													)}
+												</li>
+												<li>
+													{$i18n.t(
+														'Allowing the range only removes the local block. It does not promise that the proxy takes over, that the sign-in works, or that a model call succeeds.'
+													)}
+												</li>
+											</ul>
+											<p class="mt-1">
+												{$i18n.t('The full runbook is in docs/PROVIDER_RECOVERY.md.')}
+											</p>
+										</div>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					{/if}
 					<div
 						class="mb-4 flex flex-wrap gap-2"
 						role="tablist"
@@ -383,6 +541,7 @@
 									<input
 										class="mt-1 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-2 text-sm dark:border-gray-700"
 										type="password"
+										data-testid="provider-api-key-input"
 										bind:value={editApiKey}
 										autocomplete="new-password"
 										placeholder={$i18n.t('Leave blank to keep the current key')}

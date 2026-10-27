@@ -62,6 +62,21 @@
 			'The preview only reads the model list and never runs inference. The old connection keeps working until you migrate it; browser direct connections are out of scope.'
 		)}
 	</p>
+	<ul class="list-disc space-y-1 pl-4 text-xs text-gray-600 dark:text-gray-300">
+		<li>
+			{$i18n.t('The server-managed provider connections above are already in the new registry.')}
+		</li>
+		<li>
+			{$i18n.t(
+				'The legacy OpenAI connections below still live in the old configuration. Migrating them keeps the saved key, the model names and the access rules.'
+			)}
+		</li>
+		<li>
+			{$i18n.t(
+				'The browser direct connections in the personal settings run from this browser and are not part of this migration.'
+			)}
+		</li>
+	</ul>
 	{#if error}<p role="alert" class="text-red-600 dark:text-red-300">{error}</p>{/if}
 	{#if preview}
 		{#each Object.entries(preview.conflicts) as [alias, ids]}<label class="block text-xs"

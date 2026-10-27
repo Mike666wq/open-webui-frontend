@@ -11,7 +11,11 @@
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import { flyAndScale } from '$lib/utils/transitions';
-	import { providerErrorHint, providerErrorTitle } from '$lib/utils/provider-errors';
+	import {
+		providerCatalogFailures,
+		providerCatalogStale,
+		requestProviderRecoveryFocus
+	} from '$lib/utils/provider-errors';
 
 	import { createEventDispatcher, onMount, getContext, tick } from 'svelte';
 
@@ -198,6 +202,18 @@
 			? `${selectedModel.label} +${selectedCount - 1}`
 			: selectedModel.label
 		: (placeholder ?? $i18n.t('Select a model'));
+
+	// A failing catalog is reported per connection, with a short reason and a
+	// reachable way into the connection settings. The long explanation belongs
+	// to the connection details, not to the model list.
+	$: failingCatalogs = providerCatalogFailures($providerCatalogs);
+	$: staleCatalogCount = providerCatalogStale($providerCatalogs);
+
+	const openConnectionSettings = (connectionId: string) => {
+		if (!connectionId) return;
+		requestProviderRecoveryFocus(connectionId);
+		showSettings.set('connections');
+	};
 
 	let searchValue = '';
 
@@ -933,16 +949,39 @@
 					'w-[20rem]'} max-w-[calc(100vw-1rem)] justify-start rounded-xl border border-gray-100 bg-white p-0.5 shadow-lg outline-hidden dark:border-gray-800 dark:bg-gray-850 dark:text-white flex flex-col overflow-hidden"
 				transition:flyAndScale
 			>
-				{#if $providerCatalogs.some((c) => c.stale || c.error)}<div
-						class="m-2 rounded-lg border border-amber-400 bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100"
+				{#if failingCatalogs.length > 0}
+					<div
+						class="m-2 max-h-28 space-y-1 overflow-y-auto rounded-lg border border-amber-400 bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100"
 						role="status"
+						data-testid="provider-catalog-warnings"
 					>
-						{#each $providerCatalogs.filter((c) => c.stale || c.error) as catalog}<p>
-								{catalog.connection_name}：{catalog.error
-									? `获取模型列表失败（${providerErrorTitle(catalog.error)}）：${providerErrorHint(catalog.error)}`
-									: '目录待刷新，显示保存结果'}。可在外部连接中检查。
-							</p>{/each}
-					</div>{/if}
+						{#each failingCatalogs as catalog (catalog.connectionId)}
+							<div class="flex items-start justify-between gap-2">
+								<span class="min-w-0 flex-1 break-words">
+									{catalog.connectionName}：{catalog.summary}
+								</span>
+								<button
+									type="button"
+									class="shrink-0 underline underline-offset-2"
+									data-testid="provider-catalog-open-connection"
+									on:click={() => openConnectionSettings(catalog.connectionId)}
+								>
+									{$i18n.t('View connection')}
+								</button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+				{#if staleCatalogCount > 0}
+					<p
+						class="mx-2 mt-1 truncate text-xs text-gray-500 dark:text-gray-400"
+						data-testid="provider-catalog-stale"
+					>
+						{$i18n.t('{{count}} connections have a model list that is waiting for a refresh', {
+							count: staleCatalogCount
+						})}
+					</p>
+				{/if}
 				<slot>
 					{#if searchEnabled}
 						<div class="my-0.5 flex ml-2 mr-0.5 h-[1.6875rem] shrink-0 items-center gap-2">

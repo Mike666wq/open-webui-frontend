@@ -8,7 +8,11 @@
 		testProviderModel,
 		updateProviderModel
 	} from '$lib/apis/providers';
-	import { providerErrorHint, providerErrorTitle } from '$lib/utils/provider-errors';
+	import {
+		providerErrorActionLabelKey,
+		providerErrorHint,
+		providerErrorSummary
+	} from '$lib/utils/provider-errors';
 	import {
 		PURPOSE_ADAPTERS,
 		PURPOSE_LABEL_KEYS,
@@ -49,6 +53,7 @@
 	$: models = (connection?.models ?? []) as any[];
 	$: pool = candidatePool(candidates, models);
 	$: fetchError = connection?.catalog?.error ?? null;
+	$: fetchErrorContext = { authType: connection?.auth_type ?? null };
 
 	async function updated() {
 		if (onUpdated) await onUpdated();
@@ -64,7 +69,7 @@
 			candidates = result?.candidates ?? [];
 			picked = [];
 			if (result?.error) {
-				message = `${providerErrorTitle(result.error)}：${providerErrorHint(result.error)}`;
+				message = providerErrorSummary(result.error);
 			} else {
 				message = $i18n.t('Fetched {{count}} models from the provider', {
 					count: candidates.length
@@ -252,8 +257,15 @@
 		<div
 			class="rounded-xl border border-amber-400 bg-amber-50/70 p-3 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
 			role="status"
+			data-testid="provider-models-error"
 		>
-			{providerErrorTitle(fetchError)}：{providerErrorHint(fetchError)}
+			<p class="break-words">{providerErrorSummary(fetchError)}</p>
+			<p class="mt-1">
+				{$i18n.t('Suggested action: {{action}}', {
+					action: $i18n.t(providerErrorActionLabelKey(fetchError, fetchErrorContext))
+				})}
+			</p>
+			<p class="mt-1 leading-relaxed">{providerErrorHint(fetchError)}</p>
 		</div>
 	{/if}
 
