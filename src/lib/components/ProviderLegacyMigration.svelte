@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, getContext } from 'svelte';
 	import { previewLegacyMigration, applyLegacyMigration } from '$lib/apis/providers';
+	const i18n: any = getContext('i18n');
 	const dispatch = createEventDispatcher();
 	let preview: any = null;
 	let error = '';
@@ -20,7 +21,9 @@
 	async function migrate(source: any) {
 		if (
 			!confirm(
-				'将此旧连接迁入供应商管理，并禁用对应旧来源。保留现有模型访问规则与聊天引用。确认迁移？'
+				$i18n.t(
+					'Move this legacy connection into the provider registry and disable the old source. Existing model access rules and chat references are kept. Confirm?'
+				)
 			)
 		)
 			return;
@@ -46,25 +49,28 @@
 	class="mt-4 space-y-3 rounded-xl border border-gray-200 p-3 text-sm text-gray-900 dark:border-gray-700 dark:text-gray-100"
 >
 	<div class="flex items-center justify-between gap-2">
-		<h4 class="font-medium">旧版 OpenAI 连接迁移</h4>
+		<h4 class="font-medium">{$i18n.t('Legacy OpenAI connections')}</h4>
 		<button
 			type="button"
 			class="rounded-lg border px-3 py-1.5 dark:border-gray-700"
 			on:click={load}
-			disabled={busy}>预览迁移</button
+			disabled={busy}>{$i18n.t('Preview migration')}</button
 		>
 	</div>
 	<p class="text-xs text-gray-600 dark:text-gray-300">
-		预览只获取目录，不运行推理。迁移前旧连接继续有效；浏览器直连不在迁移范围内。
+		{$i18n.t(
+			'The preview only reads the model list and never runs inference. The old connection keeps working until you migrate it; browser direct connections are out of scope.'
+		)}
 	</p>
 	{#if error}<p role="alert" class="text-red-600 dark:text-red-300">{error}</p>{/if}
 	{#if preview}
 		{#each Object.entries(preview.conflicts) as [alias, ids]}<label class="block text-xs"
-				>同名模型 {alias} 的归属<select
+				>{$i18n.t('Owner of the duplicate model {{alias}}', { alias })}<select
 					class="ml-2 rounded bg-gray-100 p-2 dark:bg-gray-800"
 					bind:value={owners[alias]}
-					><option value={undefined}>选择来源</option>{#each ids as index}<option value={index}
-							>连接 {Number(index) + 1}</option
+					><option value={undefined}>{$i18n.t('Choose a source')}</option
+					>{#each ids as index}<option value={index}
+							>{$i18n.t('Connection {{index}}', { index: Number(index) + 1 })}</option
 						>{/each}</select
 				></label
 			>{/each}
@@ -73,7 +79,11 @@
 			>
 				<h5>{source.name}</h5>
 				<p class="break-all text-xs">{source.base_url}</p>
-				<p class="text-xs">{source.models.length} 个模型 · 保留原模型访问规则；服务端共享来源</p>
+				<p class="text-xs">
+					{$i18n.t('{{count}} models · the original access rules are kept', {
+						count: source.models.length
+					})}
+				</p>
 				<p class="break-all text-xs">{Object.keys(source.aliases).join('、')}</p>
 				{#if source.blocked_reason}<p class="text-xs text-amber-700 dark:text-amber-300">
 						{source.blocked_reason}
@@ -82,7 +92,9 @@
 					class="rounded-lg border px-3 py-1.5 disabled:opacity-50 dark:border-gray-700"
 					disabled={busy || !!source.blocked_reason || !!source.migrated_connection}
 					on:click={() => migrate(source)}
-					>{source.migrated_connection ? '已迁移' : '确认迁移此连接'}</button
+					>{source.migrated_connection
+						? $i18n.t('Migrated')
+						: $i18n.t('Migrate this connection')}</button
 				>
 			</article>{/each}
 	{/if}
