@@ -32,7 +32,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # The CJK font package download is the slowest step and its duration varies
+    # with runner network conditions; keep enough headroom for the smoke run.
+    timeout-minutes: 45
     outputs:
       artifact-name: ${{ steps.bundle.outputs.artifact-name }}
     env:
