@@ -1,6 +1,23 @@
+<script context="module" lang="ts">
+	import {
+		createFetchFeedbackCache,
+		type FetchFeedback
+	} from '$lib/components/providers/provider-models-feedback';
+
+	// Last fetch feedback per connection id, kept outside component instances so
+	// the result survives switching detail tabs and coming back (K10).
+	const feedbackCache = createFetchFeedbackCache();
+</script>
+
 <script lang="ts">
 	import { getContext } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import {
+		errorFeedback,
+		formatFetchTime,
+		successFeedback,
+		thrownFeedback
+	} from '$lib/components/providers/provider-models-feedback';
 	import {
 		addProviderModels,
 		fetchProviderModels,
@@ -50,6 +67,7 @@
 	let testPurpose: ServicePurpose | null = null;
 	let testModel: any = null;
 	let testOpen = false;
+	let fetchFeedback: FetchFeedback | null = feedbackCache.get(connection?.id);
 
 	$: if (connection?.id !== previousConnection) {
 		previousConnection = connection?.id;
@@ -59,6 +77,7 @@
 		editing = '';
 		editingUses = {};
 		testPurpose = null;
+		fetchFeedback = feedbackCache.get(connection?.id);
 	}
 
 	$: models = (connection?.models ?? []) as any[];
@@ -80,22 +99,36 @@
 	const readableError = (err: unknown) => String(err).replace(/^Error:\s*/, '');
 
 	async function fetchModels() {
+		// Anti double submit: the button is disabled while fetching, but guard
+		// here too so a stale click or a11y trigger cannot run two requests.
+		if (fetching) return;
 		fetching = true;
 		message = '';
 		try {
 			const result = await fetchProviderModels(connection.id);
 			candidates = result?.candidates ?? [];
 			picked = [];
+			const connectionId = connection.id;
 			if (result?.error) {
-				message = providerErrorSummary(result.error);
+				fetchFeedback = errorFeedback(result, fetchErrorContext, Date.now());
+				toast.error(fetchFeedback.summary);
 			} else {
-				message = $i18n.t('Fetched {{count}} models from the provider', {
-					count: candidates.length
-				});
+				fetchFeedback = successFeedback(candidates.length, Date.now());
+				toast.success(
+					$i18n.t('Fetched {{count}} models from the provider', { count: candidates.length })
+				);
 			}
-			await updated();
+			feedbackCache.set(connectionId, fetchFeedback);
+			// The parent refresh must not block the result display and must not
+			// keep the button in its loading state (K11). Failures surface as a
+			// separate message without discarding the fetch result.
+			updated().catch((refreshErr) => {
+				message = readableError(refreshErr);
+			});
 		} catch (err) {
-			message = readableError(err);
+			fetchFeedback = thrownFeedback(err, Date.now());
+			feedbackCache.set(connection.id, fetchFeedback);
+			toast.error(fetchFeedback.summary);
 		} finally {
 			fetching = false;
 		}
@@ -251,12 +284,45 @@
 				type="button"
 				class="rounded-lg border px-3 py-2 dark:border-gray-700"
 				disabled={fetching}
+				aria-busy={fetching}
 				on:click={fetchModels}
 			>
 				{fetching ? $i18n.t('Fetching…') : $i18n.t('Fetch model list')}
 			</button>
 		{/if}
 	</div>
+
+	{#if fetchFeedback}
+		<div
+			class="rounded-xl border p-3 text-xs {fetchFeedback.kind === 'success'
+				? 'border-green-300 bg-green-50/70 text-green-900 dark:border-green-800 dark:bg-green-950/40 dark:text-green-200'
+				: 'border-amber-400 bg-amber-50/70 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200'}"
+			role="status"
+			aria-live="polite"
+			data-testid="provider-models-fetch-status"
+		>
+			<p class="break-words">
+				{#if fetchFeedback.kind === 'success'}
+					{$i18n.t('Fetched {{count}} models at {{time}}', {
+						count: fetchFeedback.count,
+						time: formatFetchTime(fetchFeedback.at)
+					})}
+				{:else}
+					{fetchFeedback.summary}
+				{/if}
+			</p>
+			{#if fetchFeedback.kind === 'error'}
+				{#if fetchFeedback.actionKey}
+					<p class="mt-1">
+						{$i18n.t('Suggested action: {{action}}', { action: $i18n.t(fetchFeedback.actionKey) })}
+					</p>
+				{/if}
+				{#if fetchFeedback.hint}
+					<p class="mt-1 leading-relaxed">{fetchFeedback.hint}</p>
+				{/if}
+			{/if}
+		</div>
+	{/if}
 
 	{#if fetchError}
 		<div
