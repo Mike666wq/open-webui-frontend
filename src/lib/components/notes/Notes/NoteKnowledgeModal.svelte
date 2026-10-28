@@ -4,12 +4,14 @@
 	import dayjs from 'dayjs';
 
 	import Modal from '$lib/components/common/Modal.svelte';
-	import { getKnowledgeBases } from '$lib/apis/knowledge';
 	import {
+		getKnowledgeBases,
 		addFileToKnowledgeById,
+		updateFileFromKnowledgeById
+	} from '$lib/apis/knowledge';
+	import {
 		renameFileById,
 		updateFileDataContentById,
-		updateFileFromKnowledgeById,
 		uploadFile
 	} from '$lib/apis/files';
 	import { getNoteById, updateNoteById } from '$lib/apis/notes';
