@@ -1677,12 +1677,14 @@ async function main() {
 		);
 		await client.send('Emulation.setScrollbarsHidden', { hidden: true });
 		await client.navigate(`${origin}/notes`, "document.querySelector('#notes-container')");
-		assert.equal(
-			await client.evaluate(
-				"getComputedStyle(document.querySelector('#notes-container')).backgroundColor"
-			),
-			'rgba(0, 0, 0, 0)',
-			'notes list must keep the wallpaper visible'
+		const notesSurface = await client.evaluate(
+			"getComputedStyle(document.querySelector('#notes-container')).backgroundColor"
+		);
+		const notesSurfaceAlpha = /rgba?\([^)]*[,/]\s*([0-9.]+)\)$/.exec(notesSurface);
+		assert.ok(
+			notesSurface !== 'rgba(0, 0, 0, 0)' &&
+				(!notesSurfaceAlpha || Number(notesSurfaceAlpha[1]) >= 0.9),
+			`Notes text needs a readable surface over wallpaper: ${notesSurface}`
 		);
 		await client.screenshot('notes-reading-surface.png');
 		await client.navigate(
