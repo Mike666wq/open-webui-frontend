@@ -1,8 +1,44 @@
+import { v5 as uuidv5 } from 'uuid';
 import type { RecordingJob } from '$lib/apis/recordings';
 import sha256 from 'js-sha256';
 
 export const snapshotFingerprint = (title: string, content: string) =>
 	sha256(JSON.stringify([title, content]));
+
+// Stable namespace for recording summary idempotency keys (K7).
+export const SUMMARY_REQUEST_KEY_NAMESPACE = '8f4d9a21-6c73-4b8e-9a15-2d3e4f5a6b7c';
+
+export function summaryRequestKey(
+	jobId: string,
+	template: string,
+	model: string,
+	fingerprint: string
+): string {
+	return uuidv5([jobId, template, model, fingerprint].join('\n'), SUMMARY_REQUEST_KEY_NAMESPACE);
+}
+
+export const formatSyncTime = (timestamp?: number): string => {
+	if (!timestamp) return '';
+	const date = new Date(timestamp);
+	return Number.isNaN(date.getTime()) ? '' : date.toLocaleString();
+};
+
+export async function mapWithConcurrency<T, R>(
+	items: readonly T[],
+	limit: number,
+	task: (item: T) => Promise<R>
+): Promise<R[]> {
+	const results = new Array<R>(items.length);
+	let cursor = 0;
+	const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+		while (cursor < items.length) {
+			const index = cursor++;
+			results[index] = await task(items[index]);
+		}
+	});
+	await Promise.all(workers);
+	return results;
+}
 
 export function knowledgeSnapshotState(
 	meta: any,

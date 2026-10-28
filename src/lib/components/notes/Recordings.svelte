@@ -29,7 +29,10 @@
 		timeLabel,
 		hasCompleteSegments,
 		snapshotFingerprint,
-		knowledgeSnapshotState
+		knowledgeSnapshotState,
+		summaryRequestKey,
+		formatSyncTime,
+		mapWithConcurrency
 	} from './Recordings/utils';
 	const i18n = getContext<typeof import('$lib/i18n').default>('i18n');
 	let selectedModelRef = '';
@@ -59,7 +62,9 @@
 	let audio: HTMLAudioElement;
 	let model = '';
 	let template = 'class';
-	let summaryKey = '';
+	let summaryDetails: Record<string, { title?: string; createdAt?: number }> = {};
+	let summarySlow = false;
+	let summaryAnchor: HTMLElement;
 	let timestamps = true;
 	let speakers = true;
 	let speakerNames: Record<string, string> = {};
@@ -78,6 +83,17 @@
 	);
 	$: dirty = content !== savedContent || documentTitle !== savedTitle;
 	$: snapshotState = knowledgeSnapshotState(note?.meta, knowledgeId, documentTitle, content);
+	$: savedKnowledgeEntries = note
+		? Object.entries(note.meta?.recording_knowledge ?? {}).map(([id]) => {
+				const base = knowledge.find((k: any) => k.id === id);
+				return {
+					id,
+					name: base?.name ?? $i18n.t('Knowledge base unavailable'),
+					state: knowledgeSnapshotState(note.meta, id, documentTitle, content),
+					syncedAt: note.meta?.recording_knowledge_sync?.[id]?.updated_at as number | undefined
+				};
+			})
+		: [];
 	$: speakerIds = [
 		...new Set((selected?.segments ?? []).map((s) => s.speaker).filter((s): s is string => !!s))
 	];
@@ -170,7 +186,6 @@
 		actionErrors = { knowledgeList: actionErrors.knowledgeList ?? '' };
 		knowledgeNotice = '';
 		speakerNames = { ...selected.speaker_names };
-		summaryKey = '';
 		deleteConfirm = false;
 		deleteTaskConfirm = false;
 		audioError = false;
@@ -178,7 +193,10 @@
 		documentId = '';
 		content = savedContent = '';
 		documentTitle = savedTitle = '';
-		if (selected.state === 'completed') await loadDocument(selected.note_id);
+		if (selected.state === 'completed') {
+			await loadDocument(selected.note_id);
+			void loadSummaryDetails(selected.summary_note_ids);
+		}
 	}
 	async function refresh() {
 		const rows = await recordingRequest<RecordingJob[]>(localStorage.token);
@@ -207,6 +225,7 @@
 			selected = result;
 			if (!note && result.state === 'completed' && !missingNotes.has(documentId || result.note_id))
 				await loadDocument(documentId || result.note_id);
+			if (result.state === 'completed') void loadSummaryDetails(result.summary_note_ids);
 		}
 		pollingError = '';
 	}
@@ -340,6 +359,62 @@
 		a.download = `${name.replace(/[\\/:*?"<>|]/g, '_')}.${extension}`;
 		a.click();
 		setTimeout(() => URL.revokeObjectURL(url), 1000);
+	}
+	async function loadSummaryDetails(ids: string[]) {
+		const pending = ids.filter((id) => !summaryDetails[id]);
+		if (!pending.length) return;
+		await mapWithConcurrency(pending, 3, async (id) => {
+			try {
+				const loaded = await getRecordingNote(localStorage.token, id);
+				summaryDetails = {
+					...summaryDetails,
+					[id]: { title: loaded?.title ?? '', createdAt: loaded?.created_at }
+				};
+			} catch {
+				// Titles are informational; keep the index fallback when a read fails.
+				summaryDetails = { ...summaryDetails, [id]: {} };
+			}
+		});
+	}
+	async function generateSummary(requestKey = '') {
+		if (!selected) return;
+		if (dirty) await save();
+		let sourceTitle = '';
+		let sourceContent = '';
+		if (documentId === selected.note_id && note?.id === selected.note_id) {
+			// The loaded transcript was just saved above; its saved state is the server state.
+			sourceTitle = savedTitle;
+			sourceContent = savedContent;
+		} else {
+			const source = await getRecordingNote(localStorage.token, selected.note_id);
+			sourceTitle = source?.title ?? '';
+			sourceContent = source?.data?.content?.md ?? '';
+		}
+		const key =
+			requestKey ||
+			summaryRequestKey(
+				selected.id,
+				template,
+				model,
+				snapshotFingerprint(sourceTitle, sourceContent)
+			);
+		summarySlow = false;
+		const slowTimer = setTimeout(() => (summarySlow = true), 30000);
+		try {
+			const result = await recordingRequest<{ note_id: string }>(
+				localStorage.token,
+				`/${selected.id}/summary`,
+				'POST',
+				{ model, template, request_key: key }
+			);
+			toast.success($i18n.t('Organized note generated'));
+			await refresh();
+			await loadDocument(result.note_id);
+			summaryAnchor?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		} finally {
+			clearTimeout(slowTimer);
+			summarySlow = false;
+		}
 	}
 	async function syncKnowledge() {
 		if (!note || !knowledgeId) return;
@@ -979,7 +1054,6 @@
 									aria-label={$i18n.t('Text model')}
 									bind:value={model}
 									disabled={busy}
-									on:change={() => (summaryKey = '')}
 									><option value="">{$i18n.t('Select a model')}</option
 									>{#each $models.filter((m) => !m.info?.meta?.hidden) as m}<option value={m.id}
 											>{m.name || m.id}</option
@@ -989,38 +1063,66 @@
 									aria-label={$i18n.t('Template')}
 									bind:value={template}
 									disabled={busy}
-									on:change={() => (summaryKey = '')}
 									><option value="class">{$i18n.t('Class notes')}</option><option value="meeting"
 										>{$i18n.t('Meeting minutes')}</option
 									></select
 								><button
 									class="secondary"
 									disabled={busy || !model || missingNotes.has(selected.note_id)}
-									on:click={() =>
-										execute(async () => {
-											if (dirty) await save();
-											summaryKey ||= uuidv4();
-											const result = await recordingRequest<{ note_id: string }>(
-												localStorage.token,
-												`/${selected!.id}/summary`,
-												'POST',
-												{ model, template, request_key: summaryKey }
-											);
-											summaryKey = '';
-											await refresh();
-											await loadDocument(result.note_id);
-										}, 'summary')}
+									on:click={() => execute(() => generateSummary(), 'summary')}
 									>{working === 'summary'
 										? $i18n.t('Generating and saving note')
 										: $i18n.t('Generate')}</button
-								>
+								>{#if (selected.summary_note_ids ?? []).length}<button
+										class="secondary"
+										disabled={busy || !model || working === 'summary'}
+										data-testid="summary-regenerate"
+										on:click={() => execute(() => generateSummary(uuidv4()), 'summary')}
+										>{$i18n.t('Regenerate')}</button
+									>{/if}
 							</div>
+							{#if working === 'summary'}<p
+									role="status"
+									class="text-xs text-gray-500"
+									data-testid="summary-progress-hint"
+								>
+									{summarySlow
+										? $i18n.t(
+												'Still generating. The organized note will appear in the list below when it is ready; you can leave this page and come back later.'
+											)
+										: $i18n.t(
+												'Generating… This may take a while; you can leave this page and come back later.'
+											)}
+								</p>{/if}
 							<p class="text-xs text-gray-500">
 								{$i18n.t(
 									'Uses the saved transcript note. The selected text model may charge separately. Original transcription is never overwritten.'
 								)}
 							</p>
 						</div>
+						{#if (selected.summary_note_ids ?? []).length}<div
+								class="border-t dark:border-gray-800 pt-3 space-y-2"
+								data-testid="summary-documents-list"
+								bind:this={summaryAnchor}
+							>
+								<h3 class="font-medium text-sm">{$i18n.t('Generated organized notes')}</h3>
+								<ul class="space-y-1">
+									{#each selected.summary_note_ids as id, index (id)}<li
+											class="flex flex-wrap items-center gap-2 text-sm"
+										>
+											<span class="min-w-0 break-words font-medium"
+												>{summaryDetails[id]?.title ||
+													`${$i18n.t('Organized notes')} ${index + 1}`}</span
+											>
+											{#if summaryDetails[id]?.createdAt}<span class="text-xs text-gray-500"
+													>{formatSyncTime(summaryDetails[id].createdAt)}</span
+												>{/if}
+											<a class="underline text-xs shrink-0" href={`/notes/${id}`}
+												>{$i18n.t('Open')}</a
+											>
+										</li>{/each}
+								</ul>
+							</div>{/if}
 						{#if note}<div class="border-t dark:border-gray-800 pt-3 space-y-2">
 								<h3 class="font-medium text-sm">
 									3 · {$i18n.t('Add or update knowledge snapshot')}
@@ -1028,6 +1130,26 @@
 								<p class="text-sm">
 									{$i18n.t('Selected document')}: <strong>{documentTitle}</strong>
 								</p>
+								{#if savedKnowledgeEntries.length}<ul
+										class="space-y-1"
+										data-testid="knowledge-snapshot-list"
+									>
+										{#each savedKnowledgeEntries as entry (entry.id)}<li
+												class="flex flex-wrap items-center gap-2 text-sm"
+											>
+												<span class="min-w-0 break-words font-medium">{entry.name}</span>
+												<span class="text-xs text-gray-500"
+													>{entry.state === 'synced'
+														? $i18n.t('Up to date')
+														: $i18n.t('Has changes')}{entry.syncedAt
+															? ` · ${formatSyncTime(entry.syncedAt)}`
+															: ''}</span
+												>
+												<a class="underline text-xs shrink-0" href={`/workspace/knowledge/${entry.id}`}
+													>{$i18n.t('Open')}</a
+												>
+											</li>{/each}
+									</ul>{/if}
 								{#if actionErrors.knowledge}<p role="alert" class="text-sm text-red-600">
 										{actionErrors.knowledge}<br />{$i18n.t(
 											'Your note is preserved. Check the target knowledge base before retrying an uncertain request.'

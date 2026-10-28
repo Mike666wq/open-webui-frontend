@@ -1,6 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { RecordingJob } from '$lib/apis/recordings';
-import { timeLabel, transcriptText, snapshotFingerprint, knowledgeSnapshotState } from './utils';
+import {
+	timeLabel,
+	transcriptText,
+	snapshotFingerprint,
+	knowledgeSnapshotState,
+	summaryRequestKey,
+	formatSyncTime,
+	mapWithConcurrency
+} from './utils';
 
 const job: RecordingJob = {
 	id: 'recording',
@@ -58,5 +66,65 @@ describe('recording documents', () => {
 	});
 	it('does not invent detail for text-only ASR', () => {
 		expect(transcriptText({ ...job, segments: [] }, true, true)).toBe(job.text);
+	});
+});
+
+describe('summary request keys (K7)', () => {
+	const fingerprint = snapshotFingerprint('transcript', 'content');
+	it('derives a stable UUID from job, template, model and source fingerprint', () => {
+		const key = summaryRequestKey('job-1', 'class', 'model-a', fingerprint);
+		expect(key).toMatch(
+			/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+		);
+		expect(summaryRequestKey('job-1', 'class', 'model-a', fingerprint)).toBe(key);
+	});
+	it('changes when any semantic input changes', () => {
+		const base = summaryRequestKey('job-1', 'class', 'model-a', fingerprint);
+		expect(summaryRequestKey('job-2', 'class', 'model-a', fingerprint)).not.toBe(base);
+		expect(summaryRequestKey('job-1', 'meeting', 'model-a', fingerprint)).not.toBe(base);
+		expect(summaryRequestKey('job-1', 'class', 'model-b', fingerprint)).not.toBe(base);
+		expect(summaryRequestKey('job-1', 'class', 'model-a', snapshotFingerprint('t', 'other'))).not.toBe(
+			base
+		);
+	});
+});
+
+describe('formatSyncTime (K8)', () => {
+	it('returns a non-empty string for a valid timestamp', () => {
+		const label = formatSyncTime(1735689600000);
+		expect(typeof label).toBe('string');
+		expect(label.length).toBeGreaterThan(0);
+	});
+	it('returns an empty string for missing or invalid timestamps', () => {
+		expect(formatSyncTime(undefined)).toBe('');
+		expect(formatSyncTime(0)).toBe('');
+		expect(formatSyncTime(Number.NaN)).toBe('');
+	});
+});
+
+describe('mapWithConcurrency (K5)', () => {
+	it('maps all items preserving order', async () => {
+		const result = await mapWithConcurrency([1, 2, 3, 4, 5], 2, async (n) => n * 10);
+		expect(result).toEqual([10, 20, 30, 40, 50]);
+	});
+	it('never runs more than the configured number of tasks at once', async () => {
+		let running = 0;
+		let peak = 0;
+		await mapWithConcurrency([1, 2, 3, 4, 5, 6, 7], 3, async (n) => {
+			running += 1;
+			peak = Math.max(peak, running);
+			await new Promise((resolve) => setTimeout(resolve, 5));
+			running -= 1;
+			return n;
+		});
+		expect(peak).toBeLessThanOrEqual(3);
+	});
+	it('propagates task failures', async () => {
+		await expect(
+			mapWithConcurrency(['a', 'b'], 2, async (item) => {
+				if (item === 'b') throw new Error('boom');
+				return item;
+			})
+		).rejects.toThrow('boom');
 	});
 });
