@@ -34,6 +34,8 @@
 	export let onCopyLink = null;
 	export let onCopyToClipboard = null;
 
+	export let onSaveToKnowledge: (() => void) | null = null;
+
 	export let onChange = () => {};
 </script>
 
@@ -126,6 +128,18 @@
 				>
 					<CloudArrowUp className="size-3.5" strokeWidth="2" />
 					<div class="flex items-center">{$i18n.t('Upload files')}</div>
+				</button>
+			{/if}
+
+			{#if onSaveToKnowledge}
+				<button
+					class="select-none flex h-[1.6875rem] w-full cursor-pointer items-center gap-2 rounded-xl bg-transparent px-2 text-[0.8125rem] hover:text-gray-900 dark:hover:text-gray-100"
+					on:click={() => {
+						onSaveToKnowledge();
+					}}
+				>
+					<CloudArrowUp className="size-3.5" strokeWidth="2" />
+					<div class="flex items-center">{$i18n.t('Save to knowledge base')}</div>
 				</button>
 			{/if}
 

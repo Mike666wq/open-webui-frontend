@@ -39,6 +39,7 @@
 	import Spinner from '../common/Spinner.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
 	import NoteMenu from './Notes/NoteMenu.svelte';
+	import NoteKnowledgeModal from './Notes/NoteKnowledgeModal.svelte';
 	import FilesOverlay from '../chat/MessageInput/FilesOverlay.svelte';
 	import XMark from '../icons/XMark.svelte';
 	import DropdownOptions from '../common/DropdownOptions.svelte';
@@ -56,6 +57,7 @@
 	let selectedNote = null;
 	let openNoteMenuId: string | null = null;
 	let showDeleteConfirm = false;
+	let showKnowledgeModal = false;
 	let shiftKey = false;
 
 	let notes = {};
@@ -714,6 +716,10 @@
 																);
 																init();
 															}}
+															onSaveToKnowledge={() => {
+																selectedNote = note;
+																showKnowledgeModal = true;
+															}}
 															onChange={(state) => {
 																openNoteMenuId = state ? note.id : null;
 															}}
@@ -804,6 +810,10 @@
 																);
 																init();
 															}}
+														onSaveToKnowledge={() => {
+															selectedNote = note;
+															showKnowledgeModal = true;
+														}}
 														>
 															<button
 																class="flex size-5 items-center justify-center rounded-lg text-gray-400 transition hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
@@ -902,5 +912,15 @@
 		<div class="w-full h-full flex justify-center items-center">
 			<Spinner className="size-4" />
 		</div>
+	{/if}
+
+	{#if selectedNote}
+		<NoteKnowledgeModal
+			bind:show={showKnowledgeModal}
+			note={selectedNote}
+			onSaved={() => {
+				init();
+			}}
+		/>
 	{/if}
 </div>
