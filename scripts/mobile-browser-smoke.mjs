@@ -616,11 +616,122 @@ async function providerSettings(cdp) {
 		'ChatGPT connected without helper'
 	);
 
+	// MiniMax per-service wizard: every purpose gets its own service row and model
+	// list, and switching one off removes it from the saved connection.
+	await cdp.click(`document.querySelector('[data-testid="provider-add"]')`, 'add MiniMax provider');
+	await choose('minimax');
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="password"]'))`,
+		'MiniMax provider key input'
+	);
+	await enterKey();
+	await cdp.waitForExpression(
+		`['transcription','speech','image'].every(p => Boolean(document.querySelector('[data-testid="provider-service-' + p + '"]')))`,
+		'MiniMax per-service configuration'
+	);
+	// Only the chat service starts enabled; every media service is opt-in.
+	assert.equal(
+		await cdp.evaluate(
+			`(() => {const b=document.querySelector('[data-testid="provider-service-image"] input[type="checkbox"]');return b?.checked;})()`
+		),
+		false
+	);
+	const toggleService = async (purpose, expected) => {
+		await cdp.click(
+			`document.querySelector('[data-testid="provider-service-${purpose}"] input[type="checkbox"]')`,
+			`toggle ${purpose} service`
+		);
+		await cdp.waitForExpression(
+			`document.querySelector('[data-testid="provider-service-${purpose}"] input[type="checkbox"]')?.checked === ${expected}`,
+			`${purpose} service ${expected ? 'enabled' : 'disabled'}`
+		);
+	};
+	await toggleService('transcription', true);
+	await toggleService('speech', true);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[data-testid="provider-service-url-transcription"]')) && Boolean(document.querySelector('[data-testid="provider-service-url-speech"]'))`,
+		'per-service addresses shown'
+	);
+	// Switching a service back off removes its address again.
+	await toggleService('image', true);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[data-testid="provider-service-url-image"]'))`,
+		'image address shown while enabled'
+	);
+	await toggleService('image', false);
+	await cdp.waitForExpression(
+		`!document.querySelector('[data-testid="provider-service-url-image"]')`,
+		'image address hidden once switched off'
+	);
+	await cdp.click(
+		`document.querySelector('[data-testid="provider-verify"]')`,
+		'verify MiniMax provider'
+	);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[data-testid="provider-save"]'))`,
+		'MiniMax model choice'
+	);
+	await cdp.waitForExpression(
+		`document.querySelector('[data-testid="provider-models-chat"]')?.textContent.includes('minimax-fixture-chat') && document.querySelector('[data-testid="provider-models-chat"] input')?.checked === true`,
+		'MiniMax chat model picked'
+	);
+	await cdp.waitForExpression(
+		`document.querySelector('[data-testid="provider-models-transcription"]')?.textContent.includes('asr-1.0') && document.querySelector('[data-testid="provider-models-transcription"] input')?.checked === true`,
+		'MiniMax transcription preset picked'
+	);
+	assert.equal(
+		await cdp.evaluate(
+			`(() => {const boxes=[...document.querySelectorAll('[data-testid="provider-models-speech"] input[type="checkbox"]')];return boxes.length + ':' + boxes.every(b => b.checked);})()`
+		),
+		'8:true'
+	);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[data-testid="provider-models-image"]')) && document.querySelectorAll('[data-testid="provider-models-image"] input').length === 0 && document.querySelector('[data-testid="provider-models-image"]')?.textContent.includes('已关闭')`,
+		'image listed as switched off'
+	);
+	await cdp.click(
+		`document.querySelector('[data-testid="provider-save"]')`,
+		'save MiniMax provider'
+	);
+	await cdp.waitForExpression(
+		`!document.querySelector('[aria-labelledby="provider-wizard-title"]') && document.querySelector('#tab-connections')?.textContent.includes('MiniMax')`,
+		'saved MiniMax provider'
+	);
+	const minimaxSaved = (await (await fetch(`${origin}/__fixture_provenance`)).json()).events
+		.filter((event) => event.kind === 'provider-saved' && event.provider_id === 'minimax')
+		.pop();
+	assert.ok(minimaxSaved, 'MiniMax provider-saved event');
+	assert.deepEqual([...(minimaxSaved?.services ?? [])].sort(), ['chat', 'speech', 'transcription']);
+	const minimaxSelections = minimaxSaved?.model_selections ?? [];
+	assert.equal(minimaxSelections.length, 10);
+	// model_ids and model_selections must state the same model set, otherwise
+	// the backend refuses the connection.
+	assert.deepEqual(
+		[...(minimaxSaved?.model_ids ?? [])].sort(),
+		[...minimaxSelections.map((s) => s.upstream_id)].sort()
+	);
+	const minimaxChatSelection = minimaxSelections.find((s) => s.uses?.chat);
+	assert.equal(minimaxChatSelection?.upstream_id, 'minimax-fixture-chat');
+	assert.equal(minimaxChatSelection?.uses.chat, 'openai-chat');
+	assert.equal(minimaxChatSelection?.source, 'provider');
+	const minimaxTranscriptionSelection = minimaxSelections.find((s) => s.uses?.transcription);
+	assert.equal(minimaxTranscriptionSelection?.upstream_id, 'asr-1.0');
+	assert.equal(minimaxTranscriptionSelection?.uses.transcription, 'minimax-transcription');
+	assert.equal(minimaxTranscriptionSelection?.source, 'preset');
+	const minimaxSpeechSelections = minimaxSelections.filter((s) => s.uses?.speech);
+	assert.equal(minimaxSpeechSelections.length, 8);
+	assert.ok(
+		minimaxSpeechSelections.every(
+			(s) => s.uses.speech === 'minimax-speech' && s.source === 'preset'
+		)
+	);
+	assert.ok(minimaxSelections.every((s) => !s.uses?.image));
+
 	const providerList = '[data-testid="provider-list"]';
 	const listCount = await cdp.evaluate(
 		`document.querySelector(${JSON.stringify(providerList)})?.querySelectorAll('button').length`
 	);
-	assert.equal(listCount, 4);
+	assert.equal(listCount, 5);
 	await cdp.click(
 		`document.querySelector('[data-testid="provider-list"] button')`,
 		'open provider detail'
@@ -699,6 +810,75 @@ async function providerSettings(cdp) {
 	assert.ok(accountLayout && accountLayout.left >= 0 && accountLayout.right <= 394);
 
 	await cdp.screenshot('provider-accounts-393x852.png');
+
+	// MiniMax voice interaction: fetch voices from the connection, pick one and
+	// send a single speech test request against the resolved endpoint.
+	await cdp.click(
+		`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '← 提供商列表')`,
+		'back to provider list'
+	);
+	await cdp.click(
+		`[...document.querySelectorAll('[data-testid="provider-list"] button')].find(b => b.textContent.includes('MiniMax'))`,
+		'open MiniMax provider detail'
+	);
+	await cdp.click(
+		`[...document.querySelectorAll('[role="tablist"][aria-label="提供商详情"] [role="tab"]')].find(b => b.textContent.trim() === '模型')`,
+		'MiniMax models tab'
+	);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[data-testid="provider-test-speech"]'))`,
+		'MiniMax speech test button'
+	);
+	await cdp.click(
+		`document.querySelector('[data-testid="provider-test-speech"]')`,
+		'open MiniMax speech test'
+	);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[data-testid="provider-test-fetch-voices"]'))`,
+		'MiniMax speech test dialog'
+	);
+	await cdp.click(
+		`document.querySelector('[data-testid="provider-test-fetch-voices"]')`,
+		'fetch MiniMax voices'
+	);
+	await cdp.waitForExpression(
+		`document.querySelectorAll('[data-testid="provider-test-voice-list"] option').length >= 3`,
+		'MiniMax voice list loaded'
+	);
+	await cdp.evaluate(
+		`(() => {const s=document.querySelector('[data-testid="provider-test-voice-list"]');s.value='female-shaonv';s.dispatchEvent(new Event('change',{bubbles:true}));})()`
+	);
+	await cdp.waitForExpression(
+		`document.querySelector('[data-testid="provider-test-voice"]')?.value === 'female-shaonv'`,
+		'MiniMax voice picked from list'
+	);
+	await cdp.click(
+		`document.querySelector('[data-testid="provider-test-run"]')`,
+		'run MiniMax speech test'
+	);
+	await cdp.waitForExpression(
+		`document.querySelector('[data-testid="provider-test-result"]')?.textContent.includes('本次请求通过')`,
+		'MiniMax speech test passed'
+	);
+	assert.equal(
+		await cdp.evaluate(
+			`document.querySelector('[data-testid="provider-test-result"]')?.textContent.includes('t2a_v2')`
+		),
+		true
+	);
+	await cdp.click(
+		`document.querySelector('[data-testid="provider-test-cancel"]')`,
+		'close MiniMax speech test'
+	);
+	await cdp.waitForExpression(
+		`!document.querySelector('[data-testid="provider-test-run"]')`,
+		'MiniMax speech test dialog closed'
+	);
+	await cdp.click(
+		`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '← 提供商列表')`,
+		'back to provider list after voice test'
+	);
+
 	await cdp.click(
 		`document.querySelector('button[aria-controls="tab-appearance"]')`,
 		'restore appearance tab'
@@ -717,6 +897,8 @@ async function providerSettings(cdp) {
 		kimiDeviceCode: true,
 		kimiCancelAndDenied: true,
 		kimiConnected: true,
+		minimaxPerServiceWizard: true,
+		minimaxVoiceInteraction: true,
 		responsiveProviderDetail: true,
 		providerModelEnableToggle: true,
 		providerCallsTab: true

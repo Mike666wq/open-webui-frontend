@@ -5,7 +5,6 @@
 		addProviderModels,
 		fetchProviderModels,
 		removeProviderModel,
-		testProviderModel,
 		updateProviderModel
 	} from '$lib/apis/providers';
 	import {
@@ -23,10 +22,18 @@
 		supportsPurpose,
 		verificationLabel
 	} from '$lib/utils/provider-models';
+	import {
+		serviceAdapters,
+		supportedServicePurposes,
+		type ProviderServiceTemplate,
+		type ServicePurpose
+	} from '$lib/utils/provider-services';
+	import ProviderModelTestDialog from '$lib/components/providers/ProviderModelTestDialog.svelte';
 
 	const i18n: any = getContext('i18n');
 
 	export let connection: any;
+	export let template: ProviderServiceTemplate | null = null;
 	export let canManage = true;
 	export let onUpdated: (() => Promise<void>) | undefined = undefined;
 
@@ -40,6 +47,9 @@
 	let renaming = '';
 	let renameValue = '';
 	let previousConnection = '';
+	let testPurpose: ServicePurpose | null = null;
+	let testModel: any = null;
+	let testOpen = false;
 
 	$: if (connection?.id !== previousConnection) {
 		previousConnection = connection?.id;
@@ -48,12 +58,20 @@
 		message = '';
 		editing = '';
 		editingUses = {};
+		testPurpose = null;
 	}
 
 	$: models = (connection?.models ?? []) as any[];
 	$: pool = candidatePool(candidates, models);
 	$: fetchError = connection?.catalog?.error ?? null;
 	$: fetchErrorContext = { authType: connection?.auth_type ?? null };
+	// The template declaration decides which purposes exist. The protocol is
+	// only the fallback for a backend that predates the service contract.
+	$: declaredPurposes = template?.services
+		? supportedServicePurposes(template)
+		: (PROVIDER_PURPOSES.filter((purpose) =>
+				supportsPurpose(connection?.protocol, purpose)
+			) as ServicePurpose[]);
 
 	async function updated() {
 		if (onUpdated) await onUpdated();
@@ -166,7 +184,10 @@
 
 	function togglePurpose(purpose: string) {
 		const uses = { ...editingUses };
-		const adapter = PURPOSE_ADAPTERS[purpose as keyof typeof PURPOSE_ADAPTERS]?.[0];
+		const adapter = editingUses[purpose]
+			? editingUses[purpose]
+			: (serviceAdapters(template, purpose as ServicePurpose)[0] ??
+				PURPOSE_ADAPTERS[purpose as keyof typeof PURPOSE_ADAPTERS]?.[0]);
 		if (uses[purpose]) {
 			delete uses[purpose];
 		} else if (adapter) {
@@ -196,34 +217,18 @@
 		}
 	}
 
-	async function testModel(model: any, purpose: string) {
-		const confirmed = confirm(
-			$i18n.t(
-				'This sends one {{purpose}} request to {{model}} and may consume quota. It is never retried automatically. Continue?',
-				{
-					purpose: $i18n.t(PURPOSE_LABEL_KEYS[purpose as keyof typeof PURPOSE_LABEL_KEYS]),
-					model: model.name ?? model.upstream_id
-				}
-			)
-		);
-		if (!confirmed) return;
-		busy = true;
-		message = '';
-		try {
-			const result = await testProviderModel(connection.id, {
-				upstream_id: model.upstream_id,
-				purpose
-			});
-			message =
-				result?.status === 'passed'
-					? $i18n.t('The request passed. It does not mean every parameter is compatible.')
-					: `${$i18n.t('The request failed')}: ${providerErrorHint(result?.error)}`;
-			await updated();
-		} catch (err) {
-			message = readableError(err);
-		} finally {
-			busy = false;
-		}
+	/**
+	 * The explicit test asks for its input first.
+	 *
+	 * A transcription test needs a sample, a speech test needs a voice and an
+	 * image test needs a size. The dialog shows which service and which model
+	 * would be called, so the operator knows what the request costs before it
+	 * is sent. Exactly one request is sent per click.
+	 */
+	function openTest(model: any, purpose: string) {
+		testPurpose = purpose as ServicePurpose;
+		testModel = model;
+		testOpen = true;
 	}
 </script>
 
@@ -367,17 +372,15 @@
 
 					{#if editing === model.upstream_id}
 						<div class="mt-2 space-y-2 rounded-lg bg-gray-50 p-2 dark:bg-gray-800">
-							{#each PROVIDER_PURPOSES as purpose}
-								{#if supportsPurpose(connection?.protocol, purpose)}
-									<label class="flex items-center gap-2 text-xs">
-										<input
-											type="checkbox"
-											checked={Boolean(editingUses[purpose])}
-											on:change={() => togglePurpose(purpose)}
-										/>
-										{$i18n.t(PURPOSE_LABEL_KEYS[purpose])}
-									</label>
-								{/if}
+							{#each declaredPurposes as purpose (purpose)}
+								<label class="flex items-center gap-2 text-xs">
+									<input
+										type="checkbox"
+										checked={Boolean(editingUses[purpose])}
+										on:change={() => togglePurpose(purpose)}
+									/>
+									{$i18n.t(PURPOSE_LABEL_KEYS[purpose])}
+								</label>
 							{/each}
 							<button
 								type="button"
@@ -422,7 +425,8 @@
 									type="button"
 									class="rounded-lg border px-2 py-1 dark:border-gray-700"
 									disabled={busy}
-									on:click={() => testModel(model, purpose)}
+									data-testid={`provider-test-${purpose}`}
+									on:click={() => openTest(model, purpose)}
 								>
 									{$i18n.t('Test {{purpose}}', {
 										purpose: $i18n.t(PURPOSE_LABEL_KEYS[purpose])
@@ -448,4 +452,13 @@
 	{#if message}
 		<p role="status" class="rounded-lg bg-gray-100 p-3 text-xs dark:bg-gray-800">{message}</p>
 	{/if}
+
+	<ProviderModelTestDialog
+		bind:show={testOpen}
+		connection={connection}
+		template={template}
+		model={testModel}
+		purpose={testPurpose ?? 'chat'}
+		onTested={updated}
+	/>
 </section>

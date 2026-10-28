@@ -29,6 +29,19 @@
 - [后端流水线](https://github.com/Mike666wq/open-webui-backend/actions/workflows/backend.yml)
 - [后端前端锁](https://github.com/Mike666wq/open-webui-backend/blob/main/frontend.lock.json)
 
+## 供应商按服务接入与 MiniMax 原生媒体（P-002，2026-10-28）
+
+供应商接入从「一个连接一种协议」细化为「按服务接入」：每个连接按聊天 / 语音转写 / 语音合成 / 生图四种用途分别声明支持情况、鉴权限制、发现策略（远程列表 / 官方预设 / 手工）、参数与限制；服务是否可用由「模板支持 × 认证方式 × 适配器 × 模型声明」共同决定，OAuth 订阅连接明确不支持媒体服务。服务配置存在连接的 `config.services` JSON 里，不新增数据库表；省略 `services` 的旧连接按旧行为原样读取。
+
+- **无列表流程**：MiniMax 转写 / 合成 / 生图无需先获取远程模型列表即可添加与保存；`asr-1.0` 等预设模型明确选定后进入白名单并保持「未测试」状态，不报「模型列表失败」。添加向导改为「选供应商 → 选择服务 → 凭据与地址 → 获取列表 / 官方预设 / 手工填写 → 确认用途并保存 → 可选显式测试」。
+- **地址两模式**：`base_url`（含版本前缀的 API 根，适配器只追加一次登记路径）与 `endpoint_url`（完整地址原样使用一次）。用户给出的 `https://api.minimax.cn/v1/speech_to_text` 作为完整地址时恰好调用一次，不再叠加 `/models` 或 `/audio/transcriptions`。
+- **分用途配置与测试**：模型选择器按用途过滤（`GET /models?purpose=`），语音模型不进聊天列表；转写测试可上传音频样本、合成测试可选音色（`voices/fetch` 查询 system 音色）、图片测试可设支持尺寸；点击测试前展示实际服务、模型与可能计费。媒体未配置时提供进入服务商设置的入口。
+- **生图操作分层**：服务声明新增 `operations`（`openai-image` 为 `['edit','generate']`，`minimax-image` 仅 `['generate']`），按连接实际生效的适配器计算；图片设置在所选连接不支持编辑时显示提示，最终拒绝由后端在出站前执行——生图可用不等于编辑可用。
+
+契约与矩阵见 [接口契约](PROVIDER_CONTRACT.md) 与 [服务矩阵](PROVIDER_SERVICE_MATRIX.md)。
+
+自动化（本地 Node 预检）：vitest 28 文件 126 项通过（含新增的 `ProviderModelSelect.test.ts` 与 operations 用例）。**尚未完成**：本分支的 GitHub Actions run、`npm run build` 与手机浏览器冒烟（进行中）、svelte-check 与历史基线的错误数对比、真实 MiniMax 账号验收、Android 真机、PR 合并与正式发布。
+
 ## 本次迁移验收记录
 
 - 原签名迁移：[run 39759453405，第 3 次](https://github.com/Mike666wq/open-webui-client/actions/runs/39759453405/attempts/3) 成功；一次性入口已删除。

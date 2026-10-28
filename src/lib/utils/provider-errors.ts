@@ -42,6 +42,8 @@ export const PROVIDER_ERROR_REASONS = [
 	'tls_failure',
 	'timeout',
 	'upstream_failure',
+	'invalid_parameters',
+	'content_rejected',
 	'unknown'
 ] as const;
 
@@ -113,6 +115,8 @@ const REASON_ACTIONS: Record<ProviderErrorReason, ProviderErrorAction> = {
 	tls_failure: 'check_server_network',
 	timeout: 'check_server_network',
 	upstream_failure: 'retry_later',
+	invalid_parameters: 'inspect_connection',
+	content_rejected: 'inspect_connection',
 	unknown: 'inspect_connection'
 };
 
@@ -128,6 +132,8 @@ const REASON_SUMMARIES: Record<ProviderErrorReason, string> = {
 	tls_failure: 'TLS 握手失败',
 	timeout: '请求超时',
 	upstream_failure: '厂商服务异常',
+	invalid_parameters: '请求参数被厂商拒绝',
+	content_rejected: '内容被厂商拒绝',
 	unknown: '原因未确认'
 };
 
@@ -164,6 +170,14 @@ export interface ProviderError {
 	stage?: string;
 	reason?: string;
 	suggested_action?: string;
+	/** The business code the provider returned, when it has one. */
+	upstream_code?: string | null;
+	/** The real upstream HTTP status, also for a business failure inside a 200. */
+	upstream_http_status?: number | null;
+	/** The upstream trace id, for the operator to quote. */
+	trace_id?: string | null;
+	/** The purpose the failure belongs to, for a media service. */
+	purpose?: string | null;
 }
 
 /**
@@ -286,6 +300,24 @@ export function providerErrorUpstreamStatus(
 	error: ProviderError | null | undefined
 ): number | null {
 	return error?.upstream_status ?? null;
+}
+
+/**
+ * The real upstream HTTP status.
+ *
+ * A provider may refuse a request inside a HTTP 200 and report the refusal
+ * through its business code. The status is still 200 and must not be dressed
+ * up as an authentication or rate-limit failure.
+ */
+export function providerErrorUpstreamHttpStatus(
+	error: ProviderError | null | undefined
+): number | null {
+	return error?.upstream_http_status ?? null;
+}
+
+/** The business code the provider returned, when it has one. */
+export function providerErrorUpstreamCode(error: ProviderError | null | undefined): string {
+	return (error?.upstream_code ?? '').toString();
 }
 
 /** The catalog status the server reports for every visible connection. */

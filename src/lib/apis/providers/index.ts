@@ -57,6 +57,20 @@ const request = async (path: string, options: RequestInit = {}) => {
 	return body;
 };
 
+export interface ProviderServiceDeclaration {
+	supported?: boolean;
+	unsupported_reason?: string | null;
+	adapters?: string[];
+	auth_types?: string[];
+	discovery?: 'remote' | 'preset' | 'manual' | 'none';
+	model_requirement?: 'required' | 'defaulted' | 'none';
+	endpoint?: { kind?: string; url?: string };
+	preset_models?: { upstream_id: string; display_name?: string; uses?: Record<string, string> }[];
+	limits?: Record<string, number | string[]>;
+	options?: Record<string, (string | number)[]>;
+	notes?: string | null;
+}
+
 export interface ProviderTemplate {
 	id: string;
 	name: string;
@@ -69,6 +83,8 @@ export interface ProviderTemplate {
 	docs_url?: string;
 	supported: boolean;
 	unsupported_reason?: string | null;
+	/** What the template serves, per purpose. The backend is the authority. */
+	services?: Record<string, ProviderServiceDeclaration> | null;
 }
 
 export interface ProviderTemplateGroup {
@@ -85,7 +101,12 @@ export const getProviderCatalog = async () => {
 	const body = await request('');
 	const data = Array.isArray(body) ? body : (body?.data ?? []);
 	const groups = Array.isArray(body?.groups) ? body.groups : [];
-	return { data: data as ProviderTemplate[], groups: groups as ProviderTemplateGroup[] };
+	return {
+		data: data as ProviderTemplate[],
+		groups: groups as ProviderTemplateGroup[],
+		service_contract_version:
+			typeof body?.service_contract_version === 'number' ? body.service_contract_version : 0
+	};
 };
 export const getProviderConnections = () => request('/connections');
 export const createProviderConnection = (payload: Record<string, unknown>) =>
@@ -152,10 +173,26 @@ export const setProviderConnectionEnabled = (id: string, enabled: boolean) =>
 		method: 'PUT',
 		body: JSON.stringify({ enabled })
 	});
-export const fetchProviderModels = (id: string) =>
-	request(`/connections/${encodeURIComponent(id)}/models/fetch`, {
+export const fetchProviderModels = (id: string, purpose?: string) =>
+	request(
+		`/connections/${encodeURIComponent(id)}/models/fetch${
+			purpose ? `?purpose=${encodeURIComponent(purpose)}` : ''
+		}`,
+		{
+			method: 'POST',
+			body: '{}'
+		}
+	);
+/**
+ * List the voices of a speech service.
+ *
+ * The call is a read-only metadata request: it never activates a voice and
+ * never runs an inference. An adapter that cannot answer it says so locally.
+ */
+export const fetchProviderVoices = (id: string, purpose = 'speech', voiceType = 'system') =>
+	request(`/connections/${encodeURIComponent(id)}/voices/fetch`, {
 		method: 'POST',
-		body: '{}'
+		body: JSON.stringify({ purpose, voice_type: voiceType })
 	});
 export const addProviderModels = (
 	id: string,

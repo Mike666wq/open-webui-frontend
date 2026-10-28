@@ -40,7 +40,23 @@
 		name: string;
 		provider_id: string;
 		auth_type: string;
+		resolved_services?: Record<string, { operations?: string[] }>;
 	}> = [];
+
+	/**
+	 * The image editing entry only offers what the connection can really do.
+	 *
+	 * A provider that can generate images does not necessarily edit them: the
+	 * two use different endpoints and different payloads. The backend reports
+	 * the operations of the adapter the connection uses.
+	 */
+	$: editConnection = providerConnections.find(
+		(connection) => connection.id === config?.IMAGES_EDIT_PROVIDER_CONNECTION_ID
+	);
+	$: editOperations =
+		(editConnection?.resolved_services?.image?.operations as string[] | undefined) ?? [];
+	$: editConnectionCannotEdit =
+		editOperations.length > 0 && !editOperations.includes('edit');
 	const inputClass =
 		'w-full h-7 rounded-lg border border-gray-100/50 bg-gray-50/40 px-2 text-xs text-gray-700 outline-hidden transition-colors placeholder:text-gray-300 focus:border-blue-400 dark:border-white/[0.04] dark:bg-white/[0.03] dark:text-gray-300 dark:placeholder:text-gray-700 dark:focus:border-blue-500';
 	const textareaClass =
@@ -836,6 +852,16 @@
 										>
 									{/each}
 								</SettingsSelect>
+								{#if editConnectionCannotEdit}
+									<p
+										class="mt-1 text-xs text-amber-600 dark:text-amber-400"
+										data-testid="image-edit-unsupported-operation"
+									>
+										{$i18n.t(
+											'This connection can generate images but cannot edit them. Pick a connection whose image service supports editing.'
+										)}
+									</p>
+								{/if}
 							</AdminSettingField>
 						{/if}
 						<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">

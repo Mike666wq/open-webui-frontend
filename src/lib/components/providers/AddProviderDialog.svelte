@@ -22,6 +22,19 @@
 		providerErrorSummary
 	} from '$lib/utils/provider-errors';
 	import { PURPOSE_LABEL_KEYS, purposesOfCandidate } from '$lib/utils/provider-models';
+	import {
+		buildModelSelections,
+		buildServiceConfig,
+		defaultServiceEndpoint,
+		discoveryLabelKey,
+		endpointKindLabelKey,
+		serviceAdapters,
+		serviceDeclaration,
+		servicePresetModels,
+		supportedServicePurposes,
+		type ProviderServiceTemplate,
+		type ServicePurpose
+	} from '$lib/utils/provider-services';
 
 	const i18n: any = getContext('i18n');
 
@@ -52,8 +65,14 @@
 	let submittingCallback = false;
 	let pollTimer: ReturnType<typeof setInterval> | undefined;
 	let pollGeneration = 0;
+	let serviceEnabled: Record<string, boolean> = {};
+	let serviceKind: Record<string, 'base_url' | 'endpoint_url'> = {};
+	let serviceUrl: Record<string, string> = {};
+	let serviceModels: Record<string, string[]> = {};
+	let manualModel: Record<string, string> = {};
 
-	$: template = templates.find((item) => item.id === templateId);
+	$: template = templates.find((item) => item.id === templateId) as ProviderTemplate | undefined;
+	$: servicePurposes = supportedServicePurposes(template) as ServicePurpose[];
 	$: isOAuth = template?.auth_types?.includes('oauth') ?? false;
 	$: isCustom = templateId === 'custom';
 	$: isBailian = templateId === 'bailian';
@@ -94,7 +113,51 @@
 		picked = [];
 		error = '';
 		errorDetail = null;
+		initServices(item);
 		step = 'setup';
+	}
+
+	/**
+	 * Start from the services the template declares.
+	 *
+	 * The chat service is on by default; a media service is on when the
+	 * template declares it and the operator keeps it. Every service starts
+	 * with the address the template documents.
+	 */
+	function initServices(item: ProviderServiceTemplate) {
+		const enabled: Record<string, boolean> = {};
+		const kinds: Record<string, 'base_url' | 'endpoint_url'> = {};
+		const urls: Record<string, string> = {};
+		const models: Record<string, string[]> = {};
+		const manual: Record<string, string> = {};
+		for (const purpose of supportedServicePurposes(item)) {
+			enabled[purpose] = purpose === 'chat';
+			const fallback = defaultServiceEndpoint(item, purpose);
+			kinds[purpose] = fallback.kind;
+			urls[purpose] = fallback.url;
+			models[purpose] = [];
+			manual[purpose] = '';
+		}
+		serviceEnabled = enabled;
+		serviceKind = kinds;
+		serviceUrl = urls;
+		serviceModels = models;
+		manualModel = manual;
+	}
+
+	/** The service configuration the backend receives. */
+	function servicesPayload() {
+		const services: Record<string, unknown> = {};
+		for (const purpose of servicePurposes) {
+			if (!serviceEnabled[purpose]) continue;
+			services[purpose] = buildServiceConfig(template, purpose, {
+				enabled: true,
+				...(purpose === 'chat'
+					? {}
+					: { endpoint: { kind: serviceKind[purpose], url: (serviceUrl[purpose] ?? '').trim() } })
+			});
+		}
+		return services;
 	}
 
 	function close() {
@@ -122,6 +185,11 @@
 		picked = [];
 		error = '';
 		errorDetail = null;
+		serviceEnabled = {};
+		serviceKind = {};
+		serviceUrl = {};
+		serviceModels = {};
+		manualModel = {};
 	}
 
 	function stopPolling() {
@@ -147,12 +215,21 @@
 					...(baseUrl.trim() ? { base_url: baseUrl.trim() } : {}),
 					...(region.trim() ? { region: region.trim() } : {}),
 					...(workspaceId.trim() ? { workspace_id: workspaceId.trim() } : {}),
-					...(isCustom ? { api_type: apiType } : {})
+					...(isCustom ? { api_type: apiType } : {}),
+					...(Object.keys(servicesPayload()).length ? { services: servicesPayload() } : {})
 				},
 				...(apiKey ? { api_key: apiKey } : {})
 			});
 			candidates = result?.models ?? [];
 			picked = candidates.map((model: any) => model.upstream_id ?? model.id);
+			// The presets of a service are offered without a catalog call.
+			for (const purpose of servicePurposes) {
+				if (serviceDeclaration(template, purpose).discovery !== 'preset') continue;
+				serviceModels = {
+					...serviceModels,
+					[purpose]: servicePresetModels(template, purpose).map((model) => model.upstream_id)
+				};
+			}
 			step = 'models';
 		} catch (err) {
 			showError(err);
@@ -167,11 +244,85 @@
 			: [...picked, upstreamId];
 	}
 
+	function toggleServiceModel(purpose: string, upstreamId: string) {
+		const current = serviceModels[purpose] ?? [];
+		serviceModels = {
+			...serviceModels,
+			[purpose]: current.includes(upstreamId)
+				? current.filter((item) => item !== upstreamId)
+				: [...current, upstreamId]
+		};
+	}
+
+	/**
+	 * The models the operator picked, with the purpose each one serves.
+	 *
+	 * A selection is a traceable declaration, not a claim that the model
+	 * works: it stays untested until an explicit test says otherwise.
+	 */
+	function modelSelections() {
+		const entries: {
+			upstream_id: string;
+			display_name?: string;
+			purpose: ServicePurpose;
+			adapter: string;
+			source: 'preset' | 'manual' | 'provider';
+		}[] = [];
+		for (const purpose of servicePurposes) {
+			if (!serviceEnabled[purpose]) continue;
+			const adapter = serviceAdapters(template, purpose)[0];
+			if (!adapter) continue;
+			if (purpose === 'chat') {
+				for (const upstreamId of picked) {
+					const candidate = candidates.find(
+						(item: any) => (item.upstream_id ?? item.id) === upstreamId
+					);
+					entries.push({
+						upstream_id: upstreamId,
+						display_name: candidate?.name ?? candidate?.display_name ?? upstreamId,
+						purpose,
+						adapter,
+						source: 'provider'
+					});
+				}
+				continue;
+			}
+			const discovery = serviceDeclaration(template, purpose).discovery;
+			if (discovery === 'manual') {
+				const upstreamId = (manualModel[purpose] ?? '').trim();
+				if (upstreamId) {
+					entries.push({ upstream_id: upstreamId, purpose, adapter, source: 'manual' });
+				}
+				continue;
+			}
+			for (const upstreamId of serviceModels[purpose] ?? []) {
+				const preset = servicePresetModels(template, purpose).find(
+					(model) => model.upstream_id === upstreamId
+				);
+				entries.push({
+					upstream_id: upstreamId,
+					display_name: preset?.display_name ?? upstreamId,
+					purpose,
+					adapter,
+					source: discovery === 'preset' ? 'preset' : 'provider'
+				});
+			}
+		}
+		return buildModelSelections(entries);
+	}
+
 	async function saveConnection() {
 		error = '';
 		errorDetail = null;
 		saving = true;
 		try {
+			const selections = modelSelections();
+			// The backend refuses a request whose model_ids and model_selections
+			// state different model sets, so both carry the same models: the
+			// curated whitelist of this connection, across every purpose.
+			const modelIds = selections.length
+				? [...new Set(selections.map((selection) => selection.upstream_id))]
+				: picked;
 			await createProviderConnection({
 				provider_template: templateId,
 				name: name.trim() || template?.name || templateId,
@@ -182,8 +333,10 @@
 					...(region.trim() ? { region: region.trim() } : {}),
 					...(workspaceId.trim() ? { workspace_id: workspaceId.trim() } : {}),
 					...(isCustom ? { api_type: apiType } : {}),
-					model_ids: picked
+					...(Object.keys(servicesPayload()).length ? { services: servicesPayload() } : {}),
+					model_ids: modelIds
 				},
+				...(selections.length ? { model_selections: selections } : {}),
 				...(apiKey ? { api_key: apiKey } : {}),
 				...(isAdmin && visibility === 'shared' ? { access_control: accessGrants } : {})
 			});
@@ -417,6 +570,65 @@
 					</label>
 				{/if}
 
+				{#if !isOAuth && servicePurposes.length > 0}
+					<div class="space-y-2 rounded-xl border p-3 dark:border-gray-700" data-testid="provider-services">
+						<p class="text-xs font-medium">{$i18n.t('Services')}</p>
+						<p class="text-xs text-gray-600 dark:text-gray-300">
+							{$i18n.t(
+								'Each service has its own address and model list. A service you switch off is not offered.'
+							)}
+						</p>
+						{#each servicePurposes as purpose (purpose)}
+							{@const declaration = serviceDeclaration(template, purpose)}
+							<div
+								class="rounded-lg border p-2 dark:border-gray-700"
+								data-testid={`provider-service-${purpose}`}
+							>
+								<label class="flex items-center gap-2 text-xs">
+									<input
+										type="checkbox"
+										checked={serviceEnabled[purpose] !== false}
+										on:change={(event) =>
+											(serviceEnabled = {
+												...serviceEnabled,
+												[purpose]: (event.currentTarget as HTMLInputElement).checked
+											})}
+									/>
+									{$i18n.t(PURPOSE_LABEL_KEYS[purpose])}
+									<span class="text-gray-500 dark:text-gray-400">
+										· {$i18n.t(discoveryLabelKey(declaration.discovery ?? 'none'))}
+									</span>
+								</label>
+								{#if purpose !== 'chat' && serviceEnabled[purpose] !== false}
+									<div class="mt-2 space-y-2">
+										<label class="block text-xs">
+											{$i18n.t('Address mode')}
+											<select
+												class="mt-1 w-full rounded-lg bg-gray-100 p-2 dark:bg-gray-800"
+												data-testid={`provider-service-kind-${purpose}`}
+												bind:value={serviceKind[purpose]}
+											>
+												<option value="base_url">{$i18n.t(endpointKindLabelKey('base_url'))}</option>
+												<option value="endpoint_url">
+													{$i18n.t(endpointKindLabelKey('endpoint_url'))}
+												</option>
+											</select>
+										</label>
+										<label class="block text-xs">
+											{$i18n.t('Service address')}
+											<input
+												class="mt-1 w-full rounded-lg border bg-transparent p-2 dark:border-gray-700"
+												data-testid={`provider-service-url-${purpose}`}
+												bind:value={serviceUrl[purpose]}
+											/>
+										</label>
+									</div>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{/if}
+
 				{#if isAdmin}
 					<label class="block text-xs">
 						{$i18n.t('Visibility')}
@@ -473,38 +685,85 @@
 				<p class="text-xs text-gray-600 dark:text-gray-300">
 					{$i18n.t('Pick the models you want to use. You can change this later.')}
 				</p>
-				{#if candidates.length === 0}
-					<p class="rounded-lg border border-dashed p-3 text-xs">
-						{$i18n.t(
-							'The provider did not return a model list. You can continue and add model IDs later.'
-						)}
-					</p>
-				{:else}
-					<div class="max-h-[45vh] space-y-1 overflow-y-auto">
-						{#each candidates as candidate (candidate.upstream_id ?? candidate.id)}
-							<label
-								class="flex items-start gap-2 rounded-lg px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-800"
-							>
+				{#each servicePurposes as purpose (purpose)}
+					{#if !serviceEnabled[purpose]}
+						<div class="rounded-lg border border-dashed p-3 text-xs" data-testid={`provider-models-${purpose}`}>
+							{$i18n.t('{{purpose}} is switched off.', {
+								purpose: $i18n.t(PURPOSE_LABEL_KEYS[purpose])
+							})}
+						</div>
+					{:else}
+						{@const discovery = serviceDeclaration(template, purpose).discovery ?? 'none'}
+						<div class="space-y-2" data-testid={`provider-models-${purpose}`}>
+							<p class="text-xs font-medium">{$i18n.t(PURPOSE_LABEL_KEYS[purpose])}</p>
+							{#if discovery === 'preset'}
+								<p class="text-xs text-gray-600 dark:text-gray-300">
+									{$i18n.t('These models come from the official presets. Nothing is fetched.')}
+								</p>
+								{#each servicePresetModels(template, purpose) as model (model.upstream_id)}
+									<label
+										class="flex items-start gap-2 rounded-lg px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-800"
+									>
+										<input
+											type="checkbox"
+											checked={(serviceModels[purpose] ?? []).includes(model.upstream_id)}
+											on:change={() => toggleServiceModel(purpose, model.upstream_id)}
+										/>
+										<span class="min-w-0">
+											<span class="block break-all">{model.display_name ?? model.upstream_id}</span>
+											<span class="block break-all text-xs text-gray-500 dark:text-gray-400">
+												{model.upstream_id}
+											</span>
+										</span>
+									</label>
+								{/each}
+							{:else if discovery === 'manual'}
+								<p class="text-xs text-gray-600 dark:text-gray-300">
+									{$i18n.t('Type the model id yourself.')}
+								</p>
 								<input
-									type="checkbox"
-									checked={picked.includes(candidate.upstream_id ?? candidate.id)}
-									on:change={() => togglePick(candidate.upstream_id ?? candidate.id)}
+									class="w-full rounded-lg border bg-transparent p-2 text-xs dark:border-gray-700"
+									data-testid={`provider-manual-model-${purpose}`}
+									bind:value={manualModel[purpose]}
+									placeholder={$i18n.t('Model id')}
 								/>
-								<span class="min-w-0">
-									<span class="block break-all">{candidate.name ?? candidate.upstream_id}</span>
-									<span class="block break-all text-xs text-gray-500 dark:text-gray-400">
-										{candidate.upstream_id}
-										{purposesOfCandidate(candidate).length > 0
-											? `· ${purposesOfCandidate(candidate)
-													.map((purpose) => $i18n.t(PURPOSE_LABEL_KEYS[purpose]))
-													.join(' / ')}`
-											: ''}
-									</span>
-								</span>
-							</label>
-						{/each}
-					</div>
-				{/if}
+							{:else if purpose === 'chat'}
+								{#if candidates.length === 0}
+									<p class="rounded-lg border border-dashed p-3 text-xs">
+										{$i18n.t(
+											'The provider did not return a model list. You can continue and add model IDs later.'
+										)}
+									</p>
+								{:else}
+									<div class="max-h-[45vh] space-y-1 overflow-y-auto">
+										{#each candidates as candidate (candidate.upstream_id ?? candidate.id)}
+											<label
+												class="flex items-start gap-2 rounded-lg px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-800"
+											>
+												<input
+													type="checkbox"
+													checked={picked.includes(candidate.upstream_id ?? candidate.id)}
+													on:change={() => togglePick(candidate.upstream_id ?? candidate.id)}
+												/>
+												<span class="min-w-0">
+													<span class="block break-all">{candidate.name ?? candidate.upstream_id}</span>
+													<span class="block break-all text-xs text-gray-500 dark:text-gray-400">
+														{candidate.upstream_id}
+														{purposesOfCandidate(candidate).length > 0
+															? `· ${purposesOfCandidate(candidate)
+																	.map((purpose) => $i18n.t(PURPOSE_LABEL_KEYS[purpose]))
+																	.join(' / ')}`
+															: ''}
+													</span>
+												</span>
+											</label>
+										{/each}
+									</div>
+								{/if}
+							{/if}
+						</div>
+					{/if}
+				{/each}
 				<div class="flex flex-wrap justify-between gap-2">
 					<button
 						type="button"

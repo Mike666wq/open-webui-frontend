@@ -24,9 +24,9 @@ export const PURPOSE_LABEL_KEYS: Record<ProviderPurpose, string> = {
 /** The internal adapters stay hidden; the interface only shows the purpose. */
 export const PURPOSE_ADAPTERS: Record<ProviderPurpose, string[]> = {
 	chat: ['openai-chat', 'responses'],
-	transcription: ['openai-transcription'],
-	speech: ['openai-speech'],
-	image: ['openai-image', 'siliconflow-image']
+	transcription: ['openai-transcription', 'minimax-transcription'],
+	speech: ['openai-speech', 'minimax-speech'],
+	image: ['openai-image', 'siliconflow-image', 'minimax-image']
 };
 
 export interface ProviderModelEntry {
@@ -42,6 +42,30 @@ export interface ProviderCandidate {
 	display_name?: string;
 	capabilities?: string[];
 	uses?: Record<string, string>;
+}
+
+/** One entry of the shared model catalog returned by `GET /providers/models`. */
+export interface ProviderCatalogModel {
+	id?: string;
+	connection_id?: string;
+	connection_name?: string;
+	upstream_id?: string;
+	name?: string;
+	uses?: Record<string, string>;
+	verification?: Record<string, { status?: string }>;
+}
+
+/**
+ * The catalog entries a given purpose can use.
+ *
+ * A catalog entry that declares no use for the purpose is not offered: an
+ * unknown media model must not fall into the chat list by accident.
+ */
+export function providerModelsForPurpose(
+	models: ProviderCatalogModel[] | undefined,
+	purpose: ProviderPurpose
+): ProviderCatalogModel[] {
+	return (models ?? []).filter((model) => typeof model?.uses?.[purpose] === 'string');
 }
 
 export function purposesOf(model: ProviderModelEntry | undefined): ProviderPurpose[] {
@@ -85,7 +109,14 @@ export function isAnyPurposeTested(
 	return Object.values(verification ?? {}).some((entry) => entry?.status === 'passed');
 }
 
-/** Only the OpenAI compatible protocols declare the media purposes today. */
+/**
+ * The fallback for a backend that predates the service contract.
+ *
+ * The authoritative answer comes from the template declaration
+ * (`supportsServicePurpose` in `provider-services.ts`): an OpenAI-compatible
+ * chat endpoint says nothing about whether the vendor has a transcription
+ * API. This function only covers the old templates that declare no services.
+ */
 export function supportsPurpose(protocol: string | undefined, purpose: ProviderPurpose): boolean {
 	if (protocol === 'openai-compatible' || protocol === 'openai-responses') return true;
 	return purpose === 'chat';
