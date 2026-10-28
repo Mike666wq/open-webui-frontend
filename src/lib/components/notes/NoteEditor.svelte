@@ -33,6 +33,7 @@
 	} from '$lib/utils';
 	import { WEBUI_BASE_URL } from '$lib/constants';
 	import { getFileById, uploadFile } from '$lib/apis/files';
+	import { getKnowledgeBases } from '$lib/apis/knowledge';
 	import { generateOpenAIChatCompletion } from '$lib/apis/openai';
 
 	import {
@@ -79,6 +80,8 @@
 	import FilesOverlay from '../chat/MessageInput/FilesOverlay.svelte';
 	import RecordMenu from './RecordMenu.svelte';
 	import NoteMenu from './Notes/NoteMenu.svelte';
+	import NoteKnowledgeModal from './Notes/NoteKnowledgeModal.svelte';
+	import { snapshotIds, snapshotState } from './note-knowledge';
 	import EllipsisHorizontal from '../icons/EllipsisHorizontal.svelte';
 	import Sparkles from '../icons/Sparkles.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
@@ -86,6 +89,7 @@
 	import ArrowUturnRight from '../icons/ArrowUturnRight.svelte';
 	import Sidebar from '../icons/Sidebar.svelte';
 	import ChatBubbleOval from '../icons/ChatBubbleOval.svelte';
+	import CloudArrowUp from '../icons/CloudArrowUp.svelte';
 
 	export let id: null | string = null;
 
@@ -157,6 +161,44 @@
 
 	let ignoreBlur = false;
 	let titleInputFocused = false;
+	let showKnowledgeModal = false;
+	let knowledgeNames = {};
+	let knowledgeNamesLoaded = false;
+
+	// K4: persisted knowledge snapshots stay visible when the note is reopened.
+	const loadKnowledgeNames = async () => {
+		if (knowledgeNamesLoaded) return;
+		knowledgeNamesLoaded = true;
+		try {
+			const bases = await getKnowledgeBases(localStorage.token);
+			const list = Array.isArray(bases) ? bases : (bases.items ?? []);
+			const map = {};
+			for (const base of list) {
+				map[base.id] = base.name;
+			}
+			knowledgeNames = map;
+		} catch {
+			// Allow a retry on the next reactive pass; chips fall back to the
+			// unavailable text meanwhile.
+			knowledgeNamesLoaded = false;
+		}
+	};
+
+	$: knowledgeSnapshotEntries = note
+		? snapshotIds(note.meta).map((kbId) => ({
+				id: kbId,
+				name: knowledgeNames[kbId] ?? null,
+				state: snapshotState(
+					note.meta,
+					kbId,
+					note.title ?? '',
+					note.data?.content?.md ?? ''
+				)
+			}))
+		: [];
+	$: if (knowledgeSnapshotEntries.length > 0) {
+		loadKnowledgeNames();
+	}
 	let titleGenerating = false;
 
 	let dragged = false;
@@ -988,6 +1030,20 @@ ${content}
 	/>
 {/if}
 
+{#if note}
+	<NoteKnowledgeModal
+		bind:show={showKnowledgeModal}
+		{note}
+		onSaved={(updated) => {
+			// Only sync meta back: the editor content is the live source of truth
+			// and swapping the whole note object would disturb the editor binding.
+			if (updated?.meta) {
+				note.meta = updated.meta;
+			}
+		}}
+	/>
+{/if}
+
 <FilesOverlay show={dragged} />
 
 <DeleteConfirmDialog
@@ -1162,6 +1218,19 @@ ${content}
 								</Tooltip>
 
 								{#if note?.write_access}
+									<Tooltip content={$i18n.t('Save to knowledge base')} placement="top">
+										<button
+											type="button"
+											class="p-1 bg-transparent hover:bg-white/5 transition rounded-lg"
+											aria-label={$i18n.t('Save to knowledge base')}
+											on:click={() => (showKnowledgeModal = true)}
+										>
+											<CloudArrowUp className="size-4" strokeWidth="1.8" />
+										</button>
+									</Tooltip>
+								{/if}
+
+								{#if note?.write_access}
 									<RecordMenu
 										onRecord={async () => {
 											displayMediaRecord = false;
@@ -1220,6 +1289,7 @@ ${content}
 								<NoteMenu
 									bind:autoFormat
 									showAutoFormat={note?.write_access ?? false}
+									onSaveToKnowledge={note?.write_access ? () => (showKnowledgeModal = true) : null}
 									onUploadFiles={note?.write_access ? uploadNoteFilesHandler : null}
 									onDownload={(type) => {
 										downloadHandler(type);
@@ -1352,6 +1422,37 @@ ${content}
 						class=" flex-1 w-full h-full overflow-auto px-3 relative flex flex-col"
 						id="note-content-container"
 					>
+						{#if knowledgeSnapshotEntries.length > 0}
+							<div
+								class="shrink-0 flex flex-wrap items-center gap-1.5 px-0.5 pt-1.5 pb-2"
+								data-testid="knowledge-snapshot-chips"
+							>
+								{#each knowledgeSnapshotEntries as entry (entry.id)}
+									<Tooltip
+										content={entry.name === null
+											? $i18n.t('This knowledge base is unavailable or deleted')
+											: entry.state === 'synced'
+												? $i18n.t('Snapshot up to date')
+												: $i18n.t('Snapshot has changes')}
+									>
+										<a
+											class="flex max-w-60 items-center gap-1.5 rounded-full bg-gray-50/80 dark:bg-gray-850/80 px-2.5 py-1 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100/80 dark:hover:bg-gray-800 transition"
+											href={`/workspace/knowledge/${entry.id}`}
+										>
+											<span
+												class="size-1.5 shrink-0 rounded-full {entry.state === 'synced'
+													? 'bg-green-500'
+													: 'bg-amber-500'}"
+											></span>
+											<span class="truncate">
+												{entry.name ?? $i18n.t('This knowledge base is unavailable or deleted')}
+											</span>
+										</a>
+									</Tooltip>
+								{/each}
+							</div>
+						{/if}
+
 						{#if noteAttachmentFiles.length > 0}
 							<div class="shrink-0 flex flex-wrap gap-1.5 px-0.5 pt-1.5 pb-2">
 								{#each noteAttachmentFiles as file, fileIdx (file?.id ?? file?.itemId ?? file?.url ?? fileIdx)}
