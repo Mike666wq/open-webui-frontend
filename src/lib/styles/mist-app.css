@@ -1059,6 +1059,11 @@ html[data-owui-appearance='on']
 	:is(a, [data-knowledge-entry]) {
 	font-weight: 550;
 }
+/* Note editor body text follows the fluid text scale (--mist-text-sm wraps
+ * --app-text-scale) without overriding the user's chosen scale anywhere else. */
+html[data-owui-appearance='on'] #note-editor .input-prose-sm {
+	font-size: var(--mist-text-sm, 0.8125rem);
+}
 /* Invisible PDF selection text and source editors must not acquire a shadow. */
 html[data-owui-appearance='on']
 	:is(#workspace-container, #notes-container, #note-editor)

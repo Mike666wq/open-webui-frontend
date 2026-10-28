@@ -25,6 +25,20 @@
 	--mist-radius-sm: 14px;
 	--mist-wallpaper-mask: 0.22;
 	--mist-overlay-scrim: 0.4;
+	--mist-reading-floor: 0;
+	--mist-wallpaper-luminance: 0.5;
+	--mist-effective-surface-rgb: 246 249 253;
+
+	/*
+	 * Fluid text steps. Follow the user's --app-text-scale preference
+	 * (default 1) without ever overriding it.
+	 */
+	--mist-text-xs: calc(0.6875rem * var(--app-text-scale, 1));
+	--mist-text-sm: calc(0.8125rem * var(--app-text-scale, 1));
+	--mist-text-md: calc(0.875rem * var(--app-text-scale, 1));
+	--mist-text-lg: calc(1rem * var(--app-text-scale, 1));
+	--mist-text-xl: calc(1.125rem * var(--app-text-scale, 1));
+	--mist-text-2xl: calc(1.5rem * var(--app-text-scale, 1));
 
 	--mist-navigation-alpha: 0.5;
 	--mist-navigation-blur: 18px;
