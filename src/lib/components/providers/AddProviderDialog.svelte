@@ -28,6 +28,7 @@
 		defaultServiceEndpoint,
 		discoveryLabelKey,
 		endpointKindLabelKey,
+		initialVoiceServices,
 		serviceAdapters,
 		serviceDeclaration,
 		servicePresetModels,
@@ -43,6 +44,8 @@
 	export let groups: { id: string; label: string; order: number }[] = [];
 	export let isAdmin = false;
 	export let onCreated: (() => Promise<void>) | undefined = undefined;
+	export let initialVoicePurpose: 'transcription' | 'speech' | null = null;
+	export let initialTemplateId = '';
 
 	let step: 'template' | 'setup' | 'models' | 'oauth' = 'template';
 	let templateId = '';
@@ -70,6 +73,17 @@
 	let serviceUrl: Record<string, string> = {};
 	let serviceModels: Record<string, string[]> = {};
 	let manualModel: Record<string, string> = {};
+	let voiceInitialized = false;
+	$: if (!show) voiceInitialized = false;
+	$: if (show && initialVoicePurpose && initialTemplateId && !voiceInitialized && templates.length) {
+		const initial = templates.find((item) => item.id === initialTemplateId);
+		if (initial) {
+			voiceInitialized = true;
+			selectTemplate(initial);
+			serviceEnabled = initialVoiceServices(initial, initialVoicePurpose);
+			name = `${initial.name} · ${initialVoicePurpose}`;
+		}
+	}
 
 	$: template = templates.find((item) => item.id === templateId) as ProviderTemplate | undefined;
 	$: servicePurposes = supportedServicePurposes(template) as ServicePurpose[];
@@ -207,6 +221,14 @@
 		errorDetail = null;
 		saving = true;
 		try {
+			if (initialVoicePurpose && !serviceEnabled.chat) {
+				// A media-only key must not be sent to the chat catalog endpoint.
+				candidates = [];
+				picked = [];
+				serviceModels = { ...serviceModels, [initialVoicePurpose]: [] };
+				step = 'models';
+				return;
+			}
 			const result = await verifyProviderDraft({
 				provider_template: templateId,
 				name: name.trim() || template?.name || templateId,
@@ -317,6 +339,10 @@
 		saving = true;
 		try {
 			const selections = modelSelections();
+			if (initialVoicePurpose && !selections.some((item) => item.uses?.[initialVoicePurpose])) {
+				error = '请选择要启用的语音模型 / Select a voice model to enable.';
+				return;
+			}
 			// The backend refuses a request whose model_ids and model_selections
 			// state different model sets, so both carry the same models: the
 			// curated whitelist of this connection, across every purpose.
@@ -327,7 +353,7 @@
 				provider_template: templateId,
 				name: name.trim() || template?.name || templateId,
 				auth_type: isOAuth ? 'oauth' : 'api_key',
-				visibility: isAdmin ? visibility : 'private',
+				visibility: isAdmin && !initialVoicePurpose ? visibility : 'private',
 				config: {
 					...(baseUrl.trim() ? { base_url: baseUrl.trim() } : {}),
 					...(region.trim() ? { region: region.trim() } : {}),
@@ -338,7 +364,7 @@
 				},
 				...(selections.length ? { model_selections: selections } : {}),
 				...(apiKey ? { api_key: apiKey } : {}),
-				...(isAdmin && visibility === 'shared' ? { access_control: accessGrants } : {})
+				...(isAdmin && !initialVoicePurpose && visibility === 'shared' ? { access_control: accessGrants } : {})
 			});
 			await created();
 			toast.success($i18n.t('Provider connection saved'));
@@ -588,6 +614,7 @@
 									<input
 										type="checkbox"
 										checked={serviceEnabled[purpose] !== false}
+										disabled={!!initialVoicePurpose}
 										on:change={(event) =>
 											(serviceEnabled = {
 												...serviceEnabled,
@@ -629,7 +656,7 @@
 					</div>
 				{/if}
 
-				{#if isAdmin}
+				{#if isAdmin && !initialVoicePurpose}
 					<label class="block text-xs">
 						{$i18n.t('Visibility')}
 						<select
@@ -675,7 +702,7 @@
 							data-testid="provider-verify"
 							on:click={checkConnection}
 						>
-							{saving ? $i18n.t('Checking…') : $i18n.t('Check connection')}
+							{saving ? $i18n.t('Checking…') : initialVoicePurpose && !serviceEnabled.chat ? '选择模型 / Choose models' : $i18n.t('Check connection')}
 						</button>
 					{/if}
 				</div>

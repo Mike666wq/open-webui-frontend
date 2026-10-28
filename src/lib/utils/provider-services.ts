@@ -114,6 +114,21 @@ export function supportedServicePurposes(
 	return SERVICE_PURPOSES.filter((purpose) => supportsServicePurpose(template, purpose));
 }
 
+/** A separate voice key starts with only the explicitly selected service. */
+export function initialVoiceServices(
+	template: ProviderServiceTemplate,
+	purpose: 'transcription' | 'speech'
+): Record<string, boolean> {
+	return Object.fromEntries(supportedServicePurposes(template).map((item) => [item, item === purpose]));
+}
+
+/** Only an enabled model returned by the server for this user may be preselected. */
+export function authorizedRecordingModel(requested: string, models: any[]): string | null {
+	return models.some((model) => model.id === requested && model.enabled !== false && model.uses?.transcription)
+		? requested
+		: null;
+}
+
 /**
  * How the models of a service are obtained.
  *

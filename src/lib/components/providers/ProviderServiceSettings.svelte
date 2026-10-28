@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { getContext } from 'svelte';
+	import { getContext, onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
-	import { updateProviderConnection } from '$lib/apis/providers';
+	import { addProviderModels, updateProviderConnection, updateProviderModel } from '$lib/apis/providers';
 	import {
 		buildServiceConfig,
 		defaultServiceEndpoint,
@@ -16,6 +16,11 @@
 		type ServicePurpose
 	} from '$lib/utils/provider-services';
 	import { PURPOSE_LABEL_KEYS } from '$lib/utils/provider-models';
+	import { providerErrorSummary } from '$lib/utils/provider-errors';
+	import { goto } from '$app/navigation';
+	import { showSettings, user } from '$lib/stores';
+	import { getAudioConfig } from '$lib/apis/audio';
+	import { recordingRequest } from '$lib/apis/recordings';
 
 	const i18n: any = getContext('i18n');
 
@@ -23,6 +28,7 @@
 	export let template: ProviderServiceTemplate | null = null;
 	export let canManage = true;
 	export let onUpdated: (() => Promise<void>) | undefined = undefined;
+	export let onCreateVoiceConnection: ((purpose: 'transcription' | 'speech') => void) | undefined = undefined;
 
 	let enabled: Record<string, boolean> = {};
 	let kinds: Record<string, 'base_url' | 'endpoint_url'> = {};
@@ -30,6 +36,20 @@
 	let saving = false;
 	let message = '';
 	let previousConnection = '';
+	let selectedPresets: Record<string, string> = {};
+	let defaults: Record<string, string | null> = { transcription: null, speech: null };
+	onMount(async () => {
+		try {
+			const recording = await recordingRequest<any>(localStorage.token, '/config');
+			defaults = { ...defaults, transcription: recording.default_model_ref ?? '' };
+		} catch { /* The default is unknown when access or loading fails. */ }
+		if ($user?.role === 'admin') {
+			try {
+				const audio = await getAudioConfig(localStorage.token);
+				defaults = { ...defaults, speech: audio?.tts?.MODEL ?? '' };
+			} catch { /* Keep unknown rather than reporting an unset default. */ }
+		}
+	});
 
 	$: purposes = supportedServicePurposes(template);
 	$: if (connection?.id !== previousConnection) {
@@ -45,7 +65,7 @@
 		for (const purpose of purposes) {
 			const block = stored?.[purpose] ?? {};
 			const fallback = defaultServiceEndpoint(template, purpose);
-			nextEnabled[purpose] = block.enabled !== false;
+			nextEnabled[purpose] = connection?.resolved_services?.[purpose]?.enabled ?? (block.enabled !== false);
 			nextKinds[purpose] = (block.endpoint?.kind as 'base_url' | 'endpoint_url') ?? fallback.kind;
 			nextUrls[purpose] = block.endpoint?.url ?? fallback.url;
 		}
@@ -59,6 +79,34 @@
 		const fallback = defaultServiceEndpoint(template, purpose);
 		kinds = { ...kinds, [purpose]: fallback.kind };
 		urls = { ...urls, [purpose]: fallback.url };
+	}
+
+	async function addPreset(purpose: ServicePurpose) {
+		const chosen = serviceDeclaration(template, purpose).preset_models?.find(
+			(model) => model.upstream_id === selectedPresets[purpose]
+		);
+		if (!chosen || !canManage || saving) return;
+		saving = true;
+		message = '';
+		try {
+			const existing = (connection?.models ?? []).find((model: any) => model.upstream_id === chosen.upstream_id);
+			if (existing) {
+				await updateProviderModel(connection.id, chosen.upstream_id, {
+					uses: { ...(existing.uses ?? {}), ...(chosen.uses ?? {}) }, enabled: true
+				});
+			} else {
+				await addProviderModels(connection.id, {
+					upstream_ids: [chosen.upstream_id],
+					display_names: { [chosen.upstream_id]: chosen.display_name ?? chosen.upstream_id },
+					uses: chosen.uses ?? {},
+					source: 'preset'
+				});
+			}
+			if (onUpdated) await onUpdated();
+			toast.success('模型已添加并启用 / Model added and enabled');
+		} catch (err) {
+			message = String(err).replace(/^Error:\s*/, '');
+		} finally { saving = false; }
 	}
 
 	async function save() {
@@ -101,6 +149,8 @@
 				'Each service has its own address and model list. A service you switch off is not offered.'
 			)}
 		</p>
+		<p class="mt-2 text-xs">1. 保存服务地址 / Save the service · 2. 添加并启用模型 / Add a model · 3. 设置默认或使用 / Set a default or use it</p>
+		<p class="mt-1 text-xs">不同服务使用不同 API Key 时，请使用对应厂商提供的媒体 Key 新建独立连接；保存地址不会更改其他连接的 Key。 / Use a separate connection for a different vendor media key.</p>
 	</div>
 
 	{#if purposes.length === 0}
@@ -112,6 +162,8 @@
 			{#each purposes as purpose (purpose)}
 				{@const declaration = serviceDeclaration(template, purpose)}
 				{@const status = serviceStatus(connection, purpose)}
+				{@const activeModels = (connection?.models ?? []).filter((model: any) => model.enabled !== false && model.uses?.[purpose])}
+				{@const failedTest = activeModels.find((model: any) => model.verification?.[purpose]?.status === 'failed')?.verification?.[purpose]}
 				<article class="rounded-xl border p-3 dark:border-gray-700" data-testid={`provider-service-${purpose}`}>
 					<div class="flex flex-wrap items-center justify-between gap-2">
 						<div class="min-w-0">
@@ -123,8 +175,9 @@
 								{/if}
 							</p>
 							<p class="mt-1 text-xs text-gray-600 dark:text-gray-300" data-testid="provider-service-status">
-								{$i18n.t(serviceStatusLabelKey(status))}
+								{connection?.resolved_services?.[purpose]?.enabled === false ? '服务已关闭 / Service disabled' : $i18n.t(serviceStatusLabelKey(status))}
 							</p>
+							{#if failedTest?.error}<p class="mt-1 text-xs text-red-700 dark:text-red-300">{providerErrorSummary(failedTest.error)}</p>{/if}
 						</div>
 						{#if canManage}
 							<label class="flex shrink-0 items-center gap-1 text-xs">
@@ -148,6 +201,27 @@
 
 					{#if declaration.notes}
 						<p class="mt-2 text-xs text-gray-600 dark:text-gray-300">{declaration.notes}</p>
+					{/if}
+					<p class="mt-2 text-xs">已启用模型 / Enabled models: {activeModels.length}</p>
+					{#if purpose === 'transcription' || purpose === 'speech'}
+						<p class="mt-1 text-xs">默认 / Default: {defaults[purpose] === null ? '不可读取 / Unavailable' : (defaults[purpose] || '未设置 / Not set')}</p>
+					{/if}
+					{#if canManage && declaration.discovery === 'preset' && declaration.preset_models?.length}
+						<div class="mt-3 flex flex-wrap gap-2">
+							<select class="min-w-0 flex-1 rounded-lg bg-gray-100 p-2 text-xs dark:bg-gray-800" aria-label="选择官方预设模型 / Select an official preset" bind:value={selectedPresets[purpose]}>
+								<option value="">选择官方预设模型 / Select a preset</option>
+								{#each declaration.preset_models as preset}<option value={preset.upstream_id}>{preset.display_name ?? preset.upstream_id}</option>{/each}
+							</select>
+							<button type="button" class="rounded-lg border px-3 py-2 text-xs disabled:opacity-50 dark:border-gray-700" disabled={saving || !selectedPresets[purpose] || connection?.resolved_services?.[purpose]?.enabled === false} on:click={() => addPreset(purpose)}>添加并启用 / Add and enable</button>
+						</div>
+					{/if}
+					{#if purpose === 'transcription' && activeModels.length}
+						<button type="button" class="mt-2 text-xs underline" on:click={() => { showSettings.set(false); goto(`/notes/recordings?model_ref=${encodeURIComponent(activeModels[0].id)}`); }}>去录音转文档 / Go to recordings</button>
+					{:else if purpose === 'speech' && activeModels.length}
+						{#if $user?.role === 'admin'}<button type="button" class="mt-2 text-xs underline" on:click={() => showSettings.set('admin:audio')}>设置朗读模型和音色 / Set speech model and voice</button>{:else}<p class="mt-2 text-xs">请联系管理员设置朗读默认模型。 / Ask an administrator to set the default speech model.</p>{/if}
+					{/if}
+					{#if canManage && onCreateVoiceConnection && (purpose === 'transcription' || purpose === 'speech')}
+						<button type="button" class="mt-2 block text-xs underline" data-testid={`provider-new-voice-${purpose}`} on:click={() => onCreateVoiceConnection?.(purpose)}>使用独立 Key 新建此语音连接 / Create a separate voice connection</button>
 					{/if}
 
 					{#if canManage && enabled[purpose] !== false}

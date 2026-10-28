@@ -866,6 +866,21 @@ async function providerSettings(cdp) {
 		),
 		true
 	);
+	assert.equal(await cdp.evaluate(`document.querySelector('[data-testid="provider-test-timeline"]')?.textContent.includes('120 ms')`), true);
+	await cdp.waitForExpression(`document.querySelector('[data-testid="provider-test-timeline"] audio')?.readyState >= 2`, 'speech sample decoded');
+	assert.equal(await cdp.evaluate(`(async () => { const audio=document.querySelector('[data-testid="provider-test-timeline"] audio'); audio.muted=true; await audio.play(); return !audio.error; })()`), true);
+	const checkProviderDialogWidths = async (selector) => {
+		for (const dark of [false, true]) {
+			await cdp.evaluate(`document.documentElement.classList.toggle('dark', ${dark})`);
+			for (const width of [375, 393, 430, 1280]) {
+				await cdp.send('Emulation.setDeviceMetricsOverride', { width, height: 852, deviceScaleFactor: 1, mobile: width < 500 });
+				const bounds = await cdp.evaluate(`(() => { const r = document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect(); return r && {left:r.left,right:r.right}; })()`);
+				assert.ok(bounds && bounds.left >= -1 && bounds.right <= width + 1, `${selector} is clipped at ${width}: ${JSON.stringify(bounds)}`);
+			}
+		}
+		await cdp.send('Emulation.setDeviceMetricsOverride', { width: 393, height: 852, deviceScaleFactor: 1, mobile: true });
+	};
+	await checkProviderDialogWidths('[data-testid="provider-test-timeline"]');
 	await cdp.click(
 		`document.querySelector('[data-testid="provider-test-cancel"]')`,
 		'close MiniMax speech test'
@@ -874,6 +889,51 @@ async function providerSettings(cdp) {
 		`!document.querySelector('[data-testid="provider-test-run"]')`,
 		'MiniMax speech test dialog closed'
 	);
+	const removedPreset = await fetch(`${origin}/api/v1/providers/connections/fixture-minimax-connection/models/asr-1.0`, { method: 'DELETE' });
+	assert.equal(removedPreset.status, 200);
+	await cdp.click(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '获取模型列表')`, 'refresh fixture after removing ASR preset');
+	await cdp.waitForExpression(`!document.querySelector('[data-testid="provider-test-transcription"]')`, 'existing connection has no transcription model');
+	await cdp.click(
+		`[...document.querySelectorAll('[role="tablist"][aria-label="提供商详情"] [role="tab"]')].find(b => b.textContent.trim() === '服务')`,
+		'MiniMax services'
+	);
+	await cdp.waitForExpression(`Boolean(document.querySelector('[data-testid="provider-service-transcription"] select[aria-label="选择官方预设模型 / Select an official preset"]'))`, 'official ASR preset choice');
+	await cdp.evaluate(`(() => {const select=document.querySelector('[data-testid="provider-service-transcription"] select[aria-label="选择官方预设模型 / Select an official preset"]');select.value='asr-1.0';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+	await cdp.click(`[...document.querySelector('[data-testid="provider-service-transcription"]').querySelectorAll('button')].find(b => b.textContent.includes('添加并启用'))`, 'add ASR preset to existing connection');
+	await waitForValue(async () => (await (await fetch(`${origin}/__fixture_provenance`)).json()).events,
+		(events) => events.some((event) => event.kind === 'provider-models-added' && event.source === 'preset' && event.upstream_ids.includes('asr-1.0') && event.uses?.transcription === 'minimax-transcription'),
+		'official ASR preset saved with purpose and source');
+	await cdp.click(`document.querySelector('[data-testid="provider-new-voice-transcription"]')`, 'create separate ASR connection');
+	await cdp.waitForExpression(`Boolean(document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="password"]'))`, 'voice-only key input');
+	assert.equal(await cdp.evaluate(`(() => { const wizard=document.querySelector('[aria-labelledby="provider-wizard-title"]'); const chat=wizard.querySelector('[data-testid="provider-service-chat"] input'); const asr=wizard.querySelector('[data-testid="provider-service-transcription"] input'); return !chat.checked && chat.disabled && asr.checked && asr.disabled; })()`), true);
+	await cdp.evaluate(`(() => {const input=document.querySelector('[aria-labelledby="provider-wizard-title"] input[type="password"]');input.value='separate-synthetic-media-key';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+	await cdp.click(`document.querySelector('[data-testid="provider-verify"]')`, 'choose voice model without chat catalog');
+	await cdp.waitForExpression(`Boolean(document.querySelector('[data-testid="provider-models-transcription"] input[type="checkbox"]'))`, 'voice-only preset');
+	await cdp.click(`document.querySelector('[data-testid="provider-models-transcription"] input[type="checkbox"]')`, 'select ASR preset');
+	await cdp.click(`document.querySelector('[data-testid="provider-save"]')`, 'save separate ASR connection');
+	await cdp.waitForExpression(`!document.querySelector('[aria-labelledby="provider-wizard-title"]')`, 'voice-only connection saved');
+	const voiceOnlySaved = (await (await fetch(`${origin}/__fixture_provenance`)).json()).events.filter((event) => event.kind === 'provider-saved' && event.provider_id === 'minimax').at(-1);
+	assert.deepEqual(voiceOnlySaved?.services, ['transcription']);
+	assert.deepEqual(voiceOnlySaved?.model_ids, ['asr-1.0']);
+	assert.equal(voiceOnlySaved?.visibility, 'private');
+	assert.equal(voiceOnlySaved?.separate_key, true);
+	assert.equal(await cdp.evaluate(`(async () => (await (await fetch('/api/v1/providers/connections')).json()).filter(c => c.provider_id === 'minimax').length)()`), 2);
+	await cdp.click(
+		`[...document.querySelectorAll('[role="tablist"][aria-label="提供商详情"] [role="tab"]')].find(b => b.textContent.trim() === '连接设置')`,
+		'MiniMax connection settings'
+	);
+	await cdp.click(`document.querySelector('[data-testid="provider-remove"]')`, 'open removal confirmation');
+	await cdp.waitForExpression(`Boolean(document.querySelector('[data-testid="provider-removal-dialog"]'))`, 'removal confirmation');
+	await checkProviderDialogWidths('[data-testid="provider-removal-dialog"]');
+	await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+	await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+	assert.equal(await cdp.evaluate(`Boolean(document.querySelector('[data-testid="provider-removal-dialog"]')?.contains(document.activeElement))`), true);
+	await cdp.click(`document.querySelector('[data-testid="provider-removal-dialog"] button:not([data-testid])')`, 'cancel removal');
+	assert.equal((await (await fetch(`${origin}/__fixture_provenance`)).json()).events.filter((event) => event.kind === 'provider-connection-removed').length, 0);
+	await cdp.click(`document.querySelector('[data-testid="provider-remove"]')`, 'reopen removal confirmation');
+	await cdp.click(`document.querySelector('[data-testid="provider-removal-confirm"]')`, 'confirm removal');
+	await cdp.waitForExpression(`!document.querySelector('[data-testid="provider-removal-dialog"]')`, 'removal completed');
+	assert.equal((await (await fetch(`${origin}/__fixture_provenance`)).json()).events.filter((event) => event.kind === 'provider-connection-removed').length, 1);
 	await cdp.click(
 		`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '← 提供商列表')`,
 		'back to provider list after voice test'

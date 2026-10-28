@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
 	buildModelSelections,
+	authorizedRecordingModel,
+	initialVoiceServices,
 	buildServiceConfig,
 	buildServicesPayload,
 	defaultServiceEndpoint,
@@ -234,5 +236,19 @@ describe('provider service declarations', () => {
 		expect(serviceStatusLabelKey({ configuration: 'invalid' })).toBe('The address needs to be fixed');
 		expect(serviceStatusLabelKey({ configuration: 'missing' })).toBe('Not configured yet');
 		expect(serviceStatusLabelKey({})).toBe('Configured, not tested yet');
+	});
+
+	it('starts a separate voice connection with only the selected service', () => {
+		const enabled = initialVoiceServices(MINIMAX, 'transcription');
+		expect(enabled.chat).toBe(false);
+		expect(enabled.transcription).toBe(true);
+		expect(enabled.speech).toBe(false);
+	});
+
+	it('preselects only an enabled, authorized transcription model', () => {
+		const models = [{ id: 'one:asr-1.0', enabled: true, uses: { transcription: 'minimax-transcription' } }];
+		expect(authorizedRecordingModel('one:asr-1.0', models)).toBe('one:asr-1.0');
+		expect(authorizedRecordingModel('other:asr-1.0', models)).toBeNull();
+		expect(authorizedRecordingModel('one:asr-1.0', [{ ...models[0], enabled: false }])).toBeNull();
 	});
 });
