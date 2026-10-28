@@ -15,8 +15,8 @@
 	import { getNoteById, updateNoteById } from '$lib/apis/notes';
 	import { removeSnapshot, snapshotIds, snapshotState, upsertSnapshot } from '../note-knowledge';
 
-	import Markdown from '$lib/components/icons/Markdown.svelte';
-	import ExternalKnowledge from '$lib/components/icons/ExternalKnowledge.svelte';
+	import BookOpen from '$lib/components/icons/BookOpen.svelte';
+	import Document from '$lib/components/icons/Document.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import GarbageBin from '$lib/components/icons/GarbageBin.svelte';
 
@@ -161,7 +161,7 @@
 <Modal bind:show size="sm">
 	<div class="flex flex-col gap-3">
 		<div class="flex items-center gap-2">
-			<Markdown className="size-5" />
+			<BookOpen className="size-5" />
 			<div class="text-lg font-medium">{$i18n.t('Save to knowledge base')}</div>
 		</div>
 
@@ -190,7 +190,7 @@
 						<div
 							class="flex items-center gap-2 rounded-xl bg-gray-50 dark:bg-gray-850 px-3 py-2 text-sm"
 						>
-							<ExternalKnowledge className="size-4 shrink-0" />
+							<Document className="size-4 shrink-0" />
 							{#if name === null}
 								<span class="min-w-0 flex-1 truncate italic text-gray-500 dark:text-gray-400">
 									{$i18n.t('This knowledge base is unavailable or deleted')}
