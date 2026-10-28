@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { get } from 'svelte/store';
 	import { onDestroy, onMount } from 'svelte';
-	import { applyAppearanceCss } from './css-vars';
+	import { applyAppearanceCss, setWallpaperLuminance } from './css-vars';
 	import { loadWallpaperAsset } from './image-store';
 	import { appearanceStorageKey, loadAppearance, normalizeAppearanceOrigin } from './storage';
+	import { sampleWallpaperLuminance } from './wallpaper-luminance';
 	import {
 		appearanceSettings,
 		appearanceWallpaperUrl,
@@ -17,6 +18,7 @@
 	let wallpaperRequest = 0;
 	let objectUrl: string | null = null;
 	let objectUrlAssetId: string | null = null;
+	let luminanceCache: { assetId: string; value: number | null } | null = null;
 	let mounted = false;
 	let unsubscribeAppearance: (() => void) | null = null;
 	let unsubscribeWallpaper: (() => void) | null = null;
@@ -63,6 +65,18 @@
 						if (blob && request === wallpaperRequest) {
 							nextUrl = URL.createObjectURL(blob);
 							nextAssetId = background.assetId;
+							if (luminanceCache?.assetId !== background.assetId) {
+								// Sample brightness once per wallpaper asset; token math
+								// replays via setWallpaperLuminance. Failure -> null, which
+								// keeps the conservative 0.92 reading floor instead.
+								const value = await sampleWallpaperLuminance(blob);
+								if (request === wallpaperRequest) {
+									luminanceCache = { assetId: background.assetId, value };
+									setWallpaperLuminance(value);
+								}
+							} else {
+								setWallpaperLuminance(luminanceCache.value);
+							}
 						}
 					} catch (error) {
 						console.error('Unable to load the selected wallpaper', error);
@@ -77,6 +91,7 @@
 			objectUrl = nextUrl;
 			objectUrlAssetId = nextAssetId;
 			appearanceWallpaperUrl.set(nextUrl);
+			if (!nextAssetId) setWallpaperLuminance(null);
 		};
 
 		unsubscribeAppearance = effectiveAppearance.subscribe((settings) => {
@@ -100,6 +115,8 @@
 			if (objectUrl) URL.revokeObjectURL(objectUrl);
 			objectUrl = null;
 			objectUrlAssetId = null;
+			luminanceCache = null;
+			setWallpaperLuminance(null);
 			appearanceWallpaperUrl.set(null);
 		};
 	});

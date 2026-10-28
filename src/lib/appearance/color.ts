@@ -90,12 +90,72 @@ function mutedForeground(ink: string, background: string): string {
 	return ink;
 }
 
-export function themeColorTokens(colors: ModeColors) {
-	const ink = readableForeground(colors.surface);
-	const muted = mutedForeground(ink, colors.surface);
-	const accentForSurface = ensureContrast(colors.accent, colors.surface, 4.5);
+const linearToChannel = (linear: number) => {
+	const value = linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055;
+	return Math.round(Math.min(1, Math.max(0, value)) * 255);
+};
+
+export function luminanceToGray(luminance: number): string {
+	const linear = Math.min(1, Math.max(0, luminance));
+	const channel = linearToChannel(linear);
+	const hex = channel.toString(16).padStart(2, '0');
+	return `#${hex}${hex}${hex}`;
+}
+
+/**
+ * Effective solid-equivalent surface color behind reading content when a
+ * wallpaper is active. Blurs, translucency and the scrim are composited into
+ * one opaque color so text contrast can be checked against what the user
+ * actually sees. When no wallpaper luminance is supplied, returns the theme
+ * surface unchanged (same behavior as before wallpapers existed).
+ */
+export function effectiveSurface(
+	colors: ModeColors,
+	context: {
+		glassAlpha: number;
+		scrim: number;
+		wallpaperLuminance: number | null;
+		scrimColor?: string;
+	}
+): string {
+	if (context.wallpaperLuminance == null) return colors.surface;
+	const wallpaperGray = luminanceToGray(context.wallpaperLuminance);
+	const scrimmed = mixHex(
+		wallpaperGray,
+		context.scrimColor ?? '#070b14',
+		Math.min(1, Math.max(0, context.scrim))
+	);
+	return mixHex(scrimmed, colors.surface, Math.min(1, Math.max(0, context.glassAlpha)));
+}
+
+export function ensureReadableText(
+	ink: string,
+	muted: string,
+	background: string,
+	target = 4.5
+): { ink: string; muted: string } {
+	return {
+		ink: ensureContrast(ink, background, target),
+		muted: ensureContrast(muted, background, target)
+	};
+}
+
+export function themeColorTokens(
+	colors: ModeColors,
+	wallpaper?: {
+		glassAlpha: number;
+		scrim: number;
+		wallpaperLuminance: number | null;
+		scrimColor?: string;
+	}
+) {
+	const surface = wallpaper ? effectiveSurface(colors, wallpaper) : colors.surface;
+	const ink = readableForeground(surface);
+	const muted = mutedForeground(ink, surface);
+	const accentForSurface = ensureContrast(colors.accent, surface, 4.5);
 	const accentContrast = readableForeground(colors.accent);
 	const borderAlpha = Math.min(0.5, Math.max(0.06, colors.borderStrength / 100));
+	const inkIsDark = relativeLuminance(ink) < 0.5;
 
 	return {
 		ink,
@@ -103,18 +163,19 @@ export function themeColorTokens(colors: ModeColors) {
 		accent: colors.accent,
 		accentStrong: ensureContrast(
 			colors.accent,
-			colors.surface,
+			surface,
 			5.5
 		),
 		accentText: accentForSurface,
 		accentContrast,
+		effectiveSurfaceRgb: rgbTriplet(surface),
 		surfaceRgb: rgbTriplet(colors.surface),
-		readingRgb: rgbTriplet(mixHex(colors.surface, ink, 0.018)),
+		readingRgb: rgbTriplet(mixHex(surface, ink, 0.018)),
 		canvasRgb: rgbTriplet(colors.canvas),
 		border: rgbaFromHex(ink, borderAlpha),
 		strongBorder: rgbaFromHex(ink, Math.min(0.62, borderAlpha + 0.16)),
-		highlight: rgbaFromHex('#ffffff', ink === '#0b1118' ? 0.5 : 0.15),
-		shadow: rgbaFromHex('#000000', ink === '#0b1118' ? 0.12 : 0.28)
+		highlight: rgbaFromHex('#ffffff', inkIsDark ? 0.5 : 0.15),
+		shadow: rgbaFromHex('#000000', inkIsDark ? 0.12 : 0.28)
 	};
 }
 

@@ -256,10 +256,26 @@
 	flex-shrink: 0;
 }
 
+/*
+ * Reading surfaces (notes list, note editor, transcript views). These carry
+ * long-form body text, so while a wallpaper is active they get an opaque
+ * floor via --mist-reading-floor, raising their effective contrast without
+ * changing anything when no wallpaper is set (floor = 0).
+ */
+.mist-reading-surface {
+	background-color: rgb(var(--mist-reading-rgb) / var(--mist-reading-floor, 0));
+}
+
 @supports not (backdrop-filter: blur(1px)) {
 	.mist-surface--navigation,
 	.mist-surface--control {
 		--mist-surface-alpha: min(1, calc(var(--mist-reading-alpha) + 0.3));
+	}
+
+	/* Browsers without backdrop blur cannot rely on the wallpaper being
+	 * diffused behind text; push the floor a bit higher there. */
+	.mist-reading-surface {
+		--mist-reading-floor: min(1, calc(var(--mist-reading-floor, 0) + 0.08));
 	}
 }
 

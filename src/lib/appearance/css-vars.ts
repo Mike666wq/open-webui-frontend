@@ -6,6 +6,28 @@ import type {
 	SurfaceOverride
 } from './schema';
 
+// Module-level wallpaper luminance state. Set by AppearanceProvider after
+// sampling the active wallpaper; applyAppearanceCss composites it into
+// reading-surface token math. null = no wallpaper or unknown brightness,
+// in which case token math falls back to the plain theme surface.
+let wallpaperLuminance: number | null = null;
+let lastApply: (() => void) | null = null;
+
+/**
+ * Provide the sampled average luminance (0-1) of the active wallpaper, or
+ * null when no wallpaper is active / sampling failed. Re-applies the last
+ * computed appearance so tokens update without waiting for the next
+ * settings change.
+ */
+export function setWallpaperLuminance(luminance: number | null) {
+	const next = typeof luminance === 'number' && Number.isFinite(luminance)
+		? Math.min(1, Math.max(0, luminance))
+		: null;
+	if (next === wallpaperLuminance) return;
+	wallpaperLuminance = next;
+	lastApply?.();
+}
+
 const setVariable = (root: HTMLElement, name: string, value: string) => {
 	root.style.setProperty(name, value);
 };
@@ -40,7 +62,6 @@ export function applyAppearanceCss(
 	const resolvedTheme =
 		forcedTheme ?? resolveAppearanceTheme(settings.theme, prefersDark);
 	const mode = settings.modes[resolvedTheme];
-	const tokens = themeColorTokens(mode.colors);
 	const { glass, components, layout, reading } = settings;
 	const alpha = glass.opacity / 100;
 	const overlayScrim = glass.overlayScrim / 100;
@@ -50,6 +71,29 @@ export function applyAppearanceCss(
 	const navigation = components.navigation;
 	const overlay = components.overlay;
 	const readingSurface = components.reading;
+
+	const wallpaperActive =
+		settings.enabled &&
+		(mode.background.kind === 'local-image' || mode.background.kind === 'official-video');
+	const scrim = mode.background.mask / 100;
+	// Conservative smallest surface alpha across the slots that carry body
+	// text: whatever the user dialed down, this is the least opaque surface
+	// text can sit on while a wallpaper is behind it.
+	const contentAlpha = Math.min(
+		overrideNumber(user, 'opacity', glass.opacity),
+		overrideNumber(assistant, 'opacity', glass.opacity),
+		overrideNumber(readingSurface, 'opacity', glass.opacity)
+	) / 100;
+	const tokens = themeColorTokens(
+		mode.colors,
+		wallpaperActive
+			? { glassAlpha: contentAlpha, scrim, wallpaperLuminance }
+			: undefined
+	);
+	// Minimum opaque floor for reading surfaces. Only raised while a
+	// wallpaper is actually active; without a wallpaper the floor stays 0 so
+	// fully transparent themes still behave exactly as before.
+	const readingFloor = wallpaperActive ? Math.max(contentAlpha, 0.92) : 0;
 
 	root.dataset.owuiAppearance = settings.enabled ? 'on' : 'off';
 	root.dataset.owuiAppearancePreset = settings.preset;
@@ -90,6 +134,18 @@ export function applyAppearanceCss(
 	setVariable(root, '--mist-radius-sm', `${Math.max(8, glass.radius - 6)}px`);
 	setVariable(root, '--mist-wallpaper-mask', String(mode.background.mask / 100));
 	setVariable(root, '--mist-overlay-scrim', String(overlayScrim));
+	setVariable(root, '--mist-reading-floor', String(readingFloor));
+	setVariable(root, '--mist-wallpaper-luminance', String(wallpaperLuminance ?? 0.5));
+	setVariable(root, '--mist-effective-surface-rgb', tokens.effectiveSurfaceRgb);
+
+	// Fluid text scale steps. These follow the user's --app-text-scale
+	// preference without ever overriding it (scale default is 1).
+	setVariable(root, '--mist-text-xs', `calc(0.6875rem * var(--app-text-scale, 1))`);
+	setVariable(root, '--mist-text-sm', `calc(0.8125rem * var(--app-text-scale, 1))`);
+	setVariable(root, '--mist-text-md', `calc(0.875rem * var(--app-text-scale, 1))`);
+	setVariable(root, '--mist-text-lg', `calc(1rem * var(--app-text-scale, 1))`);
+	setVariable(root, '--mist-text-xl', `calc(1.125rem * var(--app-text-scale, 1))`);
+	setVariable(root, '--mist-text-2xl', `calc(1.5rem * var(--app-text-scale, 1))`);
 
 	const slots = {
 		user: { override: user, fallbackOpacity: glass.opacity },
@@ -182,4 +238,6 @@ export function applyAppearanceCss(
 
 	root.classList.toggle('dark', resolvedTheme === 'dark');
 	root.classList.toggle('light', resolvedTheme === 'light');
+
+	lastApply = () => applyAppearanceCss(settings, target, forcedTheme);
 }

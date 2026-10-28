@@ -1021,7 +1021,7 @@
 								</p>{/if}
 							<textarea
 								aria-label={$i18n.t('Document content')}
-								class="field w-full min-h-80 font-mono text-sm"
+								class="field w-full min-h-80 text-sm"
 								bind:value={content}
 								disabled={busy}
 							></textarea>

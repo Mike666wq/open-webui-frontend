@@ -1083,7 +1083,7 @@ ${content}
 				>{$i18n.t('Recording and transcription details')}</a
 			>
 		{/if}
-		<div class="relative flex-1 w-full h-full flex justify-center pt-2" id="note-editor">
+		<div class="mist-reading-surface relative flex-1 w-full h-full flex justify-center pt-2" id="note-editor">
 			{#if loading}
 				<div class=" absolute top-0 bottom-0 left-0 right-0 flex">
 					<div class="m-auto">
@@ -1115,7 +1115,7 @@ ${content}
 							{/if}
 
 							<input
-								class="w-full text-sm font-normal bg-transparent outline-hidden {$mobile
+								class="w-full text-[length:var(--mist-text-md)] font-normal bg-transparent outline-hidden {$mobile
 									? 'ml-1'
 									: ''}"
 								type="text"
