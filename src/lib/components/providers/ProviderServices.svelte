@@ -5,6 +5,7 @@
 	import ProviderLegacyMigration from '$lib/components/ProviderLegacyMigration.svelte';
 	import AddProviderDialog from '$lib/components/providers/AddProviderDialog.svelte';
 	import ProviderModelsPanel from '$lib/components/providers/ProviderModelsPanel.svelte';
+	import ProviderServiceSettings from '$lib/components/providers/ProviderServiceSettings.svelte';
 	import AccessControl from '$lib/components/workspace/common/AccessControl.svelte';
 	import { getModels as fetchModels } from '$lib/apis';
 	import { config as backendConfig, models, settings, user } from '$lib/stores';
@@ -496,7 +497,7 @@
 						role="tablist"
 						aria-label={$i18n.t('Provider details')}
 					>
-						{#each [['settings', $i18n.t('Connection settings')], ['models', $i18n.t('Models')], ['calls', $i18n.t('Call history')]] as [id, label]}
+						{#each [['settings', $i18n.t('Connection settings')], ['services', $i18n.t('Services')], ['models', $i18n.t('Models')], ['calls', $i18n.t('Call history')]] as [id, label]}
 							<button
 								type="button"
 								role="tab"
@@ -517,6 +518,17 @@
 					{#if detailTab === 'models'}
 						<ProviderModelsPanel
 							connection={selected}
+							template={templateFor(selected)}
+							canManage={canManageConnection(selected)}
+							onUpdated={async () => {
+								await load();
+								await refreshGlobalModels();
+							}}
+						/>
+					{:else if detailTab === 'services'}
+						<ProviderServiceSettings
+							connection={selected}
+							template={templateFor(selected)}
 							canManage={canManageConnection(selected)}
 							onUpdated={async () => {
 								await load();

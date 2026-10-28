@@ -1,7 +1,11 @@
 <script lang="ts">
 	import { onMount, getContext, createEventDispatcher } from 'svelte';
-	import { config } from '$lib/stores';
+	import { config, showSettings } from '$lib/stores';
 	import { getProviderConnections, getProviderModels } from '$lib/apis/providers';
+	import {
+		providerModelsForPurpose,
+		verificationLabel
+	} from '$lib/utils/provider-models';
 	export let purpose: 'chat' | 'transcription' | 'speech' | 'image';
 	export let value = '';
 	export let connectionId = '';
@@ -27,7 +31,7 @@
 			} else {
 				const catalog = await getProviderModels(purpose);
 				catalogErrors = catalog.errors ?? [];
-				options = (catalog.data ?? []).filter((m: any) => !!m.uses?.[purpose]);
+				options = providerModelsForPurpose(catalog.data ?? [], purpose);
 			}
 		} catch (e) {
 			error = String(e);
@@ -83,10 +87,9 @@
 				>{/if}
 			{#each options as model}<option value={model.id}
 					>{model.connection_name} · {model.name ?? model.upstream_id} · {$i18n.t(
-						!model.verification?.[purpose]?.status ||
-							model.verification[purpose].status === 'untested'
+						verificationLabel(model.verification, purpose) === 'untested'
 							? 'Not independently tested'
-							: model.verification[purpose].status
+							: verificationLabel(model.verification, purpose)
 					)}</option
 				>{/each}
 		</select>
@@ -109,6 +112,14 @@
 			<button type="button" on:click={load}>{$i18n.t('Retry')}</button>{/if}
 		{#if !loading && !error && !options.length}<p class="text-xs text-amber-600">
 				{$i18n.t('No models for this purpose. Configure model capabilities in Connections.')}
-			</p>{/if}
+			</p>
+			<button
+				type="button"
+				class="mt-1 text-xs underline underline-offset-2"
+				data-testid="provider-model-select-settings"
+				on:click={() => showSettings.set('connections')}
+			>
+				{$i18n.t('Open the provider settings')}
+			</button>{/if}
 	{/if}
 </div>

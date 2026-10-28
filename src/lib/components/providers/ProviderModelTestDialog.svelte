@@ -1,0 +1,332 @@
+<script lang="ts">
+	import { getContext } from 'svelte';
+	import Modal from '$lib/components/common/Modal.svelte';
+	import { fetchProviderVoices, testProviderModel } from '$lib/apis/providers';
+	import { providerErrorHint, providerErrorSummary } from '$lib/utils/provider-errors';
+	import { PURPOSE_LABEL_KEYS } from '$lib/utils/provider-models';
+	import {
+		serviceDeclaration,
+		type ProviderServiceTemplate,
+		type ServicePurpose
+	} from '$lib/utils/provider-services';
+
+	const i18n: any = getContext('i18n');
+
+	export let show = false;
+	export let connection: any = null;
+	export let template: ProviderServiceTemplate | null = null;
+	export let model: any = null;
+	export let purpose: ServicePurpose = 'chat';
+	export let onTested: (() => Promise<void>) | undefined = undefined;
+
+	let voice = '';
+	let voices: { id: string; name: string }[] = [];
+	let loadingVoices = false;
+	let audioName = '';
+	let audioBase64 = '';
+	let audioError = '';
+	let text = '';
+	let prompt = '';
+	let size = '1024x1024';
+	let count = 1;
+	let responseFormat = 'json';
+	let language = '';
+	let running = false;
+	let result: any = null;
+	let error = '';
+
+	$: declaration = serviceDeclaration(template, purpose);
+	$: isChat = purpose === 'chat';
+	$: isTranscription = purpose === 'transcription';
+	$: isSpeech = purpose === 'speech';
+	$: isImage = purpose === 'image';
+	$: endpoint = connection?.resolved_services?.[purpose]?.endpoint ?? '';
+	$: supportedSizes = ['512x512', '768x768', '1024x1024', '1280x720', '720x1280', '1536x1024'];
+	$: responseFormats = (declaration.options?.response_format as string[]) ?? ['json'];
+
+	const readableError = (err: unknown) => String(err).replace(/^Error:\s*/, '');
+
+	function reset() {
+		voice = '';
+		voices = [];
+		audioName = '';
+		audioBase64 = '';
+		audioError = '';
+		text = '';
+		prompt = '';
+		size = '1024x1024';
+		count = 1;
+		responseFormat = 'json';
+		language = '';
+		result = null;
+		error = '';
+	}
+
+	/**
+	 * The audio sample never leaves the browser in the clear: it is sent to the
+	 * server as base64 and forwarded to the provider by the server, not by the
+	 * browser.
+	 */
+	async function onAudio(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		audioError = '';
+		if (!file) {
+			audioName = '';
+			audioBase64 = '';
+			return;
+		}
+		if (file.size > 2 * 1024 * 1024) {
+			audioError = $i18n.t('Select a short audio sample under 2 MB');
+			audioName = '';
+			audioBase64 = '';
+			return;
+		}
+		audioName = file.name;
+		const buffer = await file.arrayBuffer();
+		let binary = '';
+		const bytes = new Uint8Array(buffer);
+		for (let index = 0; index < bytes.length; index += 1) {
+			binary += String.fromCharCode(bytes[index]);
+		}
+		audioBase64 = btoa(binary);
+	}
+
+	async function loadVoices() {
+		if (!connection?.id) return;
+		loadingVoices = true;
+		error = '';
+		try {
+			const result = await fetchProviderVoices(connection.id, 'speech', 'system');
+			voices = Array.isArray(result?.data) ? result.data : [];
+			if (voices.length === 0) {
+				error = $i18n.t('This service did not return any voice.');
+			}
+		} catch (err) {
+			error = readableError(err);
+		} finally {
+			loadingVoices = false;
+		}
+	}
+
+	async function run() {
+		if (running) return;
+		running = true;
+		result = null;
+		error = '';
+		try {
+			const payload: Record<string, unknown> = {
+				upstream_id: model?.upstream_id,
+				purpose
+			};
+			if (isTranscription) {
+				if (!audioBase64) {
+					error = $i18n.t('Select an audio sample first.');
+					return;
+				}
+				payload.audio_base64 = audioBase64;
+				payload.filename = audioName;
+				payload.response_format = responseFormat;
+				if (language.trim()) payload.language = language.trim();
+			}
+			if (isSpeech) {
+				if (!voice.trim()) {
+					error = $i18n.t('Select a voice for this model');
+					return;
+				}
+				payload.voice = voice.trim();
+				if (text.trim()) payload.text = text.trim();
+			}
+			if (isImage) {
+				if (prompt.trim()) payload.prompt = prompt.trim();
+				payload.size = size;
+				payload.count = count;
+			}
+			result = await testProviderModel(connection.id, payload);
+			if (onTested) await onTested();
+		} catch (err) {
+			error = readableError(err);
+		} finally {
+			running = false;
+		}
+	}
+</script>
+
+<Modal bind:show size="md" on:close={reset}>
+	<div class="flex flex-col gap-4" aria-labelledby="provider-model-test-title">
+		<h3 id="provider-model-test-title" class="text-lg font-semibold">
+			{$i18n.t('Test {{purpose}}', {
+				purpose: $i18n.t(PURPOSE_LABEL_KEYS[purpose] ?? purpose)
+			})}
+		</h3>
+
+		<div class="rounded-lg bg-gray-100 p-3 text-xs dark:bg-gray-800">
+			<p class="font-medium">{model?.name ?? model?.upstream_id}</p>
+			{#if endpoint}
+				<p class="mt-1 break-all text-gray-600 dark:text-gray-300">{endpoint}</p>
+			{/if}
+			<p class="mt-1 text-gray-600 dark:text-gray-300">
+				{$i18n.t(
+					'This sends one request and may consume quota. It is never retried automatically.'
+				)}
+			</p>
+		</div>
+
+		{#if isTranscription}
+			<label class="block text-xs">
+				{$i18n.t('Audio sample')}
+				<input
+					type="file"
+					accept="audio/*"
+					class="mt-1 w-full text-xs"
+					data-testid="provider-test-audio"
+					on:change={onAudio}
+				/>
+			</label>
+			{#if audioError}
+				<p class="text-xs text-red-600 dark:text-red-400">{audioError}</p>
+			{/if}
+			<label class="block text-xs">
+				{$i18n.t('Result format')}
+				<select
+					class="mt-1 w-full rounded-lg bg-gray-100 p-2 dark:bg-gray-800"
+					bind:value={responseFormat}
+				>
+					{#each responseFormats as format (format)}
+						<option value={format}>{format}</option>
+					{/each}
+				</select>
+			</label>
+			<label class="block text-xs">
+				{$i18n.t('Language (optional)')}
+				<input
+					class="mt-1 w-full rounded-lg border bg-transparent p-2 dark:border-gray-700"
+					bind:value={language}
+					placeholder={$i18n.t('Leave empty to let the provider decide')}
+				/>
+			</label>
+		{:else if isSpeech}
+			<div class="space-y-2">
+				<label class="block text-xs">
+					{$i18n.t('Voice')}
+					<div class="mt-1 flex gap-2">
+						<input
+							class="w-full rounded-lg border bg-transparent p-2 dark:border-gray-700"
+							bind:value={voice}
+							data-testid="provider-test-voice"
+							placeholder={$i18n.t('Voice id')}
+						/>
+						<button
+							type="button"
+							class="rounded-lg border px-3 text-xs disabled:opacity-50 dark:border-gray-700"
+							disabled={loadingVoices}
+							data-testid="provider-test-fetch-voices"
+							on:click={loadVoices}
+						>
+							{loadingVoices ? $i18n.t('Loading…') : $i18n.t('Fetch voices')}
+						</button>
+					</div>
+				</label>
+				{#if voices.length > 0}
+					<select
+						class="w-full rounded-lg bg-gray-100 p-2 text-xs dark:bg-gray-800"
+						data-testid="provider-test-voice-list"
+						on:change={(event) => (voice = (event.currentTarget as HTMLSelectElement).value)}
+					>
+						<option value="">{$i18n.t('Select a voice')}</option>
+						{#each voices as item (item.id)}
+							<option value={item.id}>{item.name}</option>
+						{/each}
+					</select>
+				{/if}
+				<label class="block text-xs">
+					{$i18n.t('Text (optional)')}
+					<input
+						class="mt-1 w-full rounded-lg border bg-transparent p-2 dark:border-gray-700"
+						bind:value={text}
+					/>
+				</label>
+			</div>
+		{:else if isImage}
+			<label class="block text-xs">
+				{$i18n.t('Prompt (optional)')}
+				<input
+					class="mt-1 w-full rounded-lg border bg-transparent p-2 dark:border-gray-700"
+					bind:value={prompt}
+				/>
+			</label>
+			<div class="grid gap-2 sm:grid-cols-2">
+				<label class="block text-xs">
+					{$i18n.t('Size')}
+					<select
+						class="mt-1 w-full rounded-lg bg-gray-100 p-2 dark:bg-gray-800"
+						bind:value={size}
+					>
+						{#each supportedSizes as value (value)}
+							<option value={value}>{value}</option>
+						{/each}
+					</select>
+				</label>
+				<label class="block text-xs">
+					{$i18n.t('Images')}
+					<input
+						type="number"
+						min="1"
+						max="9"
+						class="mt-1 w-full rounded-lg border bg-transparent p-2 dark:border-gray-700"
+						bind:value={count}
+					/>
+				</label>
+			</div>
+		{/if}
+
+		{#if result}
+			<div
+				role="status"
+				class="rounded-lg p-3 text-xs {result.status === 'passed'
+					? 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300'
+					: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'}"
+				data-testid="provider-test-result"
+			>
+				{#if result.status === 'passed'}
+					<p>{$i18n.t('The request passed. It does not mean every parameter is compatible.')}</p>
+				{:else}
+					<p class="break-words">{providerErrorSummary(result.error)}</p>
+					<p class="mt-1 break-words leading-relaxed">{providerErrorHint(result.error)}</p>
+				{/if}
+				{#if result.service?.endpoint}
+					<p class="mt-1 break-all text-gray-600 dark:text-gray-300">{result.service.endpoint}</p>
+				{/if}
+			</div>
+		{/if}
+
+		{#if error}
+			<p role="status" class="rounded-lg bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
+				{error}
+			</p>
+		{/if}
+
+		<div class="flex flex-wrap justify-end gap-2">
+			<button
+				type="button"
+				class="rounded-lg border px-3 py-2 text-sm dark:border-gray-700"
+				data-testid="provider-test-cancel"
+				on:click={() => {
+					show = false;
+					reset();
+				}}
+			>
+				{$i18n.t('Cancel')}
+			</button>
+			<button
+				type="button"
+				class="rounded-lg bg-black px-4 py-2 text-sm text-white disabled:opacity-50 dark:bg-white dark:text-black"
+				disabled={running}
+				data-testid="provider-test-run"
+				on:click={run}
+			>
+				{running ? $i18n.t('Testing…') : $i18n.t('Send one request')}
+			</button>
+		</div>
+	</div>
+</Modal>

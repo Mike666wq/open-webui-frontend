@@ -25,9 +25,124 @@ let recordingNoteMissing = false;
 let recordingRemoved = false;
 let kimiConnection = null;
 let chatgptConnection = null;
+let minimaxConnection = null;
 
 const chatgptAttempts = [];
 const kimiAttempts = [];
+
+// Per-service metadata mirrored from the backend registry
+// (backend/open_webui/utils/provider_registry.py). The fixture keeps the same
+// shapes so the wizard exercises the real per-service UI paths.
+const ADAPTER_OPERATIONS = {
+	'openai-image': ['generate', 'edit'],
+	'siliconflow-image': ['generate'],
+	'minimax-image': ['generate']
+};
+const MEDIA_UNSUPPORTED_OAUTH = '账号登录仅覆盖文本推理，不能用于语音转写、语音合成或生图。';
+const MEDIA_UNSUPPORTED_NONE = '该提供商未提供此服务。';
+const MEDIA_UNSUPPORTED_LATER = '该提供商的原生媒体接口本期未接入。';
+const TEMPLATE_UNSUPPORTED_REASON = '该提供商类型尚未实装，请改用 OpenAI 兼容端点接入。';
+
+function serviceDeclaration(overrides = {}) {
+	const declaration = {
+		supported: true,
+		unsupported_reason: null,
+		adapters: [],
+		auth_types: ['api_key'],
+		discovery: 'remote',
+		model_requirement: 'required',
+		endpoint: { kind: 'base_url', url: '' },
+		preset_models: [],
+		limits: {},
+		options: {},
+		notes: null,
+		...overrides
+	};
+	const operations = [
+		...new Set(declaration.adapters.flatMap((adapter) => ADAPTER_OPERATIONS[adapter] ?? []))
+	].sort();
+	if (operations.length) declaration.operations = operations;
+	return declaration;
+}
+
+function unsupportedService(reason) {
+	return serviceDeclaration({ supported: false, unsupported_reason: reason, discovery: 'none' });
+}
+
+const minimaxMediaRoot = 'https://api.minimax.cn/v1';
+const minimaxChatService = serviceDeclaration({
+	adapters: ['openai-chat'],
+	endpoint: { kind: 'base_url', url: 'https://api.minimax.chat/v1' }
+});
+const openaiChatService = serviceDeclaration({
+	adapters: ['openai-chat', 'responses'],
+	endpoint: { kind: 'base_url', url: 'https://api.openai.com/v1' }
+});
+const minimaxTranscriptionService = serviceDeclaration({
+	adapters: ['minimax-transcription'],
+	discovery: 'preset',
+	model_requirement: 'defaulted',
+	endpoint: { kind: 'base_url', url: minimaxMediaRoot },
+	preset_models: [
+		{
+			upstream_id: 'asr-1.0',
+			display_name: 'asr-1.0',
+			uses: { transcription: 'minimax-transcription' }
+		}
+	],
+	limits: {
+		max_bytes: 52428800,
+		max_seconds: 500,
+		input_formats: ['wav', 'aiff', 'flac', 'm4a', 'mp3', 'aac', 'opus', 'ogg']
+	},
+	options: { response_format: ['json', 'verbose_json'] },
+	notes: 'model 仍必须随请求发送；语言走请求头，未指定即混合语言识别。'
+});
+const minimaxSpeechService = serviceDeclaration({
+	adapters: ['minimax-speech'],
+	discovery: 'preset',
+	endpoint: { kind: 'base_url', url: minimaxMediaRoot },
+	preset_models: [
+		'speech-2.8-hd',
+		'speech-2.8-turbo',
+		'speech-2.6-hd',
+		'speech-2.6-turbo',
+		'speech-02-hd',
+		'speech-02-turbo',
+		'speech-01-hd',
+		'speech-01-turbo'
+	].map((upstreamId) => ({
+		upstream_id: upstreamId,
+		display_name: upstreamId,
+		uses: { speech: 'minimax-speech' }
+	})),
+	limits: { max_text_chars: 10000 },
+	options: { format: ['mp3'], output_format: ['hex'], voice_id: 'manual' },
+	notes: '同步非流式合成；音色 ID 独立于模型，不自动激活或克隆音色。'
+});
+const minimaxImageService = serviceDeclaration({
+	adapters: ['minimax-image'],
+	discovery: 'preset',
+	endpoint: { kind: 'base_url', url: minimaxMediaRoot },
+	preset_models: ['image-01', 'image-01-live'].map((upstreamId) => ({
+		upstream_id: upstreamId,
+		display_name: upstreamId,
+		uses: { image: 'minimax-image' }
+	})),
+	limits: {
+		max_prompt_chars: 1500,
+		min_dimension: 512,
+		max_dimension: 2048,
+		dimension_multiple: 8,
+		max_images: 9
+	},
+	options: {
+		response_format: ['base64', 'url'],
+		aspect_ratio: ['1:1', '16:9', '4:3', '3:2', '2:3', '3:4', '9:16', '21:9'],
+		n: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+	},
+	notes: '本期仅文生图，不支持图生图或图片编辑；国际区只登记已确认的 image-01。'
+});
 
 if (!root || !statSync(root).isDirectory()) {
 	console.error('Usage: node frontend-api-server.mjs <verified-frontend-directory>');
@@ -360,6 +475,7 @@ function api(pathname) {
 	if (pathname === '/api/v1/providers')
 		return {
 			object: 'list',
+			service_contract_version: 1,
 			data: [
 				{
 					id: 'openai',
@@ -372,7 +488,28 @@ function api(pathname) {
 					default_base_url: 'https://api.openai.com/v1',
 					docs_url: '',
 					supported: true,
-					unsupported_reason: null
+					unsupported_reason: null,
+					services: {
+						chat: openaiChatService,
+						transcription: serviceDeclaration({
+							adapters: ['openai-transcription'],
+							endpoint: { kind: 'base_url', url: 'https://api.openai.com/v1' },
+							options: { response_format: ['json', 'text', 'verbose_json'] }
+						}),
+						speech: serviceDeclaration({
+							adapters: ['openai-speech'],
+							endpoint: { kind: 'base_url', url: 'https://api.openai.com/v1' },
+							options: { response_format: ['mp3', 'wav', 'opus', 'aac', 'flac', 'pcm'] }
+						}),
+						image: serviceDeclaration({
+							adapters: ['openai-image'],
+							endpoint: { kind: 'base_url', url: 'https://api.openai.com/v1' },
+							options: {
+								size: ['auto', '1024x1024', '1024x1536', '1536x1024'],
+								response_format: ['b64_json', 'url']
+							}
+						})
+					}
 				},
 				{
 					id: 'deepseek',
@@ -385,7 +522,16 @@ function api(pathname) {
 					default_base_url: 'https://api.deepseek.com/v1',
 					docs_url: '',
 					supported: true,
-					unsupported_reason: null
+					unsupported_reason: null,
+					services: {
+						chat: serviceDeclaration({
+							adapters: ['openai-chat'],
+							endpoint: { kind: 'base_url', url: 'https://api.deepseek.com/v1' }
+						}),
+						transcription: unsupportedService(MEDIA_UNSUPPORTED_NONE),
+						speech: unsupportedService(MEDIA_UNSUPPORTED_NONE),
+						image: unsupportedService(MEDIA_UNSUPPORTED_NONE)
+					}
 				},
 				{
 					id: 'kimi',
@@ -398,7 +544,17 @@ function api(pathname) {
 					default_base_url: '',
 					docs_url: '',
 					supported: true,
-					unsupported_reason: null
+					unsupported_reason: null,
+					services: {
+						chat: serviceDeclaration({
+							adapters: ['openai-chat'],
+							auth_types: ['oauth'],
+							endpoint: { kind: 'base_url', url: 'https://api.kimi.com/coding/v1' }
+						}),
+						transcription: unsupportedService(MEDIA_UNSUPPORTED_OAUTH),
+						speech: unsupportedService(MEDIA_UNSUPPORTED_OAUTH),
+						image: unsupportedService(MEDIA_UNSUPPORTED_OAUTH)
+					}
 				},
 				{
 					id: 'chatgpt',
@@ -411,7 +567,36 @@ function api(pathname) {
 					default_base_url: '',
 					docs_url: '',
 					supported: true,
-					unsupported_reason: null
+					unsupported_reason: null,
+					services: {
+						chat: serviceDeclaration({
+							adapters: ['responses'],
+							auth_types: ['oauth'],
+							endpoint: { kind: 'base_url', url: '' }
+						}),
+						transcription: unsupportedService(MEDIA_UNSUPPORTED_OAUTH),
+						speech: unsupportedService(MEDIA_UNSUPPORTED_OAUTH),
+						image: unsupportedService(MEDIA_UNSUPPORTED_OAUTH)
+					}
+				},
+				{
+					id: 'minimax',
+					name: 'MiniMax',
+					protocol: 'openai-compatible',
+					protocol_label: 'OpenAI 兼容',
+					group: 'cn',
+					group_label: '国产',
+					auth_types: ['api_key'],
+					default_base_url: 'https://api.minimax.chat/v1',
+					docs_url: 'https://platform.minimaxi.com/document',
+					supported: true,
+					unsupported_reason: null,
+					services: {
+						chat: minimaxChatService,
+						transcription: minimaxTranscriptionService,
+						speech: minimaxSpeechService,
+						image: minimaxImageService
+					}
 				},
 				{
 					id: 'anthropic',
@@ -424,7 +609,13 @@ function api(pathname) {
 					default_base_url: '',
 					docs_url: '',
 					supported: false,
-					unsupported_reason: '该提供商类型暂未实装。'
+					unsupported_reason: '该提供商类型暂未实装。',
+					services: {
+						chat: unsupportedService(TEMPLATE_UNSUPPORTED_REASON),
+						transcription: unsupportedService(TEMPLATE_UNSUPPORTED_REASON),
+						speech: unsupportedService(TEMPLATE_UNSUPPORTED_REASON),
+						image: unsupportedService(TEMPLATE_UNSUPPORTED_REASON)
+					}
 				}
 			],
 			groups: [
@@ -437,9 +628,13 @@ function api(pathname) {
 	if (pathname === '/api/v1/providers/legacy-migration/preview')
 		return { sources: [], conflicts: {} };
 	if (pathname === '/api/v1/providers/connections')
-		return [providerConnection, kimiConnection, chatgptConnection, blockedConnection].filter(
-			Boolean
-		);
+		return [
+			providerConnection,
+			kimiConnection,
+			chatgptConnection,
+			minimaxConnection,
+			blockedConnection
+		].filter(Boolean);
 	if (pathname === '/api/v1/providers/models')
 		return { object: 'list', data: [transcriptionModel] };
 	if (pathname === '/api/config') return config;
@@ -563,6 +758,15 @@ const PROVIDER_CONNECTION_MODELS_FETCH =
 const PROVIDER_CONNECTION_MODEL_ITEM =
 	/^\/api\/v1\/providers\/connections\/[^/]+\/models\/([^/]+)$/;
 const PROVIDER_CONNECTION_ENABLED = /^\/api\/v1\/providers\/connections\/[^/]+\/enabled$/;
+const PROVIDER_CONNECTION_VOICES = /^\/api\/v1\/providers\/connections\/[^/]+\/voices\/fetch$/;
+const PROVIDER_CONNECTION_MODEL_TEST = /^\/api\/v1\/providers\/connections\/[^/]+\/model-test$/;
+
+function connectionForPath(pathname) {
+	const id = decodeURIComponent(pathname.split('/')[5] ?? '');
+	if (id === 'fixture-minimax-connection') return minimaxConnection;
+	if (id === 'fixture-provider-connection') return providerConnection;
+	return null;
+}
 
 const server = createServer(async (request, response) => {
 	const url = new URL(request.url || '/', origin);
@@ -718,6 +922,154 @@ const server = createServer(async (request, response) => {
 				send(response, 422, { detail: 'Missing provider name/key' });
 				return;
 			}
+			if (payload.provider_template === 'minimax') {
+				const services = payload.config?.services ?? {};
+				const enabledPurposes = Object.keys(services).sort();
+				if (url.pathname.endsWith('/verify')) {
+					if (
+						JSON.stringify(enabledPurposes) !==
+							JSON.stringify(['chat', 'speech', 'transcription']) ||
+						!services.transcription?.endpoint?.url ||
+						!services.speech?.endpoint?.url
+					) {
+						send(response, 422, {
+							detail: 'Expected transcription and speech enabled and image disabled'
+						});
+						return;
+					}
+					send(response, 200, {
+						ok: true,
+						status: 'connected',
+						models: [
+							{
+								id: 'provider:temporary:minimax-fixture-chat',
+								upstream_id: 'minimax-fixture-chat',
+								name: 'Fixture MiniMax Chat'
+							}
+						]
+					});
+					return;
+				}
+				const minimaxModelIds = Array.isArray(payload.config?.model_ids)
+					? payload.config.model_ids
+					: [];
+				if (
+					minimaxModelIds.some((id) => String(id).startsWith('provider:temporary:')) ||
+					!minimaxModelIds.includes('minimax-fixture-chat')
+				) {
+					send(response, 422, {
+						detail: 'Expected upstream model IDs rather than temporary connection IDs'
+					});
+					return;
+				}
+				const selections = payload.model_selections ?? [];
+				// The backend refuses a request whose model_ids and model_selections
+				// state different model sets, and every selection states its
+				// purpose in `uses`. The fixture enforces the same contract.
+				const modelIds = Array.isArray(payload.config?.model_ids)
+					? payload.config.model_ids
+					: [];
+				const selectionIds = new Set(selections.map((entry) => entry.upstream_id));
+				if (
+					selections.length > 0 &&
+					modelIds.length > 0 &&
+					(selectionIds.size !== new Set(modelIds).size ||
+						[...selectionIds].some((id) => !modelIds.includes(id)))
+				) {
+					send(response, 422, {
+						detail: '模型选择与 model_ids 不一致，请只提交其中一种'
+					});
+					return;
+				}
+				const byPurpose = (purpose) =>
+					selections.filter((entry) => entry.uses?.[purpose]);
+				const chatSelections = byPurpose('chat');
+				const transcriptionSelections = byPurpose('transcription');
+				const speechSelections = byPurpose('speech');
+				if (
+					chatSelections.length !== 1 ||
+					chatSelections[0].upstream_id !== 'minimax-fixture-chat' ||
+					chatSelections[0].uses.chat !== 'openai-chat' ||
+					chatSelections[0].source !== 'provider' ||
+					transcriptionSelections.length !== 1 ||
+					transcriptionSelections[0].upstream_id !== 'asr-1.0' ||
+					transcriptionSelections[0].uses.transcription !== 'minimax-transcription' ||
+					transcriptionSelections[0].source !== 'preset' ||
+					speechSelections.length !== 8 ||
+					!speechSelections.every(
+						(entry) => entry.uses.speech === 'minimax-speech' && entry.source === 'preset'
+					) ||
+					selections.some((entry) => entry.uses?.image)
+				) {
+					send(response, 422, { detail: 'Unexpected model selections for MiniMax' });
+					return;
+				}
+				const resolved = (declaration, enabled, endpointUrl) => ({
+					supported: declaration.supported,
+					unsupported_reason: declaration.unsupported_reason,
+					adapters: declaration.adapters,
+					adapter: declaration.adapters[0] ?? null,
+					...(declaration.operations ? { operations: declaration.operations } : {}),
+					enabled,
+					discovery: declaration.discovery,
+					model_requirement: declaration.model_requirement,
+					limits: declaration.limits,
+					options: declaration.options,
+					preset_models: declaration.preset_models,
+					notes: declaration.notes,
+					endpoint: endpointUrl,
+					endpoint_kind: endpointUrl ? 'base_url' : null,
+					configured: enabled
+				});
+				minimaxConnection = {
+					id: 'fixture-minimax-connection',
+					provider_id: 'minimax',
+					provider_template: 'minimax',
+					protocol: 'openai-compatible',
+					name: payload.name,
+					auth_type: payload.auth_type ?? 'api_key',
+					visibility: payload.visibility ?? 'private',
+					owner_id: userId,
+					config: payload.config,
+					status: 'configured',
+					configured: true,
+					is_enabled: true,
+					models: selections.map((entry) => ({
+						id: `provider:fixture-minimax-connection:${entry.upstream_id}`,
+						upstream_id: entry.upstream_id,
+						name: entry.display_name ?? entry.upstream_id,
+						uses: entry.uses,
+						enabled: true,
+						capability_source: entry.source
+					})),
+					catalog: { updated_at: now, error: null, stale: false },
+					resolved_services: {
+						chat: resolved(minimaxChatService, true, payload.config.base_url ?? 'https://api.minimax.chat/v1'),
+						transcription: resolved(minimaxTranscriptionService, true, minimaxMediaRoot),
+						speech: resolved(minimaxSpeechService, true, minimaxMediaRoot),
+						image: resolved(minimaxImageService, false, null)
+					},
+					service_statuses: {
+						chat: { configuration: 'valid', catalog: 'ok', probe: 'not_available' },
+						transcription: {
+							configuration: 'valid',
+							catalog: 'not_applicable',
+							probe: 'not_available'
+						},
+						speech: { configuration: 'valid', catalog: 'not_applicable', probe: 'not_available' },
+						image: { configuration: 'missing', catalog: 'not_applicable', probe: 'not_available' }
+					}
+				};
+				event('provider-saved', {
+					provider_id: 'minimax',
+					model_ids: payload.config.model_ids,
+					visibility: payload.visibility,
+					services: Object.keys(services),
+					model_selections: selections
+				});
+				send(response, 200, minimaxConnection);
+				return;
+			}
 			if (url.pathname.endsWith('/verify')) {
 				send(response, 200, {
 					ok: true,
@@ -729,6 +1081,24 @@ const server = createServer(async (request, response) => {
 							name: 'Fixture DeepSeek'
 						}
 					]
+				});
+				return;
+			}
+			const genericSelections = payload.model_selections ?? [];
+			const genericModelIds = Array.isArray(payload.config?.model_ids)
+				? payload.config.model_ids
+				: [];
+			// The backend refuses a request whose model_ids and model_selections
+			// state different model sets.
+			const genericSelectionIds = new Set(genericSelections.map((entry) => entry.upstream_id));
+			if (
+				genericSelections.length > 0 &&
+				genericModelIds.length > 0 &&
+				(genericSelectionIds.size !== new Set(genericModelIds).size ||
+					[...genericSelectionIds].some((id) => !genericModelIds.includes(id)))
+			) {
+				send(response, 422, {
+					detail: '模型选择与 model_ids 不一致，请只提交其中一种'
 				});
 				return;
 			}
@@ -752,26 +1122,86 @@ const server = createServer(async (request, response) => {
 				configured: true,
 				is_enabled: true,
 				// The models picked in the wizard become the curated whitelist.
-				models: (payload.config?.model_ids ?? []).map((upstreamId) => ({
-					id: `provider:fixture-provider-connection:${upstreamId}`,
-					upstream_id: upstreamId,
-					name: upstreamId === 'deepseek-fixture' ? 'Fixture DeepSeek' : upstreamId,
-					uses: { chat: 'openai-chat' },
-					enabled: true,
-					capability_source: 'provider-adapter'
-				}))
+				models: (genericSelections.length
+					? genericSelections.map((entry) => ({
+							id: `provider:fixture-provider-connection:${entry.upstream_id}`,
+							upstream_id: entry.upstream_id,
+							name:
+								entry.display_name ??
+								(entry.upstream_id === 'deepseek-fixture' ? 'Fixture DeepSeek' : entry.upstream_id),
+							uses: entry.uses,
+							enabled: true,
+							capability_source: entry.source
+						}))
+					: (payload.config?.model_ids ?? []).map((upstreamId) => ({
+							id: `provider:fixture-provider-connection:${upstreamId}`,
+							upstream_id: upstreamId,
+							name: upstreamId === 'deepseek-fixture' ? 'Fixture DeepSeek' : upstreamId,
+							uses: { chat: 'openai-chat' },
+							enabled: true,
+							capability_source: 'provider-adapter'
+						}))
+				)
 			};
 			event('provider-saved', {
 				provider_id: payload.provider_id ?? payload.provider_template,
 				model_ids: payload.config.model_ids,
-				visibility: payload.visibility
+				visibility: payload.visibility,
+				model_selections: genericSelections
 			});
 			send(response, 200, providerConnection);
 			return;
 		}
+		if (PROVIDER_CONNECTION_VOICES.test(url.pathname) && request.method === 'POST') {
+			const chunks = [];
+			for await (const chunk of request) chunks.push(chunk);
+			const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+			if (payload.purpose !== 'speech') {
+				send(response, 400, { detail: 'Voice listing is only available for speech' });
+				return;
+			}
+			send(response, 200, {
+				data: [
+					{ id: 'female-shaonv', name: '少青-少女音', source: 'system' },
+					{ id: 'male-qn-qingse', name: '青涩青年音', source: 'system' }
+				],
+				error: null,
+				fetched_at: now
+			});
+			return;
+		}
+		if (PROVIDER_CONNECTION_MODEL_TEST.test(url.pathname) && request.method === 'POST') {
+			const chunks = [];
+			for await (const chunk of request) chunks.push(chunk);
+			const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+			const serviceEndpoints = {
+				transcription: 'https://api.minimax.cn/v1/speech_to_text',
+				speech: 'https://api.minimax.cn/v1/t2a_v2',
+				image: 'https://api.minimax.cn/v1/image_generation',
+				chat: 'chat/completions'
+			};
+			const result = {
+				status: 'passed',
+				tested_at: Math.floor(Date.now() / 1000),
+				fingerprint: 'fixture-fingerprint',
+				elapsed_ms: 120,
+				error: null
+			};
+			if (payload.purpose && payload.purpose !== 'chat') {
+				result.service = {
+					purpose: payload.purpose,
+					endpoint: serviceEndpoints[payload.purpose],
+					model: payload.upstream_id
+				};
+			}
+			event('provider-model-tested', { purpose: payload.purpose });
+			send(response, 200, result);
+			return;
+		}
 		if (PROVIDER_CONNECTION_MODELS_FETCH.test(url.pathname) && request.method === 'POST') {
 			// Fetching only refreshes the candidate pool; the whitelist is untouched.
-			const candidates = (providerConnection?.models ?? []).map((model) => ({
+			const connection = connectionForPath(url.pathname);
+			const candidates = (connection?.models ?? []).map((model) => ({
 				upstream_id: model.upstream_id,
 				display_name: model.name,
 				capabilities: ['TG']
@@ -780,20 +1210,21 @@ const server = createServer(async (request, response) => {
 			return;
 		}
 		if (PROVIDER_CONNECTION_MODELS.test(url.pathname) && request.method === 'GET') {
-			send(response, 200, { models: providerConnection?.models ?? [] });
+			send(response, 200, { models: connectionForPath(url.pathname)?.models ?? [] });
 			return;
 		}
 		if (PROVIDER_CONNECTION_MODELS.test(url.pathname) && request.method === 'POST') {
 			const chunks = [];
 			for await (const chunk of request) chunks.push(chunk);
 			const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+			const connection = connectionForPath(url.pathname);
 			for (const upstreamId of payload.upstream_ids ?? []) {
 				if (
-					providerConnection &&
-					!providerConnection.models.some((model) => model.upstream_id === upstreamId)
+					connection &&
+					!connection.models.some((model) => model.upstream_id === upstreamId)
 				) {
-					providerConnection.models.push({
-						id: `provider:${providerConnection.id}:${upstreamId}`,
+					connection.models.push({
+						id: `provider:${connection.id}:${upstreamId}`,
 						upstream_id: upstreamId,
 						name: upstreamId,
 						uses: { chat: 'openai-chat' },
@@ -802,34 +1233,33 @@ const server = createServer(async (request, response) => {
 				}
 			}
 			event('provider-models-added', { upstream_ids: payload.upstream_ids ?? [] });
-			send(response, 200, providerConnection);
+			send(response, 200, connection);
 			return;
 		}
 		const whitelistModel = url.pathname.match(PROVIDER_CONNECTION_MODEL_ITEM);
 		if (whitelistModel) {
 			const upstreamId = decodeURIComponent(whitelistModel[1]);
+			const connection = connectionForPath(url.pathname);
 			if (request.method === 'PUT') {
 				const chunks = [];
 				for await (const chunk of request) chunks.push(chunk);
 				const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-				const model = providerConnection?.models.find((m) => m.upstream_id === upstreamId);
+				const model = connection?.models.find((m) => m.upstream_id === upstreamId);
 				if (model) {
 					if (payload.enabled !== undefined) model.enabled = payload.enabled;
 					if (payload.uses !== undefined) model.uses = payload.uses;
 					if (payload.display_name !== undefined) model.name = payload.display_name;
 				}
 				event('provider-model-updated', { upstream_id: upstreamId, ...payload });
-				send(response, 200, providerConnection);
+				send(response, 200, connection);
 				return;
 			}
 			if (request.method === 'DELETE') {
-				if (providerConnection) {
-					providerConnection.models = providerConnection.models.filter(
-						(m) => m.upstream_id !== upstreamId
-					);
+				if (connection) {
+					connection.models = connection.models.filter((m) => m.upstream_id !== upstreamId);
 				}
 				event('provider-model-removed', { upstream_id: upstreamId });
-				send(response, 200, providerConnection);
+				send(response, 200, connection);
 				return;
 			}
 		}
@@ -837,9 +1267,10 @@ const server = createServer(async (request, response) => {
 			const chunks = [];
 			for await (const chunk of request) chunks.push(chunk);
 			const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-			if (providerConnection) providerConnection.is_enabled = payload.enabled;
+			const connection = connectionForPath(url.pathname) ?? providerConnection;
+			if (connection) connection.is_enabled = payload.enabled;
 			event('provider-connection-enabled', { enabled: payload.enabled });
-			send(response, 200, providerConnection);
+			send(response, 200, connection);
 			return;
 		}
 		if (request.method === 'POST' && url.pathname === '/api/v1/auths/signin') {

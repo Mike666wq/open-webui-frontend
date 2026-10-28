@@ -55,6 +55,34 @@ In the chat model selector, a failing connection shows a short reason and a **Vi
 
 The network side (fake-ip, reserved ranges) is documented in the [recovery runbook](https://github.com/Mike666wq/open-webui-backend/blob/main/docs/PROVIDER_RECOVERY.md).
 
+## Per-service access (P-002)
+
+Each connection configures four purposes independently: **chat, transcription,
+speech synthesis and image generation**. The add-provider dialog shows which
+services a template really supports, which auth methods each service accepts,
+and how its models are discovered (remote list, official preset or manual
+entry). A subscription sign-in (ChatGPT, Kimi Code) never gains media services
+by signing in.
+
+Address fields support two modes: a `base_url` is the API root including the
+version prefix and the adapter appends its registered relative path exactly
+once; an `endpoint_url` is used verbatim once. The dialog names the two modes
+and previews the final URL, so pasting a full operation URL into the API-root
+field cannot silently produce a doubled suffix.
+
+MiniMax uses its native media endpoints with the default root
+`https://api.minimax.cn/v1`; it can be added and saved without fetching a
+remote model list first. Transcription requires `model=asr-1.0` even though the
+model is preset (a defaulted model is still sent, never omitted). Speech
+synthesis decodes the hex audio of `POST /v1/t2a_v2` and lists voices through
+`POST /v1/get_voice`; a zero HTTP status with a non-zero `base_resp.status_code`
+is an error, not a success. Image generation is text-to-image only: the edit
+entry is hidden when the connection's service declaration reports no `edit`
+operation, and the backend re-checks the effective adapter before every edit
+request. Model tests may upload an audio sample, pick a voice or set an image
+size; the dialog shows the actual service, model and possible charge before the
+test runs.
+
 ## Unified models and media
 
 Chat, transcription, speech synthesis and image generation use the same server
@@ -96,6 +124,26 @@ another paid channel.
 ChatGPT and Kimi account sign-in remain chat-only for the capabilities their
 official protocols expose. They do not grant image, transcription, speech or
 Realtime API access. Use a separate API-key connection for those media features.
+
+## 按服务接入（P-002）
+
+每个连接的**聊天 / 语音转写 / 语音合成 / 生图**四个用途分开配置。添加提供商时
+会显示模板真正支持哪些服务、每种服务接受哪些鉴权方式、模型如何发现（远程列表 /
+官方预设 / 手工录入）。ChatGPT、Kimi Code 这类订阅登录不会因为登录就获得媒体
+服务权限。
+
+地址字段分两种模式：`base_url` 是含版本前缀的 API 根，适配器只追加自己登记的
+相对路径一次；`endpoint_url` 是完整请求地址，原样使用一次。界面会说明两种模式
+并预览最终 URL，把完整操作地址误填进 API 根也不会悄悄产生重复后缀。
+
+MiniMax 的媒体能力走厂商原生接口，默认根地址 `https://api.minimax.cn/v1`，
+无需先拉取远程模型列表即可添加并保存。转写即使模型是预设的也必须发送
+`model=asr-1.0`（有默认值不等于不发 model）；合成解码 `POST /v1/t2a_v2` 返回的
+hex 音频，音色经 `POST /v1/get_voice` 查询；HTTP 200 但 `base_resp.status_code`
+非零按业务失败处理，不算成功。生图本期只有文生图：连接的服务声明没有 `edit`
+操作时，界面隐藏编辑入口，后端在每次编辑请求出站前还会按实际适配器再判定一次。
+模型测试可以上传音频样本、选择音色或设置图片尺寸，点击测试前会展示实际服务、
+模型与可能产生的费用。
 
 ## 统一模型与媒体
 
