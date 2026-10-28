@@ -1,5 +1,7 @@
 <script lang="ts">
 	import ProviderModelSelect from '$lib/components/common/ProviderModelSelect.svelte';
+	import { getProviderModels } from '$lib/apis/providers';
+	import { authorizedRecordingModel } from '$lib/utils/provider-services';
 	import { onMount, getContext } from 'svelte';
 	import { v4 as uuidv4 } from 'uuid';
 	import { toast } from 'svelte-sonner';
@@ -229,6 +231,20 @@
 		execute(async () => {
 			configuration = await recordingRequest<RecordingConfig>(localStorage.token, '/config');
 			selectedModelRef = configuration.default_model_ref ?? '';
+			const requestedModelRef = new URLSearchParams(location.search).get('model_ref');
+			if (requestedModelRef) {
+				try {
+					const available = await getProviderModels('transcription');
+					const authorized = authorizedRecordingModel(requestedModelRef, available?.data ?? []);
+					if (authorized) {
+						selectedModelRef = authorized;
+					} else {
+						toast.error('该转写模型不可用或无权使用 / This transcription model is unavailable or not permitted.');
+					}
+				} catch {
+					toast.error('无法验证转写模型权限 / Could not verify access to the transcription model.');
+				}
+			}
 			await loadKnowledge().catch((e) => {
 				actionErrors = {
 					...actionErrors,

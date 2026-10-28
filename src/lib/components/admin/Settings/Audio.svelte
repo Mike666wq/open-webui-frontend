@@ -6,7 +6,7 @@
 	const dispatch = createEventDispatcher();
 
 	import { getBackendConfig } from '$lib/apis';
-	import { getProviderConnections } from '$lib/apis/providers';
+	import { fetchProviderVoices, getProviderConnections } from '$lib/apis/providers';
 	import {
 		getAudioConfig,
 		updateAudioConfig,
@@ -105,6 +105,18 @@
 	// eslint-disable-next-line no-undef
 	let voices: SpeechSynthesisVoice[] = [];
 	let providerVoices: Voice[] = [];
+	let fetchingProviderVoices = false;
+	const fetchSelectedProviderVoices = async () => {
+		if (!TTS_PROVIDER_CONNECTION_ID || fetchingProviderVoices) return;
+		fetchingProviderVoices = true;
+		try {
+			const response = await fetchProviderVoices(TTS_PROVIDER_CONNECTION_ID, 'speech', 'system');
+			if (response?.error) throw new Error('音色查询失败 / Could not fetch voices.');
+			providerVoices = Array.isArray(response?.data) ? response.data : [];
+		} catch (error) {
+			toast.error(String(error));
+		} finally { fetchingProviderVoices = false; }
+	};
 	let models: Awaited<ReturnType<typeof _getModels>>['models'] = [];
 	let providerConnections: Array<{
 		id: string;
@@ -741,6 +753,7 @@
 						bind:connectionId={TTS_PROVIDER_CONNECTION_ID}
 					/>
 				</AdminSettingField>
+				<button type="button" class="text-xs underline disabled:opacity-50" disabled={!TTS_PROVIDER_CONNECTION_ID || fetchingProviderVoices} on:click={fetchSelectedProviderVoices}>获取系统音色 / Fetch system voices</button>
 			{:else if TTS_ENGINE === 'openai' || TTS_ENGINE === 'openai-realtime'}
 				<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 					<AdminSettingField label={$i18n.t('settings.admin.audio.ttsOpenaiApiBaseUrl.label')}>

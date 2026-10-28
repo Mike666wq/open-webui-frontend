@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+	addProviderModels,
 	createProviderConnection,
 	fetchProviderModels,
 	fetchProviderVoices,
@@ -57,6 +58,22 @@ describe('provider service configuration', () => {
 
 	afterEach(() => {
 		vi.unstubAllGlobals();
+	});
+
+	it('adds an explicitly selected official ASR preset with its purpose and source', async () => {
+		(fetch as any).mockResolvedValue(jsonResponse({ data: [] }));
+		await addProviderModels('existing-connection', {
+			upstream_ids: ['asr-1.0'],
+			uses: { transcription: 'minimax-transcription' },
+			source: 'preset'
+		});
+		const [url, options] = (fetch as any).mock.calls[0];
+		expect(url).toContain('/connections/existing-connection/models');
+		expect(JSON.parse(options.body)).toEqual({
+			upstream_ids: ['asr-1.0'],
+			uses: { transcription: 'minimax-transcription' },
+			source: 'preset'
+		});
 	});
 
 	it('sends the services and the model selections when a connection is created', async () => {

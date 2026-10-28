@@ -124,10 +124,11 @@ export const verifyProviderDraft = (payload: Record<string, unknown>) =>
 	request('/connections/verify', { method: 'POST', body: JSON.stringify(payload) });
 export const getProviderModels = (purpose = 'chat') =>
 	request(`/models?purpose=${encodeURIComponent(purpose)}`);
-export const testProviderModel = (id: string, payload: Record<string, unknown>) =>
+export const testProviderModel = (id: string, payload: Record<string, unknown>, signal?: AbortSignal) =>
 	request(`/connections/${encodeURIComponent(id)}/model-test`, {
 		method: 'POST',
-		body: JSON.stringify(payload)
+		body: JSON.stringify(payload),
+		signal
 	});
 export const getMediaMigration = () => request('/media-migration');
 export const migrateMediaSetting = (purpose: string, fingerprint: string) =>
@@ -200,6 +201,7 @@ export const addProviderModels = (
 		upstream_ids: string[];
 		display_names?: Record<string, string>;
 		uses?: Record<string, string>;
+		source?: 'provider' | 'preset' | 'manual';
 	}
 ) =>
 	request(`/connections/${encodeURIComponent(id)}/models`, {

@@ -26,6 +26,8 @@ let recordingRemoved = false;
 let kimiConnection = null;
 let chatgptConnection = null;
 let minimaxConnection = null;
+let minimaxVoiceConnection = null;
+let minimaxSyntheticKey = null;
 
 const chatgptAttempts = [];
 const kimiAttempts = [];
@@ -633,6 +635,7 @@ function api(pathname) {
 			kimiConnection,
 			chatgptConnection,
 			minimaxConnection,
+			minimaxVoiceConnection,
 			blockedConnection
 		].filter(Boolean);
 	if (pathname === '/api/v1/providers/models')
@@ -760,10 +763,13 @@ const PROVIDER_CONNECTION_MODEL_ITEM =
 const PROVIDER_CONNECTION_ENABLED = /^\/api\/v1\/providers\/connections\/[^/]+\/enabled$/;
 const PROVIDER_CONNECTION_VOICES = /^\/api\/v1\/providers\/connections\/[^/]+\/voices\/fetch$/;
 const PROVIDER_CONNECTION_MODEL_TEST = /^\/api\/v1\/providers\/connections\/[^/]+\/model-test$/;
+const PROVIDER_CONNECTION_MODEL_TEST_STREAM = /^\/api\/v1\/providers\/connections\/[^/]+\/model-test-stream$/;
+const PROVIDER_CONNECTION_ITEM = /^\/api\/v1\/providers\/connections\/[^/]+$/;
 
 function connectionForPath(pathname) {
 	const id = decodeURIComponent(pathname.split('/')[5] ?? '');
 	if (id === 'fixture-minimax-connection') return minimaxConnection;
+	if (id === 'fixture-minimax-voice-connection') return minimaxVoiceConnection;
 	if (id === 'fixture-provider-connection') return providerConnection;
 	return null;
 }
@@ -925,6 +931,7 @@ const server = createServer(async (request, response) => {
 			if (payload.provider_template === 'minimax') {
 				const services = payload.config?.services ?? {};
 				const enabledPurposes = Object.keys(services).sort();
+				const voiceOnly = enabledPurposes.length === 1 && enabledPurposes[0] === 'transcription';
 				if (url.pathname.endsWith('/verify')) {
 					if (
 						JSON.stringify(enabledPurposes) !==
@@ -955,7 +962,7 @@ const server = createServer(async (request, response) => {
 					: [];
 				if (
 					minimaxModelIds.some((id) => String(id).startsWith('provider:temporary:')) ||
-					!minimaxModelIds.includes('minimax-fixture-chat')
+					(!voiceOnly && !minimaxModelIds.includes('minimax-fixture-chat'))
 				) {
 					send(response, 422, {
 						detail: 'Expected upstream model IDs rather than temporary connection IDs'
@@ -986,7 +993,7 @@ const server = createServer(async (request, response) => {
 				const chatSelections = byPurpose('chat');
 				const transcriptionSelections = byPurpose('transcription');
 				const speechSelections = byPurpose('speech');
-				if (
+				if (!voiceOnly && (
 					chatSelections.length !== 1 ||
 					chatSelections[0].upstream_id !== 'minimax-fixture-chat' ||
 					chatSelections[0].uses.chat !== 'openai-chat' ||
@@ -1000,8 +1007,13 @@ const server = createServer(async (request, response) => {
 						(entry) => entry.uses.speech === 'minimax-speech' && entry.source === 'preset'
 					) ||
 					selections.some((entry) => entry.uses?.image)
-				) {
+				)) {
 					send(response, 422, { detail: 'Unexpected model selections for MiniMax' });
+					return;
+				}
+				if (voiceOnly && (payload.visibility !== 'private' || selections.length !== 1 ||
+					selections[0].upstream_id !== 'asr-1.0' || selections[0].uses?.transcription !== 'minimax-transcription')) {
+					send(response, 422, { detail: 'Voice-only connection must be private and use the selected ASR preset' });
 					return;
 				}
 				const resolved = (declaration, enabled, endpointUrl) => ({
@@ -1021,8 +1033,8 @@ const server = createServer(async (request, response) => {
 					endpoint_kind: endpointUrl ? 'base_url' : null,
 					configured: enabled
 				});
-				minimaxConnection = {
-					id: 'fixture-minimax-connection',
+				const savedConnection = {
+					id: voiceOnly ? 'fixture-minimax-voice-connection' : 'fixture-minimax-connection',
 					provider_id: 'minimax',
 					provider_template: 'minimax',
 					protocol: 'openai-compatible',
@@ -1035,7 +1047,7 @@ const server = createServer(async (request, response) => {
 					configured: true,
 					is_enabled: true,
 					models: selections.map((entry) => ({
-						id: `provider:fixture-minimax-connection:${entry.upstream_id}`,
+						id: `provider:${voiceOnly ? 'fixture-minimax-voice-connection' : 'fixture-minimax-connection'}:${entry.upstream_id}`,
 						upstream_id: entry.upstream_id,
 						name: entry.display_name ?? entry.upstream_id,
 						uses: entry.uses,
@@ -1044,9 +1056,9 @@ const server = createServer(async (request, response) => {
 					})),
 					catalog: { updated_at: now, error: null, stale: false },
 					resolved_services: {
-						chat: resolved(minimaxChatService, true, payload.config.base_url ?? 'https://api.minimax.chat/v1'),
+						chat: resolved(minimaxChatService, !voiceOnly, payload.config.base_url ?? 'https://api.minimax.chat/v1'),
 						transcription: resolved(minimaxTranscriptionService, true, minimaxMediaRoot),
-						speech: resolved(minimaxSpeechService, true, minimaxMediaRoot),
+						speech: resolved(minimaxSpeechService, !voiceOnly, minimaxMediaRoot),
 						image: resolved(minimaxImageService, false, null)
 					},
 					service_statuses: {
@@ -1060,14 +1072,18 @@ const server = createServer(async (request, response) => {
 						image: { configuration: 'missing', catalog: 'not_applicable', probe: 'not_available' }
 					}
 				};
+				const separateKey = voiceOnly ? Boolean(minimaxSyntheticKey && payload.api_key !== minimaxSyntheticKey) : null;
+				if (voiceOnly) minimaxVoiceConnection = savedConnection;
+				else { minimaxConnection = savedConnection; minimaxSyntheticKey = payload.api_key; }
 				event('provider-saved', {
 					provider_id: 'minimax',
 					model_ids: payload.config.model_ids,
 					visibility: payload.visibility,
 					services: Object.keys(services),
+					separate_key: separateKey,
 					model_selections: selections
 				});
-				send(response, 200, minimaxConnection);
+				send(response, 200, savedConnection);
 				return;
 			}
 			if (url.pathname.endsWith('/verify')) {
@@ -1170,6 +1186,38 @@ const server = createServer(async (request, response) => {
 			});
 			return;
 		}
+		if (PROVIDER_CONNECTION_ITEM.test(url.pathname) && request.method === 'DELETE') {
+			const connection = connectionForPath(url.pathname);
+			if (!connection) { send(response, 404, { detail: 'Not found' }); return; }
+			if (connection.id === 'fixture-minimax-connection') minimaxConnection = null;
+			else if (connection.id === 'fixture-provider-connection') providerConnection = null;
+			event('provider-connection-removed', { id: connection.id });
+			send(response, 200, { ok: true });
+			return;
+		}
+		if (PROVIDER_CONNECTION_MODEL_TEST_STREAM.test(url.pathname) && request.method === 'POST') {
+			const chunks = [];
+			for await (const chunk of request) chunks.push(chunk);
+			const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+			const testId = 'fixture-test';
+			let seq = 0;
+			response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
+			const emit = (phase, elapsed_ms, data = {}) => response.write(`data: ${JSON.stringify({ test_id: testId, seq: ++seq, phase, elapsed_ms, data })}\n\n`);
+			emit('accepted', 0);
+			if (payload.purpose === 'chat') {
+				emit('request_started', 10);
+				emit('response_headers', 40);
+				emit('output_delta', 80, { text: 'OK' });
+			}
+			event('provider-model-tested', { purpose: payload.purpose });
+			const sampleAudio = payload.purpose === 'speech' ? 'SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYyLjEyLjEwMQAAAAAAAAAAAAAA//NYwAAAAAAAAAAAAEluZm8AAAAPAAAABwAAA6gATk5OTk5OTk5OTk5OTk5sbGxsbGxsbGxsbGxsbImJiYmJiYmJiYmJiYmJp6enp6enp6enp6enp6enxMTExMTExMTExMTExMTi4uLi4uLi4uLi4uLi4v//////////////////AAAAAExhdmM2Mi4yOAAAAAAAAAAAAAAAACQEIAAAAAAAAAOozXw3pQAAAAAAAAAAAAAA//M4xAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//M4xF8AAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//M4xKAAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//M4xKAAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//M4xKAAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//M4xKAAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//M4xKAAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV' : null;
+			emit('completed', 120, { status: 'passed', elapsed_ms: 120, error: null,
+				...(sampleAudio ? { sample_audio_base64: sampleAudio, sample_audio_type: 'audio/mpeg' } : {}),
+				timings: { upstream_headers_ms: payload.purpose === 'chat' ? 40 : null, first_output_ms: payload.purpose === 'chat' ? 80 : null, upstream_total_ms: payload.purpose === 'chat' ? 120 : null },
+				service: { purpose: payload.purpose, endpoint: 'https://api.minimax.cn/v1/t2a_v2', model: payload.upstream_id } });
+			response.end();
+			return;
+		}
 		if (PROVIDER_CONNECTION_MODEL_TEST.test(url.pathname) && request.method === 'POST') {
 			const chunks = [];
 			for await (const chunk of request) chunks.push(chunk);
@@ -1227,12 +1275,13 @@ const server = createServer(async (request, response) => {
 						id: `provider:${connection.id}:${upstreamId}`,
 						upstream_id: upstreamId,
 						name: upstreamId,
-						uses: { chat: 'openai-chat' },
+						uses: payload.uses ?? { chat: 'openai-chat' },
+						source: payload.source ?? 'provider',
 						enabled: true
 					});
 				}
 			}
-			event('provider-models-added', { upstream_ids: payload.upstream_ids ?? [] });
+			event('provider-models-added', { upstream_ids: payload.upstream_ids ?? [], uses: payload.uses ?? null, source: payload.source ?? 'provider' });
 			send(response, 200, connection);
 			return;
 		}

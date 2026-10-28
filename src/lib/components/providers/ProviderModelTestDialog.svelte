@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { getContext } from 'svelte';
+	import { getContext, onDestroy } from 'svelte';
 	import Modal from '$lib/components/common/Modal.svelte';
-	import { fetchProviderVoices, testProviderModel } from '$lib/apis/providers';
+	import { fetchProviderVoices } from '$lib/apis/providers';
+	import { runProviderTestSession, type TestEvent } from './provider-test-session';
 	import { providerErrorHint, providerErrorSummary } from '$lib/utils/provider-errors';
 	import { PURPOSE_LABEL_KEYS } from '$lib/utils/provider-models';
 	import {
@@ -34,6 +35,14 @@
 	let running = false;
 	let result: any = null;
 	let error = '';
+	let controller: AbortController | null = null;
+	let generation = 0;
+	let timer: ReturnType<typeof setInterval> | null = null;
+	let browserMs = 0;
+	let phase = '';
+	let stages: { phase: TestEvent['phase']; elapsed_ms: number }[] = [];
+	let preview = '';
+	let fallback = false;
 
 	$: declaration = serviceDeclaration(template, purpose);
 	$: isChat = purpose === 'chat';
@@ -47,6 +56,17 @@
 	const readableError = (err: unknown) => String(err).replace(/^Error:\s*/, '');
 
 	function reset() {
+		generation += 1;
+		controller?.abort();
+		controller = null;
+		if (timer) clearInterval(timer);
+		timer = null;
+		running = false;
+		browserMs = 0;
+		phase = '';
+		stages = [];
+		preview = '';
+		fallback = false;
 		voice = '';
 		voices = [];
 		audioName = '';
@@ -61,6 +81,9 @@
 		result = null;
 		error = '';
 	}
+
+	function close() { show = false; reset(); }
+	onDestroy(reset);
 
 	/**
 	 * The audio sample never leaves the browser in the clear: it is sent to the
@@ -114,6 +137,18 @@
 		running = true;
 		result = null;
 		error = '';
+		preview = '';
+		phase = '';
+		stages = [];
+		fallback = false;
+		const session = ++generation;
+		const sessionController = new AbortController();
+		controller = sessionController;
+		const started = performance.now();
+		let timedOut = false;
+		const timeout = setTimeout(() => { timedOut = true; sessionController.abort(); }, 120_000);
+		browserMs = 0;
+		timer = setInterval(() => (browserMs = Math.round(performance.now() - started)), 100);
 		try {
 			const payload: Record<string, unknown> = {
 				upstream_id: model?.upstream_id,
@@ -142,17 +177,34 @@
 				payload.size = size;
 				payload.count = count;
 			}
-			result = await testProviderModel(connection.id, payload);
+			const response = await runProviderTestSession(connection.id, payload, sessionController.signal, (event: TestEvent) => {
+				if (session !== generation) return;
+				phase = event.phase;
+				if (event.phase !== 'output_delta') stages = [...stages, { phase: event.phase, elapsed_ms: event.elapsed_ms }];
+				if (event.phase === 'output_delta' && typeof event.data?.text === 'string') {
+					preview = new TextDecoder().decode(new TextEncoder().encode(preview + event.data.text).slice(0, 8192));
+				}
+			});
+			if (session !== generation) return;
+			result = response.result;
+			fallback = response.fallback;
 			if (onTested) await onTested();
 		} catch (err) {
-			error = readableError(err);
+			if (session === generation) error = timedOut ? '测试超时，可能已产生费用 / Test timed out and may have been charged.' : readableError(err);
 		} finally {
-			running = false;
+			clearTimeout(timeout);
+			if (session === generation) {
+				running = false;
+				browserMs = Math.round(performance.now() - started);
+				if (timer) clearInterval(timer);
+				timer = null;
+				controller = null;
+			}
 		}
 	}
 </script>
 
-<Modal bind:show size="md" on:close={reset}>
+<Modal bind:show size="md" onRequestClose={close}>
 	<div class="flex flex-col gap-4" aria-labelledby="provider-model-test-title">
 		<h3 id="provider-model-test-title" class="text-lg font-semibold">
 			{$i18n.t('Test {{purpose}}', {
@@ -280,6 +332,27 @@
 			</div>
 		{/if}
 
+		{#if running || phase || result}
+			<div class="space-y-1 rounded-lg bg-gray-100 p-3 text-xs dark:bg-gray-800" role="status" aria-live="polite" data-testid="provider-test-timeline">
+				<p>{phase === 'accepted' ? '已接受 / Accepted' : phase === 'request_started' ? '请求中 / Requesting' : phase === 'response_headers' || phase === 'output_delta' ? '接收中 / Receiving' : phase === 'completed' ? '完成 / Completed' : phase === 'failed' ? '失败 / Failed' : '等待中 / Waiting'}</p>
+				<ol class="space-y-1" aria-label="测试过程 / Test timeline">
+					{#each stages as stage}
+						<li>{stage.phase === 'accepted' ? '已接受 / Accepted' : stage.phase === 'request_started' ? '请求已开始 / Request started' : stage.phase === 'response_headers' ? '已收到响应头 / Response headers' : stage.phase === 'completed' ? '完成 / Completed' : '失败 / Failed'} · {stage.elapsed_ms} ms</li>
+					{/each}
+				</ol>
+				<p>浏览器等待 / Browser elapsed: {browserMs} ms</p>
+				{#if result}
+					<p>测试总耗时 / Test total: {result.elapsed_ms ?? '未测得 / Unavailable'} ms</p>
+					<p>首输出 / First output: {result.timings?.first_output_ms == null ? '未测得 / Unavailable' : `${result.timings.first_output_ms} ms`}</p>
+					{#if result.usage}<p>用量 / Usage: {JSON.stringify(result.usage)}</p>{/if}
+					{#if fallback}<p>旧版服务，仅测总耗时 / Legacy server: total time only.</p>{/if}
+				{/if}
+				{#if preview}<pre class="max-h-40 overflow-auto whitespace-pre-wrap break-words">{preview}</pre>{/if}
+				{#if result?.sample_text}<p class="whitespace-pre-wrap break-words">{result.sample_text}</p>{/if}
+				{#if result?.sample_audio_base64}<audio controls src={`data:audio/mpeg;base64,${result.sample_audio_base64}`}>Audio playback unavailable</audio>{/if}
+			</div>
+		{/if}
+
 		{#if result}
 			<div
 				role="status"
@@ -311,10 +384,7 @@
 				type="button"
 				class="rounded-lg border px-3 py-2 text-sm dark:border-gray-700"
 				data-testid="provider-test-cancel"
-				on:click={() => {
-					show = false;
-					reset();
-				}}
+				on:click={close}
 			>
 				{$i18n.t('Cancel')}
 			</button>

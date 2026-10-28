@@ -6,6 +6,8 @@
 	import AddProviderDialog from '$lib/components/providers/AddProviderDialog.svelte';
 	import ProviderModelsPanel from '$lib/components/providers/ProviderModelsPanel.svelte';
 	import ProviderServiceSettings from '$lib/components/providers/ProviderServiceSettings.svelte';
+	import Modal from '$lib/components/common/Modal.svelte';
+	import { removeAndReconcile } from '$lib/components/providers/provider-removal';
 	import AccessControl from '$lib/components/workspace/common/AccessControl.svelte';
 	import { getModels as fetchModels } from '$lib/apis';
 	import { config as backendConfig, models, settings, user } from '$lib/stores';
@@ -46,7 +48,11 @@
 	let workingId = '';
 	let error = '';
 	let addOpen = false;
+	let voicePurpose: 'transcription' | 'speech' | null = null;
+	let voiceTemplateId = '';
 	let showDetails = false;
+	let removalTarget: any = null;
+	let removalOpen = false;
 
 	let editingId = '';
 	let editName = '';
@@ -109,11 +115,12 @@
 				? ($settings?.directConnections ?? null)
 				: null;
 			await models.set(await fetchModels(localStorage.token, directConnections));
-		} catch (err) {
+			return true;
+		} catch {
 			console.warn(
-				'Provider connections changed, but the global model list could not refresh.',
-				err
+				'Provider connections changed, but the global model list could not refresh.'
 			);
+			return false;
 		}
 	};
 
@@ -149,34 +156,48 @@
 	};
 
 	const removeConnection = async (connection: any) => {
-		if (!confirm($i18n.t('Remove {{name}}?', { name: connection.name }))) return;
+		if (workingId || !canManageConnection(connection)) return;
+		removalTarget = connection;
+		removalOpen = true;
+	};
+
+	const confirmRemoval = async () => {
+		const connection = removalTarget;
+		if (!connection || workingId || !canManageConnection(connection)) return;
 		workingId = connection.id;
 		try {
-			if (isOAuthConnection(connection)) {
-				const result =
-					connection.provider_id === 'kimi'
-						? await disconnectKimiConnection(connection.id)
-						: await disconnectChatGPTConnection(connection.id);
-				connections = connections.filter((row) => row.id !== connection.id);
-				await refreshGlobalModels();
-				if (!result?.revocation_confirmed) {
+			const oauth = isOAuthConnection(connection);
+			const outcome = await removeAndReconcile(connection.id, () =>
+				oauth
+					? connection.provider_id === 'kimi'
+						? disconnectKimiConnection(connection.id)
+						: disconnectChatGPTConnection(connection.id)
+					: deleteProviderConnection(connection.id), getProviderConnections, oauth);
+			if (outcome.state !== 'removed') {
+				toast.error(outcome.state === 'uncertain'
+					? '无法确认连接是否已移除，请刷新列表后再操作。 / Could not confirm removal. Refresh the list before trying again.'
+					: (outcome.error as any)?.providerError
+						? providerErrorSummary((outcome.error as any).providerError)
+						: '移除失败，请检查权限并重试。 / Removal failed; check permissions and try again.');
+				return;
+			}
+			connections = connections.filter((row) => row.id !== connection.id);
+			if (selectedConnectionId === connection.id) selectedConnectionId = connections[0]?.id ?? '';
+			removalOpen = false;
+			removalTarget = null;
+			if (oauth && !outcome.revocationConfirmed) {
 					toast.warning(
 						$i18n.t(
 							'{{provider}} was disconnected here, but remote token revocation was not confirmed.',
 							{ provider: connection.provider_id }
 						)
 					);
-				} else {
-					toast.success($i18n.t('Provider connection removed'));
-				}
-				return;
+			} else toast.success($i18n.t('Provider connection removed'));
+			if (!(await refreshGlobalModels())) {
+				toast.warning('连接已移除，但模型列表未能刷新。 / Connection removed, but the model list could not refresh.');
 			}
-			await deleteProviderConnection(connection.id);
-			connections = connections.filter((row) => row.id !== connection.id);
-			await refreshGlobalModels();
-			toast.success($i18n.t('Provider connection removed'));
-		} catch (err) {
-			toast.error(readableError(err));
+		} catch {
+			toast.error('移除操作未完成，请刷新后核对。 / Removal did not complete; refresh to check.');
 		} finally {
 			workingId = '';
 		}
@@ -325,7 +346,7 @@
 			type="button"
 			class="rounded-lg bg-black px-3 py-2 text-sm text-white dark:bg-white dark:text-black"
 			data-testid="provider-add"
-			on:click={() => (addOpen = true)}
+			on:click={() => { voicePurpose = null; voiceTemplateId = ''; addOpen = true; }}
 		>
 			{$i18n.t('Add provider')}
 		</button>
@@ -530,6 +551,11 @@
 							connection={selected}
 							template={templateFor(selected)}
 							canManage={canManageConnection(selected)}
+							onCreateVoiceConnection={(purpose) => {
+								voicePurpose = purpose;
+								voiceTemplateId = selected.provider_template ?? selected.provider_id;
+								addOpen = true;
+							}}
 							onUpdated={async () => {
 								await load();
 								await refreshGlobalModels();
@@ -684,6 +710,7 @@
 									<button
 										type="button"
 										class="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-600 dark:border-red-800"
+										data-testid="provider-remove"
 										disabled={workingId === selected.id}
 										on:click={() => removeConnection(selected)}
 									>
@@ -703,8 +730,25 @@
 	{/if}
 </section>
 
+<Modal bind:show={removalOpen} size="sm" ariaLabel="移除连接 / Remove connection"
+	onRequestClose={() => { if (!workingId) removalOpen = false; }}>
+	<div class="space-y-4 p-5" data-testid="provider-removal-dialog">
+		<h3 class="text-lg font-semibold">{$i18n.t('Remove {{name}}?', { name: removalTarget?.name ?? '' })}</h3>
+		<p class="text-sm">本站连接及其模型将被移除，已有聊天仍可阅读。 / This removes the connection and its models; existing chats remain readable.</p>
+		{#if removalTarget && isOAuthConnection(removalTarget)}
+			<p class="text-sm">可能无法确认远端已退出。 / Remote sign-out may not be confirmed.</p>
+		{/if}
+		<div class="flex flex-wrap justify-end gap-2">
+			<button type="button" class="rounded-lg border px-4 py-2" disabled={!!workingId} on:click={() => (removalOpen = false)}>{$i18n.t('Cancel')}</button>
+			<button type="button" class="rounded-lg bg-red-700 px-4 py-2 text-white disabled:opacity-50" disabled={!!workingId} on:click={confirmRemoval} data-testid="provider-removal-confirm">{$i18n.t('Remove')}</button>
+		</div>
+	</div>
+</Modal>
+
 <AddProviderDialog
 	bind:show={addOpen}
+	initialVoicePurpose={voicePurpose}
+	initialTemplateId={voiceTemplateId}
 	{templates}
 	{groups}
 	{isAdmin}
