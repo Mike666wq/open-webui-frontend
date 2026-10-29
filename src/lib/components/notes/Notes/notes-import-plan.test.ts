@@ -32,7 +32,7 @@ describe('buildBatchPlan', () => {
 
 		expect(plan.markdown.map((m) => m.title)).toEqual(['19.Zabbix']);
 		expect(plan.images.map((i) => i.path)).toEqual(['notes/19.Zabbix/img.png']);
-		expect(plan.otherDocs.map((d) => d.title)).toEqual(['notes/report', 'notes/data']);
+		expect(plan.otherDocs.map((d) => d.title)).toEqual(['report', 'data']);
 	});
 
 	it('normalizes ./ and ../ segments before classifying', () => {
