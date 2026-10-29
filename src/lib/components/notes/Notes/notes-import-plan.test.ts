@@ -1,3 +1,4 @@
+// P-006 S2+S3: notes markdown import plan tests
 import { describe, expect, it } from 'vitest';
 
 import { buildBatchPlan, copyTitle, renderTreeLines, titleForNote } from './notes-import-plan';
