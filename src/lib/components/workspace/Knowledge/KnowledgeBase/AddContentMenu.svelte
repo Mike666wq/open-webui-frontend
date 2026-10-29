@@ -91,6 +91,16 @@
 				<div class="flex items-center">{$i18n.t('Upload directory')}</div>
 			</button>
 
+			<button
+				class="select-none flex h-[1.6875rem] w-full cursor-pointer items-center gap-2 rounded-xl bg-transparent px-2 text-xs hover:text-gray-900 dark:hover:text-gray-100"
+				on:click={() => {
+					onUpload({ type: 'markdown_folder' });
+				}}
+			>
+				<FolderOpen strokeWidth="2" />
+				<div class="flex items-center">{$i18n.t('Import Markdown folder')}</div>
+			</button>
+
 			<Tooltip
 				content={$i18n.t(
 					'Sync a local directory with this knowledge base. Only new and modified files will be uploaded. The directory structure will be mirrored.'

@@ -686,12 +686,15 @@ export const addFileToKnowledgeById = async (
 	token: string,
 	id: string,
 	fileId: string,
-	directoryId?: string | null
+	directoryId?: string | null,
+	process?: boolean
 ) => {
 	let error = null;
 
-	const body: Record<string, string> = { file_id: fileId };
+	const body: Record<string, string | boolean> = { file_id: fileId };
 	if (directoryId) body.directory_id = directoryId;
+	// Optional process flag (P-006 S4): false = link without vectorizing (images).
+	if (process !== undefined) body.process = process;
 
 	const res = await fetch(`${WEBUI_API_BASE_URL}/knowledge/${id}/file/add`, {
 		method: 'POST',
@@ -1127,6 +1130,42 @@ export const moveFileInKnowledge = async (
 			file_id: fileId,
 			directory_id: directoryId ?? null
 		})
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+// P-006 S4 — batch get-or-create directories for Markdown folder import.
+// `directories` are normalized, root-relative, parents-first paths
+// (`a/b/c`). Returns `{ "<path>": "<directoryId>" }`; idempotent.
+export const batchCreateKnowledgeDirectories = async (
+	token: string,
+	id: string,
+	directories: string[]
+) => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/knowledge/${id}/directory/batch`, {
+		method: 'POST',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			authorization: `Bearer ${token}`
+		},
+		body: JSON.stringify({ directories })
 	})
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();
