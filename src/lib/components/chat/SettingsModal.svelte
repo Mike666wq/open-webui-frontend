@@ -50,7 +50,6 @@
 	import AdminTabIcon from '$lib/components/admin/Settings/AdminTabIcon.svelte';
 	import AdminGeneral from '$lib/components/admin/Settings/General.svelte';
 	import AdminAuthentication from '$lib/components/admin/Settings/Authentication.svelte';
-	import AdminConnections from '$lib/components/admin/Settings/Connections.svelte';
 	import AdminModels from '$lib/components/admin/Settings/Models.svelte';
 	import AdminSubagents from '$lib/components/admin/Settings/Subagents.svelte';
 	import AdminEvaluations from '$lib/components/admin/Settings/Evaluations.svelte';
@@ -107,14 +106,15 @@
 		lastShow = show;
 		search = '';
 		if (show && typeof show === 'object') {
-			selectedTab = show.tab;
-			tabState = show.state ?? null;
+			selectedTab = show.tab === 'admin:connections' ? 'connections' : show.tab;
+			tabState = show.tab === 'admin:connections' ? { ...show.state, connectionView: 'all' } : (show.state ?? null);
 			show = true;
 			lastShow = true;
 			modalShow = true;
 			loadPersonalUiSettings();
 		} else if (typeof show === 'string') {
-			selectedTab = show;
+			selectedTab = show === 'admin:connections' ? 'connections' : show;
+			tabState = show === 'admin:connections' ? { connectionView: 'all' } : null;
 			show = true;
 			lastShow = true;
 			modalShow = true;
@@ -166,7 +166,6 @@
 		'admin:general': $i18n.t('System'),
 		'admin:authentication': $i18n.t('System'),
 		'admin:interface': $i18n.t('System'),
-		'admin:connections': $i18n.t('AI'),
 		'admin:models': $i18n.t('AI'),
 		'admin:subagents': $i18n.t('AI'),
 		'admin:integrations': $i18n.t('Tools'),
@@ -226,8 +225,8 @@
 		{
 			id: 'connections',
 			titleKey: 'settings.personal.connections.title',
-			title: $i18n.t('settings.personal.connections.title'),
-			searchPrefixes: ['settings.personal.connections.']
+			title: $i18n.t('settings.admin.connections.title'),
+			searchPrefixes: ['settings.personal.connections.', 'settings.admin.connections.']
 		},
 		{
 			id: 'tools',
@@ -303,12 +302,6 @@
 			titleKey: 'settings.admin.interface.title',
 			title: $i18n.t('settings.admin.interface.title'),
 			searchPrefixes: ['settings.admin.interface.', 'settings.personal.general.parameters.']
-		},
-		{
-			id: 'admin:connections',
-			titleKey: 'settings.admin.connections.title',
-			title: $i18n.t('settings.admin.connections.title'),
-			searchPrefixes: ['settings.admin.connections.']
 		},
 		{
 			id: 'admin:models',
@@ -407,6 +400,7 @@
 		const personalSettings = personalTabs.filter((tab) => {
 			if (tab.id === 'connections') {
 				return (
+					$user?.role === 'admin' ||
 					$config?.features?.enable_provider_connections === true ||
 					$config?.features?.enable_direct_connections === true
 				);
@@ -868,6 +862,7 @@
 				<Shortcuts {saveSettings} />
 			{:else if selectedTab === 'connections'}
 				<Connections
+					connectionView={tabState?.connectionView === 'all' && $user?.role === 'admin' ? 'all' : 'mine'}
 					saveSettings={async (updated: Record<string, any>) => {
 						await saveSettings(updated);
 						toast.success($i18n.t('Settings saved successfully!'));
@@ -914,12 +909,6 @@
 				<AdminGeneral saveHandler={adminConfigSaveHandler} />
 			{:else if selectedTab === 'admin:authentication'}
 				<AdminAuthentication />
-			{:else if selectedTab === 'admin:connections'}
-				<AdminConnections
-					on:save={() => {
-						toast.success($i18n.t('Settings saved successfully!'));
-					}}
-				/>
 			{:else if selectedTab === 'admin:models'}
 				<AdminModels bind:tabState />
 			{:else if selectedTab === 'admin:subagents'}

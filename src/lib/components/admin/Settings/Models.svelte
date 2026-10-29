@@ -66,6 +66,10 @@
 	import Dropdown from '$lib/components/common/Dropdown.svelte';
 	import DropdownMenu from '$lib/components/common/DropdownMenu.svelte';
 	import AdminViewSelector from './Models/AdminViewSelector.svelte';
+	import { getProviderConnections, getProviderCatalog, updateProviderConnection, updateProviderModel } from '$lib/apis/providers';
+	import { serviceAdapters, supportedServicePurposes, SERVICE_PURPOSES } from '$lib/utils/provider-services';
+	import AccessControl from '$lib/components/workspace/common/AccessControl.svelte';
+	import { connectionAccess, groupConnectionModels, type ProviderConnectionRow, type ProviderModelRow } from './Models/model-uses';
 	import TagSelector from '$lib/components/workspace/common/TagSelector.svelte';
 
 	type ModelListItem = { id: string; name?: string };
@@ -107,7 +111,66 @@
 	let modelDefaultsPanel = null;
 	let modelDefaultsDirty = false;
 
+	let providerConnections: ProviderConnectionRow[] = [];
+	let providerTemplates: any[] = [];
+	let providerError = '';
+	let providerBusy = '';
+	let editingProviderModel = '';
+	let providerDisplayName = '';
+	let providerUses: Record<string, string> = {};
+	let editingProviderAccess = '';
+	let providerVisibility: 'private' | 'shared' = 'private';
+	let providerGrants: any[] = [];
+	$: providerGroups = groupConnectionModels(providerConnections);
+	const providerPurposeLabels: Record<string, string> = {
+		chat: 'Chat', transcription: 'Transcription', speech: 'Speech', image: 'Image', uncategorized: 'Uncategorized'
+	};
+	const providerTemplateFor = (connection: ProviderConnectionRow) => providerTemplates.find((template) => template.id === (connection as any).provider_template || template.id === (connection as any).provider_id);
+	const canManageProvider = (connection: ProviderConnectionRow) => connection.visibility === 'shared' ? $user?.role === 'admin' : connection.owner_id === $user?.id;
+	const loadProviderConnections = async () => {
+		try {
+			const [rows, catalog] = await Promise.all([getProviderConnections(), getProviderCatalog()]);
+			providerConnections = Array.isArray(rows) ? rows : (rows?.connections ?? []);
+			providerTemplates = catalog.data;
+			providerError = '';
+		} catch (err) { providerError = String(err).replace(/^Error: /, ''); }
+	};
+	const beginProviderEdit = (connection: ProviderConnectionRow, model: ProviderModelRow) => {
+		editingProviderModel = `${connection.id}:${model.upstream_id}`;
+		providerDisplayName = model.name ?? model.display_name ?? model.upstream_id;
+		providerUses = { ...(model.uses ?? {}) };
+	};
+	const saveProviderModel = async (connection: ProviderConnectionRow, model: ProviderModelRow, payload: { display_name?: string; uses?: Record<string, string>; enabled?: boolean }) => {
+		providerBusy = `${connection.id}:${model.upstream_id}`;
+		try {
+			await updateProviderModel(connection.id, model.upstream_id, payload);
+			await loadProviderConnections();
+			editingProviderModel = '';
+		} catch (err) { toast.error(String(err).replace(/^Error: /, '')); }
+		finally { providerBusy = ''; }
+	};
+	const beginProviderAccess = (connection: ProviderConnectionRow) => {
+		editingProviderAccess = connection.id;
+		providerVisibility = connection.visibility === 'shared' ? 'shared' : 'private';
+		providerGrants = [...(connection.access_control ?? [])];
+	};
+	const saveProviderAccess = async (connection: ProviderConnectionRow) => {
+		providerBusy = connection.id;
+		try {
+			await updateProviderConnection(connection.id, { visibility: providerVisibility, ...(providerVisibility === 'shared' ? { access_control: providerGrants } : {}) });
+			await loadProviderConnections();
+			editingProviderAccess = '';
+		} catch (err) { toast.error(String(err).replace(/^Error: /, '')); }
+		finally { providerBusy = ''; }
+	};
 	let viewOption = 'available';
+	let providerViewLoaded = false;
+	$: if (viewOption === 'provider' && !providerViewLoaded) {
+		providerViewLoaded = true;
+		loadProviderConnections();
+	} else if (viewOption !== 'provider') {
+		providerViewLoaded = false;
+	}
 	let tags: string[] = [];
 	let selectedTag = '';
 
@@ -467,7 +530,7 @@
 			sortable = null;
 		}
 
-		if (modelListElement && filteredModels.length > 0) {
+		if (viewOption !== 'provider' && modelListElement && filteredModels.length > 0) {
 			sortable = new Sortable(modelListElement, {
 				animation: 150,
 				handle: '.model-item-handle',
@@ -793,7 +856,7 @@
 				<h2 class="text-sm font-medium text-gray-900 dark:text-white">
 					{$i18n.t('settings.admin.models.title')}
 					<span class="ml-2 font-normal text-gray-500 dark:text-gray-500">
-						{filteredModels.length}
+						{viewOption === 'provider' ? '' : filteredModels.length}
 					</span>
 				</h2>
 			</div>
@@ -836,14 +899,17 @@
 			{/if}
 
 			<div class="flex min-h-0 flex-1 flex-col space-y-1">
-				<ModelDefaultsPanel
-					bind:this={modelDefaultsPanel}
-					bind:dirty={modelDefaultsDirty}
-					initHandler={init}
-				/>
+				{#if viewOption !== 'provider'}
+					<ModelDefaultsPanel
+						bind:this={modelDefaultsPanel}
+						bind:dirty={modelDefaultsDirty}
+						initHandler={init}
+					/>
+				{/if}
 
 				<div class="flex h-8 shrink-0 items-center w-full gap-2">
 					<div class="flex min-w-0 flex-1 items-center">
+						{#if viewOption !== 'provider'}
 						<div class=" self-center ml-1 mr-3">
 							<Search className="size-3.5" />
 						</div>
@@ -866,6 +932,7 @@
 								</button>
 							</div>
 						{/if}
+						{/if}
 					</div>
 
 					<div
@@ -883,7 +950,7 @@
 						>
 							<AdminViewSelector bind:value={viewOption} align="end" />
 
-							{#if (tags ?? []).length > 0}
+							{#if viewOption !== 'provider' && (tags ?? []).length > 0}
 								<TagSelector
 									bind:value={selectedTag}
 									align="end"
@@ -894,6 +961,7 @@
 							{/if}
 						</div>
 
+						{#if viewOption !== 'provider'}
 						<Dropdown closeOnSelect align="end">
 							<Tooltip content={$i18n.t('Actions')}>
 								<button
@@ -1024,9 +1092,59 @@
 								</DropdownMenu>
 							</div>
 						</Dropdown>
+						{/if}
 					</div>
 				</div>
 
+				{#if viewOption === 'provider'}
+					<div class="min-h-0 flex-1 space-y-5 overflow-y-auto pr-1 text-sm" data-testid="provider-purpose-view">
+						{#if providerError}<p role="alert" class="break-words text-red-600">{providerError} <button type="button" class="underline" on:click={loadProviderConnections}>{$i18n.t('Try again')}</button></p>{/if}
+						<p class="text-xs text-gray-600 dark:text-gray-300">{$i18n.t('Sharing applies to the entire connection, including all its models.')}</p>
+						{#each providerGroups as group}
+							<section aria-label={$i18n.t(providerPurposeLabels[group.purpose])} class="space-y-2">
+								<h3 class="border-b pb-1 font-medium dark:border-gray-700">{$i18n.t(providerPurposeLabels[group.purpose])}</h3>
+								{#each group.connections as { connection, models }}
+									<div class="rounded-xl border border-gray-200 p-3 dark:border-gray-700">
+										<div class="flex flex-wrap items-center gap-2">
+											<strong>{connection.name}</strong><span class="text-xs text-gray-500">{models.length} {$i18n.t('models')} · {connection.is_enabled === false ? $i18n.t('Disabled') : $i18n.t('Enabled')} · {$i18n.t(connectionAccess(connection) === 'public' ? 'Public' : connectionAccess(connection) === 'shared' ? 'Shared' : 'Private')}</span>
+											{#if canManageProvider(connection) && $user?.role === 'admin' && (connection as any).auth_type !== 'oauth'}<button type="button" class="ml-auto rounded-lg border px-2 py-1 text-xs dark:border-gray-600" on:click={() => beginProviderAccess(connection)}>{$i18n.t('Sharing')}</button>{/if}
+										</div>
+										{#if editingProviderAccess === connection.id}
+											<div class="mt-2 space-y-2 rounded-lg bg-gray-50 p-2 dark:bg-gray-800">
+												<label class="block">{$i18n.t('Visibility')} <select bind:value={providerVisibility} class="ml-2 rounded border bg-transparent p-1"><option value="private">{$i18n.t('Private')}</option><option value="shared">{$i18n.t('Shared')}</option></select></label>
+												{#if providerVisibility === 'shared'}<AccessControl bind:accessGrants={providerGrants} accessRoles={['read']} />{/if}
+												<button type="button" disabled={providerBusy !== ''} class="rounded border px-2 py-1" on:click={() => saveProviderAccess(connection)}>{$i18n.t('Save')}</button>
+												<button type="button" class="ml-2 underline" on:click={() => (editingProviderAccess = '')}>{$i18n.t('Cancel')}</button>
+											</div>
+										{/if}
+										{#each models as model (model.upstream_id)}
+											<div class="mt-2 border-t pt-2 dark:border-gray-700">
+												<div class="flex flex-wrap items-center gap-2"><span class="min-w-0 break-all">{model.name ?? model.display_name ?? model.upstream_id}</span><span class="text-xs text-gray-500">{model.enabled === false ? $i18n.t('Disabled') : $i18n.t('Enabled')}</span>
+													{#if canManageProvider(connection)}
+														<button type="button" class="ml-auto underline" on:click={() => beginProviderEdit(connection, model)}>{$i18n.t('Edit')}</button>
+														<button type="button" class="underline" disabled={providerBusy !== ''} on:click={() => saveProviderModel(connection, model, { enabled: model.enabled === false })}>{$i18n.t(model.enabled === false ? 'Enable' : 'Disable')}</button>
+													{/if}
+												</div>
+												{#if editingProviderModel === `${connection.id}:${model.upstream_id}`}
+													<div class="mt-2 space-y-2"><label class="block">{$i18n.t('Display name')} <input class="w-full rounded border bg-transparent p-2" bind:value={providerDisplayName} /></label>
+														<div class="flex flex-wrap gap-2">
+															{#each SERVICE_PURPOSES.filter((purpose) => supportedServicePurposes(providerTemplateFor(connection)).includes(purpose)) as purpose}
+																{@const adapters = serviceAdapters(providerTemplateFor(connection), purpose)}
+																{#if adapters.length}<label class="text-xs">{$i18n.t(providerPurposeLabels[purpose])} <select class="rounded border bg-transparent p-1" value={providerUses[purpose] ?? ''} on:change={(event) => { const value = event.currentTarget.value; providerUses = { ...providerUses }; if (value) providerUses[purpose] = value; else delete providerUses[purpose]; }}><option value="">{$i18n.t('Disabled')}</option>{#each adapters as adapter}<option value={adapter}>{adapter}</option>{/each}</select></label>{/if}
+															{/each}
+														</div>
+														<button type="button" class="rounded border px-2 py-1" disabled={providerBusy !== ''} on:click={() => saveProviderModel(connection, model, { display_name: providerDisplayName.trim() || model.upstream_id, uses: providerUses })}>{$i18n.t('Save')}</button>
+														<button type="button" class="ml-2 underline" on:click={() => (editingProviderModel = '')}>{$i18n.t('Cancel')}</button>
+													</div>
+												{/if}
+											</div>
+										{/each}
+									</div>
+								{/each}
+							</section>
+						{/each}
+					</div>
+				{:else}
 				<div
 					class="my-0.5 min-h-0 flex-1 space-y-px {filteredModels.length > 0
 						? 'overflow-y-auto scrollbar-hover pr-1.5'
@@ -1340,6 +1458,7 @@
 						{/if}
 					</button>
 				</div>
+				{/if}
 			</div>
 		</div>
 	{:else}

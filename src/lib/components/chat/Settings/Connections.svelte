@@ -9,11 +9,13 @@
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
 	import Connection from './Connections/Connection.svelte';
-	import ProviderConnections from '$lib/components/ProviderConnections.svelte';
+	import ProviderServices from '$lib/components/providers/ProviderServices.svelte';
+	import AdminConnections from '$lib/components/admin/Settings/Connections.svelte';
 
 	import AddConnectionModal from '$lib/components/AddConnectionModal.svelte';
 
 	export let saveSettings: Function;
+	export let connectionView: 'mine' | 'shared' | 'all' = 'mine';
 
 	let config = null;
 
@@ -64,7 +66,7 @@
 	});
 </script>
 
-<div id="tab-connections">
+<div id="tab-connections" class="space-y-5">
 	{#if $backendConfig?.features?.enable_provider_connections}
 		<section class="space-y-3" aria-labelledby="provider-connections-heading">
 			<h3 id="provider-connections-heading" class="text-xs text-gray-600 dark:text-gray-400">
@@ -75,7 +77,12 @@
 					'These connections are kept by the server. The browser direct connections below are a different thing: they run from this browser and are not part of the server configuration.'
 				)}
 			</p>
-			<ProviderConnections mode="personal" />
+			<div class="flex flex-wrap gap-2" role="tablist" aria-label={$i18n.t('settings.admin.connections.title')}>
+				{#each ([['mine', 'settings.personal.connections.title'], ['shared', 'Shared with me'], ...($user?.role === 'admin' ? [['all', 'All connections']] : [])] as [string, string][]) as [id, label]}
+					<button type="button" role="tab" aria-selected={connectionView === id} class="rounded-lg px-3 py-2 text-xs {connectionView === id ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'text-gray-600 dark:text-gray-300'}" on:click={() => (connectionView = id as typeof connectionView)}>{$i18n.t(label)}</button>
+				{/each}
+			</div>
+			<ProviderServices mode={$user?.role === 'admin' ? 'admin' : 'personal'} view={connectionView} />
 		</section>
 	{/if}
 
@@ -189,5 +196,9 @@
 				</button>
 			</div>
 		</form>
+	{/if}
+
+	{#if $user?.role === 'admin'}
+		<AdminConnections />
 	{/if}
 </div>
