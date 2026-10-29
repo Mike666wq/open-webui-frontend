@@ -383,7 +383,7 @@
 			{$i18n.t('No provider yet. Add OpenAI, MiniMax, DeepSeek, ChatGPT or a compatible endpoint.')}
 		</div>
 	{:else}
-		<div class="mt-4 flex flex-wrap gap-2 md:hidden" role="tablist" aria-label={$i18n.t('Provider details')} data-testid="provider-mobile-tabs">
+		<div class="mt-4 flex flex-wrap gap-2 md:hidden" role="tablist" aria-label={$i18n.t('Providers')} data-testid="provider-mobile-tabs">
 			{#each [['list', $i18n.t('Provider list')], ['details', $i18n.t('Provider details')], ['results', $i18n.t('Result')]] as [view, label]}
 				<button type="button" role="tab" aria-selected={mobileView === view} class="rounded-lg px-3 py-2 text-sm {mobileView === view ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'border dark:border-gray-700'}" on:click={() => (mobileView = view as typeof mobileView)}>{label}</button>
 			{/each}
