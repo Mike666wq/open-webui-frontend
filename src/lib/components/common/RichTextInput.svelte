@@ -2,135 +2,9 @@
 	import { marked } from 'marked';
 	import DOMPurify from 'dompurify';
 	import { equalEditorJSON } from '$lib/utils/editorJson';
+	import { htmlToMarkdown, markdownToHtml } from '$lib/utils/tiptap-markdown';
 	import { showCallOverlay, skills, terminalSkills } from '$lib/stores';
 
-	marked.use({
-		breaks: true,
-		gfm: true,
-		renderer: {
-			list(body, ordered, start) {
-				const isTaskList = body.includes('data-checked=');
-
-				if (isTaskList) {
-					return `<ul data-type="taskList">${body}</ul>`;
-				}
-
-				const type = ordered ? 'ol' : 'ul';
-				const startatt = ordered && start !== 1 ? ` start="${start}"` : '';
-				return `<${type}${startatt}>${body}</${type}>`;
-			},
-
-			listitem(text, task, checked) {
-				if (task) {
-					const checkedAttr = checked ? 'true' : 'false';
-					return `<li data-type="taskItem" data-checked="${checkedAttr}">${text}</li>`;
-				}
-				return `<li>${text}</li>`;
-			}
-		}
-	});
-
-	import TurndownService from 'turndown';
-	import { gfm } from '@joplin/turndown-plugin-gfm';
-	const turndownService = new TurndownService({
-		codeBlockStyle: 'fenced',
-		headingStyle: 'atx'
-	});
-	turndownService.escape = (string) => string;
-
-	// Produce single newlines between paragraphs instead of double.
-	// TipTap wraps every line in <p> tags; the default Turndown rule emits
-	// \n\n around each paragraph which then required a destructive
-	// replaceAll('\n\n','\n') that also wiped blank lines inside code blocks.
-	// This rule eliminates that hack so <pre><code> content is untouched.
-	turndownService.addRule('singleNewlineParagraphs', {
-		filter: 'p',
-		replacement: function (content) {
-			return '\n' + content + '\n';
-		}
-	});
-
-	// Use turndown-plugin-gfm for proper GFM table support
-	turndownService.use(gfm);
-
-	// Add custom table header rule before using GFM plugin
-	turndownService.addRule('tableHeaders', {
-		filter: 'th',
-		replacement: function (content, node) {
-			return content;
-		}
-	});
-
-	// Add custom table rule to handle headers properly
-	turndownService.addRule('tables', {
-		filter: 'table',
-		replacement: function (content, node) {
-			// Extract rows
-			const rows = Array.from(node.rows);
-			if (rows.length === 0) return content;
-
-			let markdown = '\n';
-
-			rows.forEach((row, rowIndex) => {
-				const cells = Array.from(row.cells);
-				const cellContents = cells.map((cell) => {
-					// Get the text content and clean it up
-					let cellContent = turndownService.turndown(cell.innerHTML).trim();
-					// Remove extra paragraph tags that might be added
-					cellContent = cellContent.replace(/^\n+|\n+$/g, '');
-					cellContent = cellContent.replace(/\n/g, '<br>');
-					return cellContent;
-				});
-
-				// Add the row
-				markdown += '| ' + cellContents.join(' | ') + ' |\n';
-
-				// Add separator after first row (which should be headers)
-				if (rowIndex === 0) {
-					const separator = cells.map(() => '---').join(' | ');
-					markdown += '| ' + separator + ' |\n';
-				}
-			});
-
-			return markdown + '\n';
-		}
-	});
-
-	// Registered after use(gfm) to override its checkbox rule; taskListItems owns the marker.
-	turndownService.addRule('taskItemCheckbox', {
-		filter: (node) => node.nodeName === 'INPUT' && node.getAttribute('type') === 'checkbox',
-		replacement: () => ''
-	});
-
-	turndownService.addRule('taskListItems', {
-		filter: (node) =>
-			node.nodeName === 'LI' &&
-			(node.getAttribute('data-checked') === 'true' ||
-				node.getAttribute('data-checked') === 'false'),
-		replacement: function (content, node) {
-			const checked = node.getAttribute('data-checked') === 'true';
-			// Trim TipTap's block wrapper; 4-space continuation keeps sublists and fences nested.
-			content = content.trim().replace(/\n(?=.)/g, '\n    ');
-			return `- [${checked ? 'x' : ' '}] ${content}\n`;
-		}
-	});
-
-	// Convert TipTap mention spans -> serialized mention tags.
-	turndownService.addRule('mentions', {
-		filter: (node) => node.nodeName === 'SPAN' && node.getAttribute('data-type') === 'mention',
-		replacement: (_content, node: HTMLElement) => {
-			const id = node.getAttribute('data-id') || '';
-			// TipTap stores the trigger char in data-mention-suggestion-char (usually "@")
-			const ch = node.getAttribute('data-mention-suggestion-char') || '@';
-			const mentionChar = ch === '/' ? '$' : ch;
-			return `<${mentionChar}${id}>`;
-		}
-	});
-
-	turndownService.addRule('underline', {
-		filter: 'u',
-		replacement: (content) => `<u>${content}</u>`
-	});
 
 	import { onMount, onDestroy, tick, getContext } from 'svelte';
 	import { createEventDispatcher } from 'svelte';
@@ -141,7 +15,7 @@
 	import { Fragment, DOMParser, Slice, type Node, type Schema } from 'prosemirror-model';
 	import { EditorState, Plugin, PluginKey, TextSelection, Selection } from 'prosemirror-state';
 	import { Decoration, DecorationSet } from 'prosemirror-view';
-	import { Editor, Extension, markInputRule, mergeAttributes } from '@tiptap/core';
+	import { Editor, Extension, Mark, markInputRule, mergeAttributes } from '@tiptap/core';
 
 	import { AIAutocompletion, setFollowUpSuggestion } from './RichTextInput/AutoCompletion.js';
 
@@ -162,6 +36,10 @@
 	import FileHandler from '@tiptap/extension-file-handler';
 	import Typography from '@tiptap/extension-typography';
 	import Highlight from '@tiptap/extension-highlight';
+	const inlineMark = (name: 'superscript' | 'subscript', tag: 'sup' | 'sub') =>
+		Mark.create({ name, parseHTML: () => [{ tag }], renderHTML: () => [tag, 0] });
+	const Superscript = inlineMark('superscript', 'sup');
+	const Subscript = inlineMark('subscript', 'sub');
 	import Code from '@tiptap/extension-code';
 	import Italic from '@tiptap/extension-italic';
 	import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
@@ -366,28 +244,7 @@
 		htmlValue = editor.getHTML();
 		jsonValue = editor.getJSON();
 
-		if (richText) {
-			mdValue = turndownService
-				.turndown(
-					htmlValue
-						.replace(/<p><\/p>/g, '<br/>')
-						.replace(/ {2,}/g, (m) => m.replace(/ /g, '\u00a0'))
-				)
-				.replace(/\u00a0/g, ' ');
-		} else {
-			mdValue = turndownService
-				.turndown(
-					htmlValue
-						// Replace empty paragraphs with line breaks
-						.replace(/<p><\/p>/g, '<br/>')
-						// Replace multiple spaces with non-breaking spaces
-						.replace(/ {2,}/g, (m) => m.replace(/ /g, '\u00a0'))
-						// Replace tabs with non-breaking spaces (preserve indentation)
-						.replace(/\t/g, '\u00a0\u00a0\u00a0\u00a0') // 1 tab = 4 spaces
-				)
-				// Convert non-breaking spaces back to regular spaces for markdown
-				.replace(/\u00a0/g, ' ');
-		}
+		mdValue = htmlToMarkdown(richText ? htmlValue : htmlValue.replace(/\t/g, '    '), preserveBreaks);
 	};
 
 	$: serializeContent(richText);
@@ -809,22 +666,11 @@
 				content = html ? html : null;
 			}
 		} else {
-			if (preserveBreaks) {
-				turndownService.addRule('preserveBreaks', {
-					filter: 'br', // Target <br> elements
-					replacement: function (content) {
-						return '<br/>';
-					}
-				});
-			}
-
 			if (!raw) {
 				async function tryParse(value, attempts = 3, interval = 100) {
 					try {
 						// Try parsing the value
-						return marked.parse(value.replaceAll(`\n<br/>`, `<br/>`), {
-							breaks: false
-						});
+						return markdownToHtml(value);
 					} catch (error) {
 						// If no attempts remain, fallback to plain text
 						if (attempts <= 1) {
@@ -890,7 +736,10 @@
 								taskItem: {
 									nested: true
 								}
-							})
+							}),
+							Highlight,
+							Superscript,
+							Subscript
 						]
 					: []),
 				...(suggestions
@@ -1173,6 +1022,30 @@
 						return false;
 					},
 					keydown: (view, event) => {
+						if (editor && !messageInput && richText && documentId.startsWith('note:') && (event.metaKey || event.ctrlKey) && event.shiftKey) {
+							const key = event.key.toLowerCase();
+							const action = key === 'b' ? () => editor.commands.toggleBlockquote()
+								: key === 'h' ? () => editor.commands.setHorizontalRule()
+								: key === 'm' ? () => editor.commands.toggleHighlight()
+								: event.key === 'ArrowUp' ? () => editor.commands.toggleMark('superscript')
+								: event.key === 'ArrowDown' ? () => editor.commands.toggleMark('subscript') : null;
+							if (action?.()) {
+								event.preventDefault();
+								return true;
+							}
+						}
+						if (editor && !messageInput && richText && event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+							const item = editor.isActive('taskList') ? 'taskItem' : 'listItem';
+							if (editor.isActive('taskList') || editor.isActive('bulletList') || editor.isActive('orderedList')) {
+								const handled = event.shiftKey
+									? editor.commands.liftListItem(item)
+									: editor.commands.sinkListItem(item);
+								if (handled) {
+									event.preventDefault();
+									return true;
+								}
+							}
+						}
 						if (messageInput) {
 							// Check if the current selection is inside a structured block (like codeBlock or list)
 							const { state } = view;
@@ -1409,14 +1282,7 @@
 
 		const editorJsonValue = editor.getJSON();
 		const htmlValue = editor.getHTML();
-		let mdValue = turndownService
-			.turndown(
-				(preserveBreaks ? htmlValue.replace(/<p><\/p>/g, '<br/>') : htmlValue).replace(
-					/ {2,}/g,
-					(m) => m.replace(/ /g, '\u00a0')
-				)
-			)
-			.replace(/\u00a0/g, ' ');
+		let mdValue = htmlToMarkdown(htmlValue, preserveBreaks);
 
 		if (value === '') {
 			editor.commands.clearContent(); // Clear content if value is empty
@@ -1441,9 +1307,7 @@
 					editor.commands.setContent(
 						preserveBreaks
 							? value
-							: marked.parse(value.replaceAll(`\n<br/>`, `<br/>`), {
-									breaks: false
-								})
+							: markdownToHtml(value)
 					);
 
 					selectTemplate();
