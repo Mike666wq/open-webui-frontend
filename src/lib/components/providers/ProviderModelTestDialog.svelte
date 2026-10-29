@@ -4,6 +4,7 @@
 	import { fetchProviderVoices } from '$lib/apis/providers';
 	import { runProviderTestSession, type TestEvent } from './provider-test-session';
 	import { providerErrorHint, providerErrorSummary } from '$lib/utils/provider-errors';
+	import { classifiedResult, providerResults, requestFailureResult, successfulResult } from './provider-models-feedback';
 	import { PURPOSE_LABEL_KEYS } from '$lib/utils/provider-models';
 	import {
 		serviceDeclaration,
@@ -19,6 +20,7 @@
 	export let model: any = null;
 	export let purpose: ServicePurpose = 'chat';
 	export let onTested: (() => Promise<void>) | undefined = undefined;
+	export let onResult: (() => void) | undefined = undefined;
 
 	let voice = '';
 	let voices: { id: string; name: string }[] = [];
@@ -144,6 +146,9 @@
 		const session = ++generation;
 		const sessionController = new AbortController();
 		controller = sessionController;
+		const connectionId = connection.id;
+		const purposeName = $i18n.t(PURPOSE_LABEL_KEYS[purpose] ?? purpose);
+		const modelName = model?.name ?? model?.upstream_id;
 		const started = performance.now();
 		let timedOut = false;
 		const timeout = setTimeout(() => { timedOut = true; sessionController.abort(); }, 120_000);
@@ -188,9 +193,19 @@
 			if (session !== generation) return;
 			result = response.result;
 			fallback = response.fallback;
+			providerResults.set(connectionId, result?.status === 'passed'
+				? successfulResult('test', $i18n.t('The request passed. It does not mean every parameter is compatible.'), Date.now(), purposeName, modelName)
+				: classifiedResult('test', result?.error, { authType: connection.auth_type }, Date.now(), purposeName, modelName));
+			onResult?.();
 			if (onTested) await onTested();
 		} catch (err) {
-			if (session === generation) error = timedOut ? '测试超时，可能已产生费用 / Test timed out and may have been charged.' : readableError(err);
+			if (session === generation) {
+				error = timedOut ? '测试超时，可能已产生费用 / Test timed out and may have been charged.' : readableError(err);
+				if (!sessionController.signal.aborted || timedOut) {
+					providerResults.set(connectionId, requestFailureResult('test', err, Date.now(), purposeName, modelName, { authType: connection.auth_type }));
+					onResult?.();
+				}
+			}
 		} finally {
 			clearTimeout(timeout);
 			if (session === generation) {

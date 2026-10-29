@@ -1,3 +1,4 @@
+import { writable } from 'svelte/store';
 import {
 	providerErrorActionLabelKey,
 	providerErrorHint,
@@ -71,6 +72,96 @@ export function thrownFeedback(err: unknown, at: number): FetchFeedback {
 		actionKey: null,
 		hint: null
 	};
+}
+
+export type ProviderOperation = 'fetch' | 'verify' | 'test';
+export type ProviderResult = {
+	operation: ProviderOperation;
+	kind: 'success' | 'error';
+	at: number;
+	summary: string;
+	actionKey: string | null;
+	hint: string | null;
+	/** Error retains its classification so the recovery action matches P-001. */
+	error: any | null;
+	purpose?: string;
+	modelName?: string;
+};
+
+export function classifiedResult(
+	operation: ProviderOperation,
+	error: any,
+	context: ProviderErrorContext,
+	at: number,
+	purpose?: string,
+	modelName?: string
+): ProviderResult {
+	return {
+		operation, kind: 'error', at,
+		summary: providerErrorSummary(error),
+		actionKey: providerErrorActionLabelKey(error, context),
+		hint: providerErrorHint(error), error, purpose, modelName
+	};
+}
+
+export function requestFailureResult(
+	operation: ProviderOperation,
+	error: unknown,
+	at: number,
+	purpose?: string,
+	modelName?: string,
+	context: ProviderErrorContext = {}
+): ProviderResult {
+	const classified = (error as { providerError?: any } | null)?.providerError;
+	if (classified) return classifiedResult(operation, classified, context, at, purpose, modelName);
+	return {
+		operation, kind: 'error', at,
+		summary: String(error).replace(/^Error:\s*/, ''),
+		actionKey: null, hint: null, error: null, purpose, modelName
+	};
+}
+
+export function successfulResult(
+	operation: ProviderOperation,
+	summary: string,
+	at: number,
+	purpose?: string,
+	modelName?: string
+): ProviderResult {
+	return { operation, kind: 'success', summary, at, actionKey: null, hint: null, error: null, purpose, modelName };
+}
+
+/** The current result is per connection; tab and connection switches retain it. */
+export function createProviderResultCache() {
+	const results = writable<Record<string, ProviderResult>>({});
+	return {
+		subscribe: results.subscribe,
+		set(connectionId: string | undefined, result: ProviderResult) {
+			if (connectionId) results.update((entries) => ({ ...entries, [connectionId]: result }));
+		},
+		clear(connectionId: string | undefined) {
+			if (!connectionId) return;
+			results.update((entries) => {
+				const next = { ...entries };
+				delete next[connectionId];
+				return next;
+			});
+		}
+	};
+}
+
+export const providerResults = createProviderResultCache();
+
+export function catalogResult(connection: any): ProviderResult | null {
+	const catalog = connection?.catalog;
+	if (catalog?.error) {
+		return classifiedResult('fetch', catalog.error, { authType: connection.auth_type },
+			(catalog.error.at ?? catalog.updated_at ?? 0) * 1000);
+	}
+	if (catalog?.updated_at) {
+		return successfulResult('fetch', '', catalog.updated_at * 1000);
+	}
+	return null;
 }
 
 export type FetchFeedbackCache = {

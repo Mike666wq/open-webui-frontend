@@ -5,6 +5,8 @@
 	import ProviderLegacyMigration from '$lib/components/ProviderLegacyMigration.svelte';
 	import AddProviderDialog from '$lib/components/providers/AddProviderDialog.svelte';
 	import ProviderModelsPanel from '$lib/components/providers/ProviderModelsPanel.svelte';
+	import ProviderResultsPanel from '$lib/components/providers/ProviderResultsPanel.svelte';
+	import { classifiedResult, providerResults, requestFailureResult, successfulResult } from '$lib/components/providers/provider-models-feedback';
 	import ProviderServiceSettings from '$lib/components/providers/ProviderServiceSettings.svelte';
 	import Modal from '$lib/components/common/Modal.svelte';
 	import { removeAndReconcile } from '$lib/components/providers/provider-removal';
@@ -42,7 +44,7 @@
 	let connections: any[] = [];
 	let selectedConnectionId = '';
 	let detailTab = 'models';
-	let mobileDetail = false;
+	let mobileView: 'list' | 'details' | 'results' = 'list';
 	let loading = true;
 	let saving = false;
 	let workingId = '';
@@ -141,6 +143,10 @@
 		workingId = connection.id;
 		try {
 			const result = await verifyProviderConnection(connection.id);
+			providerResults.set(connection.id, result?.error
+				? classifiedResult('verify', result.error, { authType: connection.auth_type }, Date.now())
+				: successfulResult('verify', $i18n.t('Connection verified · {{count}} models found', { count: result?.models?.length ?? 0 }), Date.now()));
+			mobileView = 'results';
 			toast.success(
 				$i18n.t('Connection verified · {{count}} models found', {
 					count: result?.models?.length ?? 0
@@ -149,6 +155,8 @@
 			await load();
 			await refreshGlobalModels();
 		} catch (err) {
+			providerResults.set(connection.id, requestFailureResult('verify', err, Date.now(), undefined, undefined, { authType: connection.auth_type }));
+			mobileView = 'results';
 			toast.error(readableError(err));
 		} finally {
 			workingId = '';
@@ -256,7 +264,7 @@
 		if (action === 'replace_key') {
 			beginEdit(connection);
 			detailTab = 'settings';
-			mobileDetail = true;
+			mobileView = 'details';
 			await tick();
 			(
 				document.querySelector('[data-testid="provider-api-key-input"]') as HTMLElement | null
@@ -269,13 +277,15 @@
 		}
 		// The remaining actions are explained in the details; there is nothing
 		// to run from the browser.
+		detailTab = 'models';
+		mobileView = 'details';
 		showDetails = true;
 	};
 
 	const focusConnection = (connectionId: string) => {
 		if (!connectionId) return;
 		selectedConnectionId = connectionId;
-		mobileDetail = true;
+		mobileView = 'details';
 		editingId = '';
 	};
 
@@ -373,10 +383,15 @@
 			{$i18n.t('No provider yet. Add OpenAI, MiniMax, DeepSeek, ChatGPT or a compatible endpoint.')}
 		</div>
 	{:else}
-		<div class="mt-4 grid min-w-0 gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
+		<div class="mt-4 flex flex-wrap gap-2 md:hidden" role="tablist" aria-label={$i18n.t('Provider details')} data-testid="provider-mobile-tabs">
+			{#each [['list', $i18n.t('Provider list')], ['details', $i18n.t('Provider details')], ['results', $i18n.t('Result')]] as [view, label]}
+				<button type="button" role="tab" aria-selected={mobileView === view} class="rounded-lg px-3 py-2 text-sm {mobileView === view ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'border dark:border-gray-700'}" on:click={() => (mobileView = view as typeof mobileView)}>{label}</button>
+			{/each}
+		</div>
+		<div class="mt-4 grid min-w-0 gap-4 md:grid-cols-[minmax(150px,200px)_minmax(0,1fr)_minmax(180px,240px)]">
 			<nav
-				class:hidden={mobileDetail}
-				class="space-y-2 md:!block"
+				class:hidden={mobileView !== 'list'}
+				class="min-w-0 space-y-2 md:!block"
 				aria-label={$i18n.t('Providers')}
 				data-testid="provider-list"
 			>
@@ -391,7 +406,7 @@
 							class="min-w-0 flex-1 text-left"
 							on:click={() => {
 								selectedConnectionId = item.id;
-								mobileDetail = true;
+								mobileView = 'details';
 								editingId = '';
 								showDetails = false;
 							}}
@@ -404,8 +419,9 @@
 							</span>
 							{#if item.catalog?.error}
 								<span
-									class="mt-0.5 block truncate text-xs text-amber-700 dark:text-amber-300"
+									class="mt-0.5 block whitespace-normal break-words text-xs text-amber-700 dark:text-amber-300"
 									data-testid="provider-list-error"
+									title={providerErrorSummary(item.catalog.error)}
 								>
 									{providerErrorSummary(item.catalog.error)}
 								</span>
@@ -425,14 +441,7 @@
 				{/each}
 			</nav>
 
-			<div class:hidden={!mobileDetail} class="min-w-0 md:!block">
-				<button
-					type="button"
-					class="mb-3 text-sm text-blue-600 dark:text-blue-300 md:hidden"
-					on:click={() => (mobileDetail = false)}
-				>
-					← {$i18n.t('Provider list')}
-				</button>
+			<div class:hidden={mobileView !== 'details'} class="min-w-0 md:!block">
 
 				{#if selected}
 					{#if selectedError}
@@ -541,6 +550,7 @@
 							connection={selected}
 							template={templateFor(selected)}
 							canManage={canManageConnection(selected)}
+							onResult={() => (mobileView = 'results')}
 							onUpdated={async () => {
 								await load();
 								await refreshGlobalModels();
@@ -720,6 +730,16 @@
 							</div>
 						</div>
 					{/if}
+				{/if}
+			</div>
+			<div class:hidden={mobileView !== 'results'} class="min-w-0 md:!block">
+				{#if selected}
+					<ProviderResultsPanel
+						connection={selected}
+						canManage={canManageConnection(selected)}
+						onOpenModels={() => { detailTab = 'models'; mobileView = 'details'; }}
+						onRecovery={(action) => runRecovery(selected, action)}
+					/>
 				{/if}
 			</div>
 		</div>
