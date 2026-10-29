@@ -13,6 +13,10 @@
 	import { getContext } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import {
+		classifiedResult,
+		providerResults,
+		requestFailureResult,
+		successfulResult,
 		errorFeedback,
 		formatFetchTime,
 		successFeedback,
@@ -53,6 +57,7 @@
 	export let template: ProviderServiceTemplate | null = null;
 	export let canManage = true;
 	export let onUpdated: (() => Promise<void>) | undefined = undefined;
+	export let onResult: (() => void) | undefined = undefined;
 
 	let candidates: any[] = [];
 	let picked: string[] = [];
@@ -104,13 +109,14 @@
 		if (fetching) return;
 		fetching = true;
 		message = '';
+		const connectionId = connection.id;
+		const errorContext = { authType: connection.auth_type ?? null };
 		try {
-			const result = await fetchProviderModels(connection.id);
+			const result = await fetchProviderModels(connectionId);
 			candidates = result?.candidates ?? [];
 			picked = [];
-			const connectionId = connection.id;
 			if (result?.error) {
-				fetchFeedback = errorFeedback(result, fetchErrorContext, Date.now());
+				fetchFeedback = errorFeedback(result, errorContext, Date.now());
 				toast.error(fetchFeedback.summary);
 			} else {
 				fetchFeedback = successFeedback(candidates.length, Date.now());
@@ -119,6 +125,10 @@
 				);
 			}
 			feedbackCache.set(connectionId, fetchFeedback);
+			providerResults.set(connectionId, result?.error
+				? classifiedResult('fetch', result.error, errorContext, fetchFeedback.at)
+				: successfulResult('fetch', $i18n.t('Fetched {{count}} models from the provider', { count: candidates.length }), fetchFeedback.at));
+			onResult?.();
 			// The parent refresh must not block the result display and must not
 			// keep the button in its loading state (K11). Failures surface as a
 			// separate message without discarding the fetch result.
@@ -127,7 +137,9 @@
 			});
 		} catch (err) {
 			fetchFeedback = thrownFeedback(err, Date.now());
-			feedbackCache.set(connection.id, fetchFeedback);
+			feedbackCache.set(connectionId, fetchFeedback);
+			providerResults.set(connectionId, requestFailureResult('fetch', err, fetchFeedback.at, undefined, undefined, errorContext));
+			onResult?.();
 			toast.error(fetchFeedback.summary);
 		} finally {
 			fetching = false;
@@ -526,5 +538,6 @@
 		model={testModel}
 		purpose={testPurpose ?? 'chat'}
 		onTested={updated}
+		{onResult}
 	/>
 </section>

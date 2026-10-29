@@ -3,6 +3,11 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+	classifiedResult,
+	createProviderResultCache,
+	catalogResult,
+	requestFailureResult,
+	successfulResult,
 	createFetchFeedbackCache,
 	errorFeedback,
 	formatFetchTime,
@@ -12,6 +17,9 @@ import {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PANEL_SOURCE = readFileSync(join(HERE, 'ProviderModelsPanel.svelte'), 'utf8');
+const SERVICES_SOURCE = readFileSync(join(HERE, 'ProviderServices.svelte'), 'utf8');
+const RESULTS_SOURCE = readFileSync(join(HERE, 'ProviderResultsPanel.svelte'), 'utf8');
+const TEST_SOURCE = readFileSync(join(HERE, 'ProviderModelTestDialog.svelte'), 'utf8');
 
 describe('provider models fetch feedback', () => {
 	it('reports the fetched count and time on success', () => {
@@ -76,6 +84,62 @@ describe('provider models fetch feedback', () => {
 		// Unknown connection ids are ignored, never throw.
 		cache.set(undefined, feedback);
 		expect(cache.get(undefined)).toBeNull();
+	});
+});
+
+describe('provider result cards', () => {
+	it('keeps the latest operation per connection across tab switches and clears it explicitly', () => {
+		const cache = createProviderResultCache();
+		let snapshot: Record<string, ReturnType<typeof successfulResult>> = {};
+		const unsubscribe = cache.subscribe((value) => (snapshot = value));
+		const fetched = successfulResult('fetch', '3 models', 1_700_000_000_000);
+		const tested = successfulResult('test', 'passed', 1_700_000_002_000, 'Chat', 'alpha');
+		cache.set('a', fetched);
+		cache.set('b', tested);
+		expect(snapshot.a).toEqual(fetched);
+		expect(snapshot.b).toEqual(tested);
+		cache.set('a', tested);
+		expect(snapshot.a).toEqual(tested);
+		expect(snapshot.b).toEqual(tested);
+		cache.clear('a');
+		expect(snapshot.a).toBeUndefined();
+		expect(snapshot.b).toEqual(tested);
+		unsubscribe();
+	});
+
+	it('uses the existing error taxonomy for classified operations and retains transport failures', () => {
+		const error = { category: 'authentication', reason: 'invalid_credentials', hint: 'Replace this key.' };
+		const classified = classifiedResult('verify', error, { authType: 'api_key' }, 100);
+		expect(classified.summary).toContain('凭据');
+		expect(classified.actionKey).toBe('Replace the API key');
+		expect(classified.hint).toBe('Replace this key.');
+		expect(requestFailureResult('test', new Error('offline'), 200).summary).toBe('offline');
+	});
+
+	it('falls back to the server catalog state after local feedback is cleared', () => {
+		const failed = catalogResult({ auth_type: 'api_key', catalog: {
+			error: { category: 'authentication', reason: 'invalid_credentials', at: 123 }, updated_at: 120
+		} });
+		expect(failed?.kind).toBe('error');
+		expect(failed?.at).toBe(123_000);
+		expect(failed?.actionKey).toBe('Replace the API key');
+		expect(catalogResult({ catalog: { updated_at: 456 } })?.at).toBe(456_000);
+		expect(catalogResult({ catalog: {} })).toBeNull();
+	});
+
+	it('keeps list, details and results accessible on narrow screens without truncating catalog errors', () => {
+		expect(SERVICES_SOURCE).toContain("['results', $i18n.t('Result')]");
+		expect(SERVICES_SOURCE).toContain("class:hidden={mobileView !== 'results'}");
+		expect(SERVICES_SOURCE).toContain('provider-list-error');
+		expect(SERVICES_SOURCE).toContain('whitespace-normal break-words text-xs text-amber');
+		expect(RESULTS_SOURCE).toContain('provider-result-card');
+		expect(RESULTS_SOURCE).toContain('onOpenModels');
+	});
+
+	it('records the operation outcomes at their source rather than deriving them from a toast', () => {
+		expect(PANEL_SOURCE).toContain('providerResults.set(connectionId, result?.error');
+		expect(SERVICES_SOURCE).toContain("providerResults.set(connection.id, result?.error");
+		expect(TEST_SOURCE).toContain('providerResults.set(connectionId, result?.status');
 	});
 });
 

@@ -814,7 +814,7 @@ async function providerSettings(cdp) {
 	// MiniMax voice interaction: fetch voices from the connection, pick one and
 	// send a single speech test request against the resolved endpoint.
 	await cdp.click(
-		`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '← 提供商列表')`,
+		`document.querySelector('[data-testid="provider-mobile-tabs"] [role="tab"]:nth-child(1)')`,
 		'back to provider list'
 	);
 	await cdp.click(
@@ -889,9 +889,41 @@ async function providerSettings(cdp) {
 		`!document.querySelector('[data-testid="provider-test-run"]')`,
 		'MiniMax speech test dialog closed'
 	);
+	// K1-K2: a finished purpose test remains readable after switching views,
+	// including the short 489x550 viewport; none of the three panes scroll sideways.
+	for (const size of [{ width: 390, height: 844 }, { width: 489, height: 550 }]) {
+		await cdp.send('Emulation.setDeviceMetricsOverride', {
+			...size, deviceScaleFactor: 1, mobile: true
+		});
+		await cdp.click(`document.querySelector('[data-testid="provider-mobile-tabs"] [role="tab"]:nth-child(3)')`, 'show provider result');
+		await cdp.waitForExpression(
+			`document.querySelector('[data-testid="provider-result-card"]')?.textContent.includes('语音合成') && document.querySelector('[data-testid="provider-result-card"]')?.textContent.includes('成功')`,
+			'completed MiniMax test in result card'
+		);
+		const resultGeometry = await cdp.evaluate(`(() => {
+			const panel=document.querySelector('[data-testid="provider-results-panel"]');
+			const tabs=document.querySelector('[data-testid="provider-mobile-tabs"]');
+			const r=panel.getBoundingClientRect(); const t=tabs.getBoundingClientRect();
+			return {panel:{left:r.left,right:r.right,top:r.top,scrollWidth:panel.scrollWidth,clientWidth:panel.clientWidth},tabs:{left:t.left,right:t.right,top:t.top,scrollWidth:tabs.scrollWidth,clientWidth:tabs.clientWidth}};
+		})()`);
+		assertHorizontalBounds('Provider result panel', resultGeometry.panel, size.width);
+		assertHorizontalBounds('Provider navigation tabs', resultGeometry.tabs, size.width);
+		assert.ok(resultGeometry.panel.scrollWidth <= resultGeometry.panel.clientWidth + 1, 'Result panel needs no horizontal scrolling');
+		assert.ok(resultGeometry.tabs.scrollWidth <= resultGeometry.tabs.clientWidth + 1, 'Navigation needs no horizontal scrolling');
+		assert.ok(resultGeometry.tabs.top < size.height && resultGeometry.panel.top < size.height, 'Result and tabs start inside viewport');
+		await cdp.screenshot(`provider-result-${size.width}x${size.height}.png`);
+		await cdp.click(`document.querySelector('[data-testid="provider-mobile-tabs"] [role="tab"]:nth-child(1)')`, 'switch to provider list');
+		await cdp.click(`document.querySelector('[data-testid="provider-mobile-tabs"] [role="tab"]:nth-child(2)')`, 'return to provider detail');
+		await cdp.click(`document.querySelector('[data-testid="provider-mobile-tabs"] [role="tab"]:nth-child(3)')`, 'return to retained result');
+		assert.equal(await cdp.evaluate(`document.querySelector('[data-testid="provider-result-card"]')?.textContent.includes('语音合成')`), true);
+	}
+	await cdp.send('Emulation.setDeviceMetricsOverride', { width: 393, height: 852, deviceScaleFactor: 1, mobile: true });
+	await cdp.click(`document.querySelector('[data-testid="provider-mobile-tabs"] [role="tab"]:nth-child(2)')`, 'return to MiniMax model detail');
 	const removedPreset = await fetch(`${origin}/api/v1/providers/connections/fixture-minimax-connection/models/asr-1.0`, { method: 'DELETE' });
 	assert.equal(removedPreset.status, 200);
 	await cdp.click(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '获取模型列表')`, 'refresh fixture after removing ASR preset');
+	await cdp.waitForExpression(`document.querySelector('[data-testid="provider-result-card"]')?.textContent.includes('获取模型列表')`, 'fetch outcome visible in result card');
+	await cdp.click(`document.querySelector('[data-testid="provider-mobile-tabs"] [role="tab"]:nth-child(2)')`, 'return to models after fetch');
 	await cdp.waitForExpression(`!document.querySelector('[data-testid="provider-test-transcription"]')`, 'existing connection has no transcription model');
 	await cdp.click(
 		`[...document.querySelectorAll('[role="tablist"][aria-label="提供商详情"] [role="tab"]')].find(b => b.textContent.trim() === '服务')`,
@@ -935,7 +967,7 @@ async function providerSettings(cdp) {
 	await cdp.waitForExpression(`!document.querySelector('[data-testid="provider-removal-dialog"]')`, 'removal completed');
 	assert.equal((await (await fetch(`${origin}/__fixture_provenance`)).json()).events.filter((event) => event.kind === 'provider-connection-removed').length, 1);
 	await cdp.click(
-		`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '← 提供商列表')`,
+		`document.querySelector('[data-testid="provider-mobile-tabs"] [role="tab"]:nth-child(1)')`,
 		'back to provider list after voice test'
 	);
 
