@@ -258,11 +258,17 @@ P-005 S1 扩展此 PUT 请求：可选 `capabilities` 为对象或 `null`。对�
 `false` 不能当作未声明。
 声明写在 `provider_model.model_info.capabilities`，原 `provider_model.capabilities` 保持
 供应商能力标签的 list 语义，不迁移、不新增列。保留 `model_info` 的其他键。
+写权限（裁决 A）：`capabilities` 声明沿用连接管理权限，即
+`_connection_with_manage_access` 的现有语义——shared 连接仅管理员可写（403），
+private 连接仅 owner 可写（其他用户 404）；不新增管理员查看或管理他人
+私有连接的能力。
 
 模型返回的 `model_info.capabilities` 是显式声明；`info.meta.capabilities` 是最终判定，
 逐字段按「显式 bool > 供应商目录元数据 > 未知（字段缺失）」解析。
 `vision` 的供应商证据是目录 `capabilities` 含 `VU` / `Visual Understanding`，
-也兼容旧模型自身保存的同类标签；目录没有视觉标签不能推断为 `false`。
+也兼容旧模型自身保存的同类标签；仅当目录快照 `fingerprint` 与当前连接
+`catalog_fingerprint` 一致时采用目录标签，端点或凭据变化后的旧快照不作为能力证据；
+目录没有视觉标签不能推断为 `false`。
 `file_upload`、`file_context` 缺供应商证据时保持缺失；平台自身的 `web_search`
 保持现有默认 `true`（与供应商原生搜索功能无关），可由显式 bool 覆盖。
 `GET /api/models` 中服务商模型的 `info.meta.capabilities` 与单模型解析使用同一函数，
