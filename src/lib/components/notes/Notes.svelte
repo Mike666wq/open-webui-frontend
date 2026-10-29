@@ -40,6 +40,7 @@
 	import Tooltip from '../common/Tooltip.svelte';
 	import NoteMenu from './Notes/NoteMenu.svelte';
 	import NoteKnowledgeModal from './Notes/NoteKnowledgeModal.svelte';
+	import ImportNotesModal, { type ImportReport } from './Notes/ImportNotesModal.svelte';
 	import FilesOverlay from '../chat/MessageInput/FilesOverlay.svelte';
 	import XMark from '../icons/XMark.svelte';
 	import DropdownOptions from '../common/DropdownOptions.svelte';
@@ -58,6 +59,8 @@
 	let openNoteMenuId: string | null = null;
 	let showDeleteConfirm = false;
 	let showKnowledgeModal = false;
+	let showImportModal = false;
+	let importReport: ImportReport | null = null;
 	let shiftKey = false;
 
 	let notes = {};
@@ -466,6 +469,11 @@
 								id: 'notes-import',
 								label: $i18n.t('Import txt/md'),
 								onClick: () => notesImportInputElement?.click()
+							},
+							{
+								id: 'notes-import-markdown',
+								label: $i18n.t('Import Markdown notes'),
+								onClick: () => (showImportModal = true)
 							}
 						]}
 					/>
@@ -923,4 +931,6 @@
 			}}
 		/>
 	{/if}
+
+	<ImportNotesModal bind:show={showImportModal} bind:report={importReport} onCompleted={() => init()} />
 </div>
