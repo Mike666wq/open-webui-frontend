@@ -430,7 +430,8 @@ describe('buildImportPreview (K18)', () => {
 		expect(preview.tree.map((n) => [n.name, n.type])).toEqual([
 			['doc', 'directory'],
 			['sub', 'directory'],
-			['data.json', 'file']
+			['data.json', 'file'],
+			['doc.md', 'markdown']
 		]);
 		const doc = preview.tree[0];
 		expect(doc.path).toBe('doc');
@@ -469,9 +470,10 @@ describe('buildImportPreview (K18)', () => {
 		expect(preview.conflicts).toEqual([{ relativePath: 'doc/a.png', key: 'doc/a.png' }]);
 	});
 
-	it('supports a custom conflictKeyOf', () => {
+	it('supports a custom conflictKeyOf (evaluated against existingKeys)', () => {
 		const preview = buildImportPreview([{ relativePath: 'a/f.png' }, { relativePath: 'b/f.png' }], {
-			conflictKeyOf: (file) => file.filename
+			conflictKeyOf: (file) => file.filename,
+			existingKeys: new Set(['f.png'])
 		});
 		expect(preview.conflicts.map((c) => c.key)).toEqual(['f.png', 'f.png']);
 	});
