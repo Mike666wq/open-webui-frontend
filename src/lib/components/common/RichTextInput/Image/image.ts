@@ -146,7 +146,15 @@ export const Image = Node.create<ImageOptions>({
 					img.setAttribute('src', '/image-placeholder.png');
 				}
 			} else {
-				img.setAttribute('src', safeImageUrl(node.attrs.src || ''));
+				const src = node.attrs.src || '';
+
+				// Remote http(s) images (e.g. links pasted from the web) are rendered
+				// as-is; safeImageUrl only allows internal URLs.
+				if (/^https?:\/\//i.test(src)) {
+					img.setAttribute('src', src);
+				} else {
+					img.setAttribute('src', safeImageUrl(src));
+				}
 			}
 
 			img.setAttribute('alt', node.attrs.alt || '');
