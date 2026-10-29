@@ -33,6 +33,8 @@
 	import Spinner from '$lib/components/common/Spinner.svelte';
 
 	import AddTextContentModal from './KnowledgeBase/AddTextContentModal.svelte';
+	import ImportFolderModal from './KnowledgeBase/ImportFolderModal.svelte';
+	import type { FolderImportReport } from './KnowledgeBase/knowledge-import';
 
 	import SyncConfirmDialog from '../../common/ConfirmDialog.svelte';
 	import ConfirmDialog from '../../common/ConfirmDialog.svelte';
@@ -44,6 +46,8 @@
 
 	let showAddWebpageModal = false;
 	let showAddTextContentModal = false;
+	let showImportFolderModal = false;
+	let lastFolderImportReport: FolderImportReport | null = null;
 
 	let showSyncConfirmModal = false;
 	let pendingSyncFiles: Array<{ path: string; filename: string; file: File }> | null = null;
@@ -93,6 +97,7 @@
 		currentDirectoryId = parent;
 		breadcrumbs = ancestors;
 		if (type === 'directory') uploadDirectoryHandler();
+		else if (type === 'markdown_folder') showImportFolderModal = true;
 		else if (type === 'web') showAddWebpageModal = true;
 		else if (type === 'text') showAddTextContentModal = true;
 		else document.getElementById('files-input')?.click();
@@ -820,6 +825,16 @@
 	on:submit={(e) => {
 		const file = createFileFromText(e.detail.name, e.detail.content);
 		uploadFileHandler(file);
+	}}
+/>
+
+<ImportFolderModal
+	bind:show={showImportFolderModal}
+	knowledgeId={id ?? ''}
+	lastReport={lastFolderImportReport}
+	on:completed={(e) => {
+		lastFolderImportReport = e.detail;
+		init();
 	}}
 />
 
