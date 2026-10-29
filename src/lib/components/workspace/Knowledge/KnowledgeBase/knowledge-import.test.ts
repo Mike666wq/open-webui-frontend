@@ -40,6 +40,12 @@ interface Listing {
 	items: Record<string, unknown>[];
 	directories: { id: string; name: string; parent_id: string | null }[];
 	total?: number;
+	/**
+	 * Listings for sub-directories, keyed by directory id. Mirrors the real
+	 * API semantics: a listing that contains `directories` belongs to the
+	 * parent page; each child directory is listed separately by its id.
+	 */
+	byDirectory?: Record<string, Listing>;
 }
 
 const makeDeps = (rootListing?: Listing): { deps: FolderImportDeps; state: StubState } => {
@@ -79,10 +85,11 @@ const makeDeps = (rootListing?: Listing): { deps: FolderImportDeps; state: StubS
 		async listFiles(_token, _id, directoryId, page) {
 			state.listCalls.push({ directoryId, page });
 			if (page > 1) return { items: [], directories: [], total: 0 };
+			const listing = directoryId ? rootListing?.byDirectory?.[directoryId] : rootListing;
 			return {
-				items: rootListing?.items ?? [],
-				directories: rootListing?.directories ?? [],
-				total: rootListing?.items.length ?? 0
+				items: listing?.items ?? [],
+				directories: listing?.directories ?? [],
+				total: listing?.total ?? listing?.items.length ?? 0
 			};
 		},
 		async computeFileHash(file) {
@@ -116,7 +123,7 @@ describe('planFolderImport', () => {
 			entry('notes/报告/img/a.png'),
 			entry('data.json')
 		]);
-		expect(plan.counts).toEqual({ markdown: 1, image: 1, other: 1, directory: 1 });
+		expect(plan.counts).toEqual({ markdown: 1, image: 1, other: 1, directory: 3 });
 		expect(asPlanned(plan, 'notes/报告.md').kind).toBe('markdown');
 		expect(asPlanned(plan, 'notes/报告/img/a.png').kind).toBe('image');
 		expect(asPlanned(plan, 'data.json').kind).toBe('other');
@@ -145,33 +152,21 @@ describe('buildKnowledgePathIndex', () => {
 	it('walks the directory tree recursively and keys files by path', async () => {
 		const { deps, state } = makeDeps({
 			items: [{ meta: { name: 'root.md' } }],
-			directories: [{ id: 'd1', name: 'docs', parent_id: null }]
-		});
-		// Second-level listing for d1, returned by directoryId.
-		const seen: { directoryId: string | null; page: number }[] = [];
-		const wrapped: FolderImportDeps = {
-			...deps,
-			listFiles: async (token, id, directoryId, page) => {
-				seen.push({ directoryId, page });
-				if (directoryId === 'd1' && page === 1) {
-					return {
-						items: [{ meta: { name: 'deep.png' } }],
-						directories: [{ id: 'd2', name: 'img', parent_id: 'd1' }],
-						total: 1
-					};
-				}
-				if (directoryId === 'd2' && page === 1) {
-					return { items: [{ meta: { name: 'x.md' } }], directories: [], total: 1 };
-				}
-				return { items: [], directories: [], total: 0 };
+			directories: [{ id: 'd1', name: 'docs', parent_id: null }],
+			byDirectory: {
+				d1: {
+					items: [{ meta: { name: 'deep.png' } }],
+					directories: [{ id: 'd2', name: 'img', parent_id: 'd1' }]
+				},
+				d2: { items: [{ meta: { name: 'x.md' } }], directories: [] }
 			}
-		};
-		const index = await buildKnowledgePathIndex(wrapped, 'token', 'kb1');
+		});
+		const index = await buildKnowledgePathIndex(deps, 'token', 'kb1');
 		expect(index.keys).toEqual(new Set(['root.md', 'docs/deep.png', 'docs/img/x.md']));
 		expect(index.files.get('docs/deep.png')?.meta?.name).toBe('deep.png');
-		// Every directory page beyond the first is empty in this stub.
-		expect(seen.filter((c) => c.page > 1).length).toBeGreaterThan(0);
-		expect(state.listCalls).toBeDefined();
+		// Root and every discovered directory are listed exactly once,
+		// depth-first: root → docs → docs/img.
+		expect(state.listCalls.map((c) => c.directoryId)).toEqual([null, 'd1', 'd2']);
 	});
 
 	it('paginates file listings until total is reached', async () => {
@@ -244,14 +239,15 @@ describe('runFolderImport (K7–K10)', () => {
 		expect(first.status).toBe('completed');
 		expect(first.succeeded).toHaveLength(2);
 
-		// The knowledge base now contains both paths at their directories.
+		// The knowledge base now contains both paths at their directories:
+		// doc.md at the root, img.png inside the existing `doc` directory.
 		const second = await runFolderImport(
 			makeDeps({
-				items: [
-					{ id: 'old-md', meta: { name: 'doc.md' } },
-					{ id: 'old-img', meta: { name: 'img.png' } }
-				],
-				directories: [{ id: 'kd', name: 'doc', parent_id: null }]
+				items: [{ id: 'old-md', meta: { name: 'doc.md' } }],
+				directories: [{ id: 'kd', name: 'doc', parent_id: null }],
+				byDirectory: {
+					kd: { items: [{ id: 'old-img', meta: { name: 'img.png' } }], directories: [] }
+				}
 			}).deps,
 			{ token: 't', knowledgeId: 'kb', entries }
 		);
@@ -315,7 +311,14 @@ describe('runFolderImport (K7–K10)', () => {
 				entry('unref.png', 'bytes')
 			]
 		});
-		expect(report.missingImages).toEqual([{ mdPath: 'n.md', raw: '![缺](missing.png)', path: 'missing.png' }]);
+		// n.md's missing ref, plus heavy.md's 51 refs to images that are
+		// neither imported nor present in the knowledge base (#10).
+		expect(report.missingImages[0]).toEqual({
+			mdPath: 'n.md',
+			raw: '![缺](missing.png)',
+			path: 'missing.png'
+		});
+		expect(report.missingImages).toHaveLength(52);
 		// unref.png exists in the tree but is never referenced → orphan.
 		expect(report.orphanImages).toEqual([]);
 		expect(report.refHeavyFiles).toEqual([{ path: 'heavy.md', imageRefs: 51 }]);

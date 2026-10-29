@@ -204,8 +204,13 @@ export const buildKnowledgePathIndex = async (
 ): Promise<{ keys: Set<string>; files: Map<string, KnowledgeFile> }> => {
 	const keys = new Set<string>();
 	const files = new Map<string, KnowledgeFile>();
+	// Guard against cyclic directory references from the backend: each
+	// directory is walked at most once (the root may also be re-listed by id).
+	const visited = new Set<string | null>();
 
 	const walk = async (directoryId: string | null, dirPath: string): Promise<void> => {
+		if (visited.has(directoryId)) return;
+		visited.add(directoryId);
 		const directories: KnowledgeDirectory[] = [];
 		let page = 1;
 		while (true) {
