@@ -211,7 +211,12 @@ export const addProviderModels = (
 export const updateProviderModel = (
 	id: string,
 	upstream_id: string,
-	payload: { display_name?: string; uses?: Record<string, string>; enabled?: boolean }
+	payload: {
+		display_name?: string;
+		uses?: Record<string, string>;
+		enabled?: boolean;
+		capabilities?: Partial<Record<'vision' | 'file_upload' | 'file_context' | 'web_search', boolean | null>>;
+	}
 ) =>
 	request(`/connections/${encodeURIComponent(id)}/models/${encodeURIComponent(upstream_id)}`, {
 		method: 'PUT',
