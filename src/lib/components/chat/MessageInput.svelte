@@ -63,6 +63,7 @@
 		isRasterImageContentType
 	} from '$lib/utils';
 	import { uploadFile } from '$lib/apis/files';
+	import { visionCapability } from '$lib/utils/model-capabilities';
 	import { getCwd, uploadNewFileToTerminal } from '$lib/apis/terminal';
 	import { generateAutoCompletion } from '$lib/apis';
 	import { deleteFileById } from '$lib/apis/files';
@@ -820,7 +821,9 @@
 	) => modelIds.filter((id) => capabilitiesById[id]?.[capability] ?? true);
 
 	let visionCapableModels = [];
-	$: visionCapableModels = getCapableModelIds(selectedModelIds, 'vision', modelCapabilitiesById);
+	$: visionCapableModels = selectedModelIds.filter(
+		(id) => visionCapability(($models ?? []).find((model) => model.id === id)) !== false
+	);
 
 	let fileUploadCapableModels = [];
 	$: fileUploadCapableModels = getCapableModelIds(
@@ -1182,11 +1185,8 @@
 			}
 
 			if (isRasterImageContentType(file['type']) || isHeicImage(file)) {
-				if (visionCapableModels.length === 0) {
-					toast.error($i18n.t('Selected model(s) do not support image inputs'));
-					return;
-				}
-
+				// Capability is checked at submission; users may still attach an image
+				// and change the model or its declaration before sending.
 				const compressImageHandler = async (imageUrl, settings = {}, config = {}) => {
 					// Quick shortcut so we don’t do unnecessary work.
 					const settingsCompression = settings?.imageCompression ?? false;

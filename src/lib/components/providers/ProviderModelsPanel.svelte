@@ -46,6 +46,7 @@
 		type ServicePurpose
 	} from '$lib/utils/provider-services';
 	import ProviderModelTestDialog from '$lib/components/providers/ProviderModelTestDialog.svelte';
+	import ProviderModelCapabilities from '$lib/components/providers/ProviderModelCapabilities.svelte';
 
 	const i18n: any = getContext('i18n');
 
@@ -435,6 +436,8 @@
 							</span>
 						{/if}
 					</div>
+
+					<ProviderModelCapabilities {connection} {model} {canManage} onUpdated={updated} />
 
 					{#if editing === model.upstream_id}
 						<div class="mt-2 space-y-2 rounded-lg bg-gray-50 p-2 dark:bg-gray-800">

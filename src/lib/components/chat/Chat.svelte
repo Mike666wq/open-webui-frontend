@@ -47,6 +47,7 @@
 		showFileNavPath,
 		showFileNavDir,
 		chatRequestQueues,
+		showSettings,
 		desktopEvent
 	} from '$lib/stores';
 	import { refreshChatList, refreshFolderChatLists } from '$lib/stores/chatList';
@@ -70,6 +71,7 @@
 		isRasterImageContentType
 	} from '$lib/utils';
 	import { AudioQueue } from '$lib/utils/audio';
+	import { imageInputStatus, visionCapability } from '$lib/utils/model-capabilities';
 	import { RealtimeCall, getBridgeTurnState, type BridgeSubmission } from '$lib/utils/realtime';
 	import { acquireWakeLock } from '$lib/utils/wakeLock';
 	import { routeAvatarAnimation } from '$lib/utils/voice-avatar';
@@ -3041,6 +3043,28 @@
 		}
 	};
 
+	const canSendProviderImages = (inputFiles: any[], fromQueue = false): boolean => {
+		if (imageGenerationEnabled || !inputFiles.some((file) => file.type === 'image' || isRasterImageContentType(file?.content_type))) return true;
+		const vision = imageInputStatus(selectedModelIds, $models);
+		if (vision === 'supported') return true;
+		toast.warning(
+			$i18n.t(
+				vision === 'unknown'
+					? 'Image support has not been declared for this provider model. This does not mean the provider cannot process images. Declare vision support or remove the image.'
+					: 'This model is marked as unable to process images. Change its vision declaration or remove the image.'
+			),
+			{
+				duration: 12000,
+				action: { label: $i18n.t('Manage provider models'), onClick: () => showSettings.set('connections') },
+				...(!fromQueue ? { cancel: {
+					label: $i18n.t('Remove images'),
+					onClick: () => (files = files.filter((file) => file.type !== 'image' && !isRasterImageContentType(file?.content_type)))
+				} } : {})
+			}
+		);
+		return false;
+	};
+
 	let processingQueueChats = new Set<string>();
 
 	const processNextInQueue = async (targetChatId: string) => {
@@ -3058,6 +3082,7 @@
 			return;
 		}
 
+		if (!canSendProviderImages(queue.flatMap((message) => message.files ?? []), true)) return;
 		processingQueueChats.add(targetChatId);
 		const queuedMessages = [...queue];
 		const queuedMessageIds = new Set(queuedMessages.map((m) => m.id));
@@ -3091,6 +3116,7 @@
 			return;
 		}
 
+		if (!canSendProviderImages(item.files ?? [], true)) return;
 		const targetChatId = $chatId;
 		processingQueueChats.add(targetChatId);
 		try {
@@ -3748,6 +3774,7 @@
 			toast.error($i18n.t('Model not selected'));
 			return { status: 'rejected' };
 		}
+		if (!canSendProviderImages(files)) return { status: 'rejected' };
 		const form = getChatVariablesForm(selectedModelIds, chatVariables, $models);
 		if (form.conflicts.length > 0) {
 			showChatVariablesModal = true;
@@ -3961,7 +3988,7 @@
 
 				if (
 					hasImages &&
-					!(model.info?.meta?.capabilities?.vision ?? true) &&
+					visionCapability(model) === false &&
 					!imageGenerationEnabled
 				) {
 					toast.error(
@@ -5203,6 +5230,7 @@
 											showChatVariablesModal = true;
 										}}
 										on:submit={async (e) => {
+											if (!canSendProviderImages(files)) return;
 											clearDraft(getDraftChatId());
 											if (e.detail || files.length > 0) {
 												await tick();
@@ -5299,6 +5327,7 @@
 											showChatVariablesModal = true;
 										}}
 										on:submit={async (e) => {
+											if (!canSendProviderImages(files)) return;
 											clearDraft(getDraftChatId());
 											if (e.detail || files.length > 0) {
 												await tick();
@@ -5354,6 +5383,7 @@
 										}
 									}}
 									on:submit={async (e) => {
+										if (!canSendProviderImages(files)) return;
 										clearDraft(getDraftChatId());
 										if (e.detail || files.length > 0) {
 											await tick();
