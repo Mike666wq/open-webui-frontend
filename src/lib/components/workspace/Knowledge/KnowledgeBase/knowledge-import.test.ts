@@ -1,3 +1,4 @@
+// P-006 S4: knowledge folder import tests
 import { describe, expect, it } from 'vitest';
 
 import {
