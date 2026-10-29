@@ -4415,5 +4415,6 @@
 	"Complete request address": "Complete request address",
 	"API root address": "API root address",
 	"Open the provider settings": "Open the provider settings",
-	"This connection can generate images but cannot edit them. Pick a connection whose image service supports editing.": "This connection can generate images but cannot edit them. Pick a connection whose image service supports editing."
+	"This connection can generate images but cannot edit them. Pick a connection whose image service supports editing.": "This connection can generate images but cannot edit them. Pick a connection whose image service supports editing.",
+	"Failed to upload image.": "Failed to upload image."
 }

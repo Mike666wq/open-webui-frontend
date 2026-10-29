@@ -4418,5 +4418,6 @@
 	"Complete request address": "完整请求地址",
 	"API root address": "API 根地址",
 	"Open the provider settings": "打开服务商设置",
-	"This connection can generate images but cannot edit them. Pick a connection whose image service supports editing.": "该连接只能生成图片，不能编辑图片。请选择支持图片编辑的服务连接。"
+	"This connection can generate images but cannot edit them. Pick a connection whose image service supports editing.": "该连接只能生成图片，不能编辑图片。请选择支持图片编辑的服务连接。",
+	"Failed to upload image.": "图片上传失败。"
 }

@@ -32,7 +32,7 @@
 		convertHeicToJpeg,
 		isHeicImage
 	} from '$lib/utils';
-	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { WEBUI_BASE_URL, WEBUI_API_BASE_URL } from '$lib/constants';
 	import { getFileById, uploadFile } from '$lib/apis/files';
 	import { getKnowledgeBases } from '$lib/apis/knowledge';
 	import { generateOpenAIChatCompletion } from '$lib/apis/openai';
@@ -666,36 +666,62 @@ ${content}
 		}
 
 		if (file['type'].startsWith('image/') || isHeicImage(file)) {
-			const uploadImagePromise = new Promise(async (resolve, reject) => {
-				let reader = new FileReader();
-				reader.onload = async (event) => {
-					try {
-						let imageUrl = event.target.result;
-						imageUrl = await compressImageHandler(imageUrl, $settings, $config);
+			try {
+				const imageFile = isHeicImage(file) ? await convertHeicToJpeg(file) : file;
 
-						const fileId = uuidv4();
-						const fileItem = {
-							id: fileId,
-							type: 'image',
-							url: `${imageUrl}`
-						};
-						files = [...files, fileItem];
-						note.data.files = files;
-						if (editor) {
-							editor.storage.files = files;
-						}
+				// Read the image as a data URL so settings/config based compression can be
+				// applied, mirroring the chat input behaviour.
+				const imageUrl = await new Promise((resolve, reject) => {
+					const reader = new FileReader();
+					reader.onload = (event) => resolve(event.target.result);
+					reader.onerror = (event) => reject(event);
+					reader.readAsDataURL(imageFile);
+				});
 
-						changeDebounceHandler();
-						resolve(fileItem);
-					} catch (err) {
-						reject(err);
+				// Compress the image if settings or config require it
+				const compressedImageUrl = await compressImageHandler(imageUrl, $settings, $config);
+
+				const uploadImageFile =
+					compressedImageUrl === imageUrl
+						? imageFile
+						: await (async () => {
+								const blob = await (await fetch(compressedImageUrl)).blob();
+								return new File([blob], imageFile.name, {
+									type: blob.type || imageFile.type
+								});
+							})();
+
+				// Upload the image to the server (process=false: no content extraction).
+				const uploadedFile = await uploadFile(localStorage.token, uploadImageFile, null, false);
+
+				if (uploadedFile?.id) {
+					const fileItem = {
+						id: uploadedFile.id,
+						type: 'image',
+						url: `${WEBUI_API_BASE_URL}/files/${uploadedFile.id}/content`,
+						name: file.name,
+						size: file.size,
+						status: 'uploaded'
+					};
+
+					files = [...files, fileItem];
+					note.data.files = files;
+					if (editor) {
+						editor.storage.files = files;
 					}
-				};
 
-				reader.readAsDataURL(isHeicImage(file) ? await convertHeicToJpeg(file) : file);
-			});
+					changeDebounceHandler();
 
-			return await uploadImagePromise;
+					return fileItem;
+				} else {
+					toast.error($i18n.t('Failed to upload image.'));
+					return null;
+				}
+			} catch (err) {
+				console.error('Image upload failed:', err);
+				toast.error(`${err}`);
+				return null;
+			}
 		} else {
 			return await uploadFileHandler(file);
 		}
@@ -1556,19 +1582,56 @@ ${content}
 
 									if (clipboardData && clipboardData.items) {
 										console.log('Clipboard data items:', clipboardData.items);
+
+										// If the clipboard HTML carries remote image links (e.g. an image
+										// copied from a web page), keep the external URLs as-is instead of
+										// re-uploading the clipboard image blobs.
+										const htmlContent = clipboardData.getData('text/html') || '';
+										const externalImageSrcs = [
+											...htmlContent.matchAll(/<img[^>]+src=["']?(https?:\/\/[^"'\s>]+)/gi)
+										]
+											.map((match) => {
+												// Decode HTML entities (e.g. &amp;) so the URL stays usable
+												const doc = new DOMParser().parseFromString(match[1], 'text/html');
+												return doc.documentElement.textContent || match[1];
+											})
+
+										if (externalImageSrcs.length > 0) {
+											for (const src of externalImageSrcs) {
+												if (editor) {
+													editor
+														.chain()
+														.insertContentAt(editor.state.selection.$anchor.pos, {
+															type: 'image',
+															attrs: {
+																src: src
+															}
+														})
+														.focus()
+														.run();
+												}
+											}
+											return;
+										}
+
 										for (const item of clipboardData.items) {
 											console.log('Clipboard item:', item);
 											if (item.type.indexOf('image') !== -1) {
 												const blob = item.getAsFile();
+
+												if (!blob) {
+													continue;
+												}
+
 												const fileItem = await inputFileHandler(blob);
 
-												if (editor) {
+												if (fileItem && editor) {
 													editor
-														?.chain()
+														.chain()
 														.insertContentAt(editor.state.selection.$anchor.pos, {
 															type: 'image',
 															attrs: {
-																src: `data://${fileItem.id}` // Use data URI for the image
+																src: `data://${fileItem.id}` // Reference the uploaded file
 															}
 														})
 														.focus()
@@ -1576,7 +1639,10 @@ ${content}
 												}
 											} else if (item?.kind === 'file') {
 												const file = item.getAsFile();
-												await inputFileHandler(file);
+
+												if (file) {
+													await inputFileHandler(file);
+												}
 												e.preventDefault();
 											}
 										}
