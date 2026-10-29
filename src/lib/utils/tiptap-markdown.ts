@@ -32,6 +32,13 @@ const noteMarked = new Marked({
 			return task
 				? `<li data-type="taskItem" data-checked="${checked ? 'true' : 'false'}">${text}</li>`
 				: `<li>${text}</li>`;
+		},
+		// Emit the editor's inline alignment style (TipTap TextAlign) instead of the
+		// deprecated `align` attribute, so saved Markdown re-imports with fidelity.
+		tablecell(content, flags) {
+			const type = flags.header ? 'th' : 'td';
+			const align = flags.align ? ` style="text-align: ${flags.align}"` : '';
+			return `<${type}${align}>${content}</${type}>\n`;
 		}
 	}
 });
@@ -57,7 +64,7 @@ const createTurndown = (preserveBreaks: boolean) => {
 		replacement: () => ''
 	});
 	service.addRule('taskListItems', {
-		filter: (node) =>
+		filter: (node: HTMLElement) =>
 			node.nodeName === 'LI' && ['true', 'false'].includes(node.getAttribute('data-checked') ?? ''),
 		replacement: (content: string, node: HTMLElement) => {
 			const checked = node.getAttribute('data-checked') === 'true';
