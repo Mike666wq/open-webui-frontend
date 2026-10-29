@@ -10,6 +10,7 @@
 	const i18n = getContext<typeof import('$lib/i18n').default>('i18n');
 
 	import { marked } from 'marked';
+	import { markdownToHtml } from '$lib/utils/tiptap-markdown';
 	import { toast } from 'svelte-sonner';
 	import { equalEditorJSON } from '$lib/utils/editorJson';
 
@@ -209,7 +210,7 @@
 	// Computed HTML for editor: fall back to markdown if HTML is missing
 	$: editorHtml =
 		note?.data?.content?.html ||
-		(note?.data?.content?.md ? marked.parse(note.data.content.md) : '');
+		(note?.data?.content?.md ? markdownToHtml(note.data.content.md) : '');
 
 	const init = async () => {
 		autoFormat = true;
@@ -349,7 +350,7 @@
 		}
 
 		const selection = editor.state.selection;
-		editor.commands.setContent(incomingContent.html || marked.parse(incomingContent.md ?? ''));
+		editor.commands.setContent(incomingContent.html || markdownToHtml(incomingContent.md ?? ''));
 		await tick();
 
 		const docSize = editor.state.doc.content.size;

@@ -26,7 +26,7 @@
 </script>
 
 <div
-	class="flex gap-0.5 p-0.5 rounded-xl shadow-lg bg-white text-gray-800 dark:text-white dark:bg-gray-850 min-w-fit border border-gray-100 dark:border-gray-800"
+	class="flex flex-wrap max-w-[min(94vw,36rem)] gap-0.5 p-0.5 rounded-xl shadow-lg bg-white text-gray-800 dark:text-white dark:bg-gray-850 border border-gray-100 dark:border-gray-800"
 >
 	<Tooltip placement="top" content={$i18n.t('H1')}>
 		<button
@@ -65,22 +65,24 @@
 	</Tooltip>
 
 	{#if editor?.isActive('bulletList') || editor?.isActive('orderedList') || editor?.isActive('taskList')}
-		<Tooltip placement="top" content={$i18n.t('Lift List')}>
+		<Tooltip placement="top" content={$i18n.t('Lift List (Shift+Tab)')}>
 			<button
 				on:click={() => {
 					editor?.commands.liftListItem(editor?.isActive('taskList') ? 'taskItem' : 'listItem');
 				}}
 				class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5 transition-all"
+				aria-label={$i18n.t('Lift List (Shift+Tab)')}
 				type="button"
 			>
 				<ArrowLeftTag />
 			</button>
 		</Tooltip>
-		<Tooltip placement="top" content={$i18n.t('Sink List')}>
+		<Tooltip placement="top" content={$i18n.t('Sink List (Tab)')}>
 			<button
 				on:click={() =>
 					editor?.commands.sinkListItem(editor?.isActive('taskList') ? 'taskItem' : 'listItem')}
 				class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5 transition-all"
+				aria-label={$i18n.t('Sink List (Tab)')}
 				type="button"
 			>
 				<ArrowRightTag />
@@ -182,6 +184,31 @@
 		>
 			<CodeBracket />
 		</button>
+	</Tooltip>
+
+	<Tooltip placement="top" content={$i18n.t('Blockquote (Mod+Shift+B)')}>
+		<button type="button" aria-label={$i18n.t('Blockquote (Mod+Shift+B)')} class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5" on:click={() => editor?.chain().focus().toggleBlockquote().run()}>❝</button>
+	</Tooltip>
+	<Tooltip placement="top" content={$i18n.t('Insert table (3×3)')}>
+		<button type="button" aria-label={$i18n.t('Insert table (3×3)')} class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5" on:click={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>▦</button>
+	</Tooltip>
+	{#if editor?.isActive('table')}
+		<Tooltip placement="top" content={$i18n.t('Add table row')}><button type="button" aria-label={$i18n.t('Add table row')} on:click={() => editor?.chain().focus().addRowAfter().run()}>+R</button></Tooltip>
+		<Tooltip placement="top" content={$i18n.t('Delete table row')}><button type="button" aria-label={$i18n.t('Delete table row')} on:click={() => editor?.chain().focus().deleteRow().run()}>−R</button></Tooltip>
+		<Tooltip placement="top" content={$i18n.t('Add table column')}><button type="button" aria-label={$i18n.t('Add table column')} on:click={() => editor?.chain().focus().addColumnAfter().run()}>+C</button></Tooltip>
+		<Tooltip placement="top" content={$i18n.t('Delete table column')}><button type="button" aria-label={$i18n.t('Delete table column')} on:click={() => editor?.chain().focus().deleteColumn().run()}>−C</button></Tooltip>
+	{/if}
+	<Tooltip placement="top" content={$i18n.t('Horizontal rule (Mod+Shift+H)')}>
+		<button type="button" aria-label={$i18n.t('Horizontal rule (Mod+Shift+H)')} class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5" on:click={() => editor?.chain().focus().setHorizontalRule().run()}>—</button>
+	</Tooltip>
+	<Tooltip placement="top" content={$i18n.t('Highlight (Mod+Shift+M)')}>
+		<button type="button" aria-label={$i18n.t('Highlight (Mod+Shift+M)')} class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5" on:click={() => editor?.chain().focus().toggleHighlight().run()}>🖍</button>
+	</Tooltip>
+	<Tooltip placement="top" content={$i18n.t('Superscript (Mod+Shift+Up)')}>
+		<button type="button" aria-label={$i18n.t('Superscript (Mod+Shift+Up)')} class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5" on:click={() => editor?.chain().focus().toggleMark('superscript').run()}>xⁿ</button>
+	</Tooltip>
+	<Tooltip placement="top" content={$i18n.t('Subscript (Mod+Shift+Down)')}>
+		<button type="button" aria-label={$i18n.t('Subscript (Mod+Shift+Down)')} class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5" on:click={() => editor?.chain().focus().toggleMark('subscript').run()}>xₙ</button>
 	</Tooltip>
 
 	<EmojiPicker
