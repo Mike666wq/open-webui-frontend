@@ -181,7 +181,9 @@ describe('buildKnowledgePathIndex', () => {
 			listFiles: async (_t, _i, _d, page) =>
 				page === 1
 					? { items: page1, directories: [], total: 3 }
-					: { items: [{ meta: { name: 'c.md' } }], directories: [], total: 3 }
+					: page === 2
+						? { items: [{ meta: { name: 'c.md' } }], directories: [], total: 3 }
+						: { items: [], directories: [], total: 0 }
 		};
 		const index = await buildKnowledgePathIndex(wrapped, 'token', 'kb1');
 		expect(index.keys).toEqual(new Set(['a.md', 'b.md', 'c.md']));
