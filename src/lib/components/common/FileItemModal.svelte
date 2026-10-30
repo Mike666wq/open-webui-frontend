@@ -8,7 +8,11 @@
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
 	import { settings } from '$lib/stores';
 	import { getKnowledgeById } from '$lib/apis/knowledge';
-	import { getFileById, getFileContentById } from '$lib/apis/files';
+	import { getFileById, getFileContentById, getFileBlobById } from '$lib/apis/files';
+	import {
+		blobToImageDataUrl,
+		renderAuthenticatedImportImages
+	} from '$lib/components/notes/markdown-import';
 
 	import CodeBlock from '$lib/components/chat/Messages/CodeBlock.svelte';
 	import Markdown from '$lib/components/chat/Messages/Markdown.svelte';
@@ -36,6 +40,8 @@
 
 	let enableFullContent = false;
 	let loading = false;
+	let importedMarkdown: string | null = null;
+	let importedMarkdownError = false;
 
 	let isPDF = false;
 	let isAudio = false;
@@ -188,7 +194,7 @@
 				getFileContentById(item.id),
 				import('$lib/utils/pptxToHtml')
 			]);
-			const result = await pptxToImages(arrayBuffer);
+			const result = await pptxToImages(arrayBuffer as ArrayBuffer);
 			pptxSlides = result.images;
 			pptxCurrentSlide = 0;
 		} catch (error) {
@@ -200,6 +206,8 @@
 	const loadContent = async () => {
 		selectedTab = '';
 		expandedContent = false;
+		importedMarkdown = null;
+		importedMarkdownError = false;
 		docxData = null;
 		if (item?.type === 'collection') {
 			loading = true;
@@ -223,6 +231,20 @@
 
 			if (file) {
 				item.file = file || {};
+				if (
+					file.meta?.data?.markdown_import?.version === 2 &&
+					/\.(md|markdown|txt)$/i.test(file.filename ?? '')
+				) {
+					try {
+						const original = await getFileBlobById(localStorage.token, file.id);
+						importedMarkdown = await renderAuthenticatedImportImages(
+							await original.text(),
+							async (id) => blobToImageDataUrl(await getFileBlobById(localStorage.token, id))
+						);
+					} catch {
+						importedMarkdownError = true;
+					}
+				}
 			}
 
 			// Load Excel content if it's an Excel file
@@ -507,7 +529,7 @@
 							class="w-full border-0 rounded-lg mb-2"
 							controls
 							playsinline
-						/>
+						></audio>
 					{:else if isPDF}
 						<PDFViewer
 							url={`${WEBUI_API_BASE_URL}/files/${item.id}/content`}
@@ -560,7 +582,14 @@
 						<div
 							class="max-h-[60vh] overflow-scroll scrollbar-hidden text-sm prose dark:prose-invert max-w-full"
 						>
-							<Markdown content={item.file.data.content} id="markdown-viewer" />
+							{#if importedMarkdownError}
+								<p role="alert">{$i18n.t('Failed to load file content.')}</p>
+							{:else}
+								<Markdown
+									content={importedMarkdown ?? item.file.data.content}
+									id="markdown-viewer"
+								/>
+							{/if}
 						</div>
 					{:else if isDocx}
 						{#if docxError}

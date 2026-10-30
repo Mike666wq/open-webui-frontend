@@ -692,6 +692,16 @@ function api(pathname) {
 			access_grants: [],
 			write_access: false
 		};
+	if (pathname === '/api/v1/knowledge/import-kb')
+		return {
+			id: 'import-kb',
+			name: '导入专项验收',
+			description: 'P-006 移动导入与部分失败报告',
+			user_id: userId,
+			data: { file_ids: [] },
+			access_grants: [],
+			write_access: true
+		};
 	if (pathname === '/api/v1/knowledge/reading-kb/files')
 		return { items: [readingFile], directories: [], breadcrumbs: [], total: 1 };
 	if (pathname === '/api/v1/knowledge/reading-kb/files/pending') return [];
@@ -724,7 +734,10 @@ function api(pathname) {
 	if (pathname === '/api/v1/recordings') return recordingRemoved ? [] : [recording];
 	if (pathname === '/api/v1/recordings/recording-fixture') return recording;
 	if (pathname === '/api/v1/knowledge/')
-		return [{ id: 'recording-kb', name: '课程资料', write_access: true }];
+		return [
+			{ id: 'recording-kb', name: '课程资料', write_access: true },
+			{ id: 'import-kb', name: '导入专项验收', write_access: true }
+		];
 	if (pathname.startsWith('/api/v1/notes/') && recordingNotes.has(pathname.split('/').pop()))
 		return recordingNotes.get(pathname.split('/').pop());
 
@@ -784,6 +797,77 @@ const server = createServer(async (request, response) => {
 	}
 
 	try {
+		if (request.method === 'GET' && url.pathname === '/api/v1/knowledge/import-kb/files') {
+			const directoryId = url.searchParams.get('directory_id');
+			event('knowledge-import-listing', { directory_id: directoryId });
+			send(response, 200, {
+				items: [],
+				directories:
+					directoryId === ''
+						? [
+								{ id: 'import-dir-a', name: 'a', parent_id: null },
+								{ id: 'import-dir-b', name: 'b', parent_id: null }
+							]
+						: [],
+				breadcrumbs: [],
+				total: 0
+			});
+			return;
+		}
+		if (
+			request.method === 'POST' &&
+			url.pathname === '/api/v1/knowledge/import-kb/directory/batch'
+		) {
+			const chunks = [];
+			for await (const chunk of request) chunks.push(chunk);
+			const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+			const directories = Object.fromEntries(
+				(payload.directories ?? []).map((directory) => [
+					directory,
+					`import-${directory.replaceAll('/', '-')}`
+				])
+			);
+			event('knowledge-import-preflight', { directories: payload.directories ?? [] });
+			send(response, 200, directories);
+			return;
+		}
+		if (
+			request.method === 'POST' &&
+			url.pathname === '/api/v1/knowledge/import-kb/import/file'
+		) {
+			const chunks = [];
+			for await (const chunk of request) chunks.push(chunk);
+			const raw = Buffer.concat(chunks).toString('utf8');
+			const field = (name) =>
+				new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r\\n]*)`).exec(raw)?.[1] ?? '';
+			const operationId = field('operation_id');
+			const sourcePath = field('source_path');
+			const directoryId = field('directory_id') || null;
+			const kind = field('kind');
+			event('knowledge-import-file', { operation_id: operationId, source_path: sourcePath, kind });
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			if (sourcePath.endsWith('/broken.md')) {
+				send(response, 502, {
+					detail: {
+						code: 'index_failed',
+						stage: 'index',
+						message: 'Synthetic index failure',
+						operation_id: operationId,
+						cleanup_status: 'pending'
+					}
+				});
+				return;
+			}
+			send(response, 200, {
+				file_id: `import-${operationId}`,
+				directory_id: directoryId,
+				source_path: sourcePath,
+				operation_id: operationId,
+				status: 'completed',
+				indexed: kind === 'markdown'
+			});
+			return;
+		}
 		if (request.method === 'POST' && url.pathname === '/__fixture_missing_recording_note') {
 			recordingNoteMissing = true;
 			send(response, 200, {});

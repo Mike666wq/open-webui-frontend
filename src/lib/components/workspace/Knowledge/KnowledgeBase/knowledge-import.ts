@@ -1,13 +1,10 @@
 import {
 	analyzeMarkdownNote,
 	buildImportPreview,
-	crossBatchAssetKey,
 	isImagePath,
 	isMarkdownPath,
 	knowledgeImageMarker,
-	markdownImportMeta,
 	normalizeRelativePath,
-	noteContentHash,
 	parseImageRefs,
 	rewriteImageRefs,
 	type ImportPreview
@@ -15,12 +12,15 @@ import {
 import { computeFileHash } from '$lib/utils/hash';
 import { WEBUI_API_BASE_URL } from '$lib/constants';
 import {
-	addFileToKnowledgeById,
 	batchCreateKnowledgeDirectories,
+	getKnowledgeImportOperation,
+	importKnowledgeFile,
+	KnowledgeImportError,
+	type KnowledgeImportFile,
+	type KnowledgeImportResult,
 	removeFileFromKnowledgeById,
 	searchKnowledgeFilesById
 } from '$lib/apis/knowledge';
-import { uploadFile } from '$lib/apis/files';
 
 import { fileName, type KnowledgeFile, type KnowledgeDirectory } from './types';
 
@@ -28,10 +28,9 @@ import { fileName, type KnowledgeFile, type KnowledgeDirectory } from './types';
 // Planning and reporting are pure; network access goes through injectable
 // dependencies (`FolderImportDeps`) so the orchestrator can be unit tested
 // with stubs. Path safety reuses the S1 core (`normalizeRelativePath`,
-// `analyzeMarkdownNote`, `rewriteImageRefs`); decisions #4/#7/#9 of the
-// P-006 plan apply: images never vectorize, Markdown image references are
-// rewritten to readable `[图片 <file>]` markers, conflict keys are the
-// normalized knowledge-base path.
+// `analyzeMarkdownNote`, `rewriteImageRefs`); decisions #4/#7/#9 keep the
+// readable original image references while replacing them with short markers
+// in indexed text. Conflict keys are normalized knowledge-base paths.
 
 export type ImportConflictStrategy = 'skip' | 'overwrite' | 'copy';
 
@@ -89,16 +88,19 @@ export function planFolderImport(
 		{
 			...(existingKeys ? { existingKeys } : {}),
 			// buildImportPreview passes the normalized path through as `path`.
-			conflictKeyOf: ((file: { path: string }) => file.path) as unknown as (
-				file: { relativePath: string; directory: string; filename: string }
-			) => string
+			conflictKeyOf: (file: { path?: string }) => file.path ?? ''
 		}
 	);
 
 	const fileByPath = new Map<string, File>();
+	const duplicates: { relativePath: string; reason: string }[] = [];
 	for (const entry of entries) {
 		const res = normalizeRelativePath(entry.relativePath);
-		if (res.ok) fileByPath.set(res.path, entry.file);
+		if (res.ok) {
+			if (fileByPath.has(res.path))
+				duplicates.push({ relativePath: entry.relativePath, reason: 'duplicate normalized path' });
+			else fileByPath.set(res.path, entry.file);
+		}
 	}
 
 	const files: PlannedFile[] = [...fileByPath.entries()].map(([path, file]) => ({
@@ -118,9 +120,7 @@ export function planFolderImport(
 
 	const warnings: string[] = [];
 	if (files.length > MAX_FILES_BEFORE_BATCH_WARNING) {
-		warnings.push(
-			`所选文件数超过 ${MAX_FILES_BEFORE_BATCH_WARNING}，建议分批导入。` as string
-		);
+		warnings.push(`所选文件数超过 ${MAX_FILES_BEFORE_BATCH_WARNING}，建议分批导入。` as string);
 	}
 
 	return {
@@ -130,7 +130,7 @@ export function planFolderImport(
 		imagePaths: new Set(files.filter((f) => f.kind === 'image').map((f) => f.path)),
 		directories: preview.directories,
 		conflicts: preview.conflicts.map((c) => c.key),
-		invalidPaths: preview.invalidPaths,
+		invalidPaths: [...preview.invalidPaths, ...duplicates],
 		counts,
 		warnings
 	};
@@ -150,19 +150,9 @@ export interface FolderImportDeps {
 		id: string,
 		directories: string[]
 	): Promise<Record<string, string>>;
-	uploadFile(
-		token: string,
-		file: File,
-		metadata?: object | null,
-		process?: boolean | null
-	): Promise<any>;
-	addFileToKnowledgeById(
-		token: string,
-		id: string,
-		fileId: string,
-		directoryId?: string | null,
-		process?: boolean
-	): Promise<any>;
+	importFile(token: string, id: string, file: KnowledgeImportFile): Promise<KnowledgeImportResult>;
+	confirmOperation(token: string, id: string, operationId: string): Promise<KnowledgeImportResult>;
+	canReadFile(token: string, fileId: string): Promise<boolean>;
 	removeFileFromKnowledgeById(
 		token: string,
 		id: string,
@@ -179,14 +169,17 @@ export interface FolderImportDeps {
 }
 
 export const defaultFolderImportDeps: FolderImportDeps = {
-	batchDirectories: (token, id, directories) =>
-		batchCreateKnowledgeDirectories(token, id, directories),
-	// stream=false: batch import does not await the per-file process status SSE.
-	uploadFile: (token, file, metadata, process) => uploadFile(token, file, metadata, process, false),
-	addFileToKnowledgeById: (token, id, fileId, directoryId, process) =>
-		addFileToKnowledgeById(token, id, fileId, directoryId, process),
-	removeFileFromKnowledgeById: (token, id, fileId, confirmShared) =>
-		removeFileFromKnowledgeById(token, id, fileId, confirmShared),
+	batchDirectories: batchCreateKnowledgeDirectories,
+	importFile: importKnowledgeFile,
+	confirmOperation: getKnowledgeImportOperation,
+	canReadFile: async (token, fileId) => {
+		const response = await fetch(`${WEBUI_API_BASE_URL}/files/${fileId}/content`, {
+			headers: { authorization: `Bearer ${token}`, Range: 'bytes=0-0' }
+		});
+		await response.body?.cancel();
+		return response.ok;
+	},
+	removeFileFromKnowledgeById,
 	listFiles: (token, id, directoryId, page) =>
 		searchKnowledgeFilesById(token, id, '', null, null, null, page, directoryId, false),
 	computeFileHash
@@ -213,6 +206,8 @@ export const buildKnowledgePathIndex = async (
 		visited.add(directoryId);
 		const directories: KnowledgeDirectory[] = [];
 		let page = 1;
+		let received = 0;
+		const seenPages = new Set<string>();
 		while (true) {
 			const listing = await deps.listFiles(token, id, directoryId, page);
 			for (const file of listing.items ?? []) {
@@ -222,8 +217,17 @@ export const buildKnowledgePathIndex = async (
 				files.set(key, file);
 			}
 			if (page === 1) directories.push(...(listing.directories ?? []));
-			const total = listing.total ?? (listing.items?.length ?? 0);
-			if (!listing.items?.length || listing.items.length >= total) break;
+			const total = listing.total ?? listing.items?.length ?? 0;
+			const signature = JSON.stringify(
+				(listing.items ?? []).map((file) => file.id ?? fileName(file))
+			);
+			if (listing.items?.length && seenPages.has(signature))
+				throw new Error('Knowledge listing did not advance');
+			seenPages.add(signature);
+			received += listing.items?.length ?? 0;
+			if (received >= total) break;
+			if (!listing.items?.length || page >= 10000)
+				throw new Error('Knowledge listing is incomplete');
 			page++;
 		}
 		for (const directory of directories) {
@@ -252,11 +256,17 @@ export interface SkippedEntry {
 export interface FailedEntry {
 	path: string;
 	reason: string;
+	stage?: string;
+	cleanupStatus?: string;
+	fileId?: string;
+	operationId?: string;
 }
 
 export interface FolderImportReport {
-	status: 'completed' | 'cancelled' | 'failed';
+	status: 'completed' | 'completed_with_errors' | 'cancelled' | 'failed';
 	total: number;
+	processed: number;
+	pending: string[];
 	directoriesCreated: number;
 	succeeded: ImportedEntry[];
 	skipped: SkippedEntry[];
@@ -288,7 +298,8 @@ const reasonOf = (error: unknown): string => {
 	if (typeof error === 'string') return error;
 	if (error && typeof error === 'object' && 'detail' in (error as any)) {
 		const detail = (error as any).detail;
-		if (detail) return String(detail);
+		if (typeof detail === 'string') return detail;
+		if (detail?.message) return String(detail.message);
 	}
 	if (error instanceof Error && error.message) return error.message;
 	return String(error);
@@ -316,32 +327,18 @@ export const copyTargetPath = (
 
 // ── Orchestrator ────────────────────────────────────────────────────────────
 
-/**
- * Batch import a Markdown folder into a knowledge base (K7–K10):
- * directories get-or-created via the batch endpoint, images uploaded
- * unprocessed (never vectorized, #4) with cross-batch content dedup,
- * Markdown uploaded processed with image references rewritten to readable
- * markers (#7), conflicts resolved per strategy (skip default), batches of
- * `batchSize` files with progress reporting and cancellation between batches.
- */
+/** Import images before documents, and only accept confirmed target placements. */
 export const runFolderImport = async (
 	deps: FolderImportDeps,
 	params: FolderImportParams
 ): Promise<FolderImportReport> => {
-	const {
-		token,
-		knowledgeId,
-		entries,
-		strategy = 'skip',
-		shouldCancel,
-		onProgress,
-		batchSize = 10
-	} = params;
-
+	const { token, knowledgeId, entries, strategy = 'skip', shouldCancel, onProgress } = params;
 	const startedAt = Date.now();
 	const report: FolderImportReport = {
 		status: 'completed',
-		total: 0,
+		total: entries.length,
+		processed: 0,
+		pending: [],
 		directoriesCreated: 0,
 		succeeded: [],
 		skipped: [],
@@ -356,193 +353,221 @@ export const runFolderImport = async (
 		startedAt,
 		finishedAt: startedAt
 	};
-
-	const fail = (reason: unknown) => {
+	let plan: FolderImportPlan;
+	let existing: Awaited<ReturnType<typeof buildKnowledgePathIndex>>;
+	let directories: Record<string, string>;
+	try {
+		existing = await buildKnowledgePathIndex(deps, token, knowledgeId);
+		plan = planFolderImport(entries, existing.keys);
+		report.invalidPaths = plan.invalidPaths;
+		report.warnings.push(...plan.warnings);
+		// Even root-only imports must preflight the server's write permission.
+		directories = await deps.batchDirectories(token, knowledgeId, plan.directories);
+		report.directoriesCreated = plan.directories.filter((path) => !!directories[path]).length;
+	} catch (error) {
 		report.status = 'failed';
-		report.failed.push({ path: '*', reason: reasonOf(reason) });
+		report.warnings.push(`Preflight: ${reasonOf(error)}`);
+		report.pending = entries.map((entry) => entry.relativePath);
 		report.finishedAt = Date.now();
 		return report;
-	};
-
-	// ── 1. Index what already exists in the knowledge base (#9) ──
-	let existingKeys: Set<string>;
-	let existingFiles: Map<string, KnowledgeFile>;
-	try {
-		const index = await buildKnowledgePathIndex(deps, token, knowledgeId);
-		existingKeys = index.keys;
-		existingFiles = index.files;
-	} catch (error) {
-		return fail(error);
 	}
-
-	// ── 2. Plan: normalize paths, build the tree, flag conflicts ──
-	const plan = planFolderImport(entries, existingKeys);
-	report.invalidPaths = plan.invalidPaths;
-	report.warnings.push(...plan.warnings);
-
-	const ordered = plan.files.filter((f) => f.kind !== 'other');
-	for (const other of plan.files.filter((f) => f.kind === 'other')) {
-		report.skipped.push({ path: other.path, reason: 'unsupported type' });
+	const images = plan.files.filter((item) => item.kind === 'image');
+	const documents = plan.files.filter((item) => item.kind === 'markdown');
+	const ordered = [...images, ...documents];
+	const imageUrls = new Map<string, string>();
+	const taken = new Set(existing.keys);
+	for (const item of plan.files.filter((item) => item.kind === 'other')) {
+		report.skipped.push({ path: item.path, reason: 'unsupported type' });
 	}
-	report.total = ordered.length;
-
-	// ── 3. Get-or-create the directory tree (K7) ──
-	const directoryIdByPath: Record<string, string> = {};
-	if (plan.directories.length > 0) {
-		try {
-			const created = await deps.batchDirectories(token, knowledgeId, plan.directories);
-			Object.assign(directoryIdByPath, created ?? {});
-		} catch (error) {
-			return fail(error);
-		}
-	}
-	report.directoriesCreated = plan.directories.filter((p) => !!directoryIdByPath[p]).length;
-
-	const directoryIdOf = (dir: string): string | null => directoryIdByPath[dir] ?? null;
-
-	// Cross-batch image dedup (#4): (filename, size, sha256) → uploaded asset.
-	const assetCache = new Map<string, { fileId: string; url: string }>();
-
-	const importImage = async (item: PlannedFile): Promise<void> => {
-		const hash = await deps.computeFileHash(item.file);
-		const assetKey = crossBatchAssetKey(item.filename, item.file.size, hash);
-		let fileId: string;
-		let url: string;
-		const cached = assetCache.get(assetKey);
-		if (cached) {
-			({ fileId, url } = cached);
-		} else {
-			const uploaded = await deps.uploadFile(
-				token,
-				item.file,
-				{ directory_id: directoryIdOf(item.dir) },
-				false
-			);
-			if (!uploaded?.id) throw new Error('upload failed');
-			fileId = uploaded.id;
-			url = `${WEBUI_API_BASE_URL}/files/${fileId}/content`;
-			await deps.addFileToKnowledgeById(
-				token,
-				knowledgeId,
-				fileId,
-				directoryIdOf(item.dir),
-				false
-			);
-			assetCache.set(assetKey, { fileId, url });
-			report.imageUrls.push({ path: item.path, url });
-		}
-		report.succeeded.push({ path: item.path, kind: 'image', fileId });
+	report.processed = report.skipped.length + report.invalidPaths.length;
+	const directoryId = (item: PlannedFile): string | null => {
+		if (!item.dir) return null;
+		if (!directories[item.dir]) throw new Error('Target directory was not confirmed');
+		return directories[item.dir];
 	};
-
-	const importMarkdown = async (item: PlannedFile): Promise<void> => {
-		const text = await item.file.text();
-		const analysis = analyzeMarkdownNote(item.path, text, [...plan.paths], {});
-		const refCount = parseImageRefs(text).length;
-		if (refCount > MAX_IMAGE_REFS_PER_NOTE) {
-			report.refHeavyFiles.push({ path: item.path, imageRefs: refCount });
-		}
-		for (const missing of analysis.missingRefs) {
-			report.missingImages.push({ mdPath: item.path, raw: missing.raw, path: missing.path });
-		}
-		for (const orphan of analysis.orphanImages) {
-			report.orphanImages.push(orphan);
-		}
-
-		// Rewrite every reference that resolves to an existing image in the
-		// selected tree into a readable marker (#7); external references are
-		// kept as-is (#11); missing/unresolvable ones stay untouched.
-		const { content } = rewriteImageRefs(
-			text,
-			(ref, path) => {
-				if (ref.external) return null;
-				if (path && plan.imagePaths.has(path)) {
-					return { form: 'text' as const, text: knowledgeImageMarker(path) };
-				}
-				return null;
-			},
-			{ mdDir: item.dir }
-		);
-
-		const contentHash = noteContentHash(content);
-		const outFile = new File([content], item.filename, { type: 'text/markdown' });
-		const metadata = {
-			directory_id: directoryIdOf(item.dir),
-			...markdownImportMeta(item.path, contentHash, Math.floor(Date.now() / 1000))
-		};
-		const uploaded = await deps.uploadFile(token, outFile, metadata, true);
-		if (!uploaded?.id) throw new Error('upload failed');
-		await deps.addFileToKnowledgeById(
-			token,
-			knowledgeId,
-			uploaded.id,
-			directoryIdOf(item.dir),
-			true
-		);
-		report.succeeded.push({ path: item.path, kind: 'markdown', fileId: uploaded.id });
-	};
-
-	const importPlanned = async (
+	const submit = async (
 		item: PlannedFile,
-		target: { path: string; filename: string }
-	): Promise<void> => {
-		const effective: PlannedFile =
-			target.filename === item.filename ? item : { ...item, ...target };
-		if (effective.kind === 'image') {
-			await importImage(effective);
-		} else if (effective.kind === 'markdown') {
-			await importMarkdown(effective);
-		}
-	};
-
-	// ── 4. Submit in batches, cancellable between batches (K7) ──
-	let processed = 0;
-	let cancelled = false;
-	for (let start = 0; start < ordered.length; start += batchSize) {
-		if (shouldCancel?.()) {
-			cancelled = true;
-			break;
-		}
-		const batch = ordered.slice(start, start + batchSize);
-		for (const item of batch) {
-			processed++;
-			onProgress?.({ processed, total: ordered.length, current: item.path });
+		file: File,
+		kind: 'image' | 'markdown',
+		indexText?: string
+	) => {
+		const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+		bytes[6] = (bytes[6] & 15) | 64;
+		bytes[8] = (bytes[8] & 63) | 128;
+		const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+		const operationId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+		const input: KnowledgeImportFile = {
+			file,
+			kind,
+			directoryId: directoryId(item),
+			sourcePath: item.path,
+			sourceHash: await deps.computeFileHash(item.file),
+			operationId,
+			...(indexText !== undefined ? { indexText } : {})
+		};
+		let result: KnowledgeImportResult;
+		try {
+			result = await deps.importFile(token, knowledgeId, input);
+		} catch (error) {
+			if (!(error instanceof KnowledgeImportError) || !error.unconfirmed)
+				throw Object.assign(error instanceof Error ? error : new Error(reasonOf(error)), {
+					operationId
+				});
 			try {
-				if (existingKeys.has(item.path)) {
-					// Conflict: knowledge base already has this path (#9).
-					if (strategy === 'skip') {
-						report.skipped.push({ path: item.path, reason: 'already exists' });
-						continue;
-					}
-					if (strategy === 'copy') {
-						const target = copyTargetPath(item.path, existingKeys);
-						existingKeys.add(target.path);
-						await importPlanned(item, target);
-						continue;
-					}
-					// overwrite: upload fresh content, then swap the KB entry.
-					await importPlanned(item, { path: item.path, filename: item.filename });
-					const stale = existingFiles.get(item.path);
-					if (stale?.id) {
-						await deps.removeFileFromKnowledgeById(token, knowledgeId, stale.id).catch(
-							(error) => {
-								report.warnings.push(`overwrite: ${item.path}: ${reasonOf(error)}`);
-							}
-						);
-					}
-				} else {
-					existingKeys.add(item.path);
-					await importPlanned(item, { path: item.path, filename: item.filename });
-				}
-			} catch (error) {
-				report.failed.push({ path: item.path, reason: reasonOf(error) });
+				result = await deps.confirmOperation(token, knowledgeId, operationId);
+			} catch {
+				throw Object.assign(error, { operationId });
 			}
 		}
+		if (
+			result.status !== 'completed' ||
+			result.operation_id !== operationId ||
+			result.source_path !== item.path ||
+			result.directory_id !== input.directoryId ||
+			result.indexed !== (kind === 'markdown') ||
+			!result.file_id
+		) {
+			throw Object.assign(
+				new KnowledgeImportError(
+					'Import result was not confirmed',
+					'confirmation',
+					'pending',
+					undefined,
+					true
+				),
+				{ operationId }
+			);
+		}
+		return { fileId: result.file_id, operationId };
+	};
+	let cancelled = false;
+	for (let i = 0; i < ordered.length; i++) {
+		const item = ordered[i];
+		if (shouldCancel?.()) {
+			cancelled = true;
+			report.pending = ordered.slice(i).map((entry) => entry.path);
+			break;
+		}
+		onProgress?.({ processed: report.processed, total: report.total, current: item.path });
+		try {
+			const old = existing.files.get(item.path);
+			if (old && strategy === 'skip') {
+				if (item.kind === 'image') {
+					if (!old.id || old.has_original === false || !(await deps.canReadFile(token, old.id))) {
+						throw new Error('Existing image could not be confirmed readable');
+					}
+					const url = `/api/v1/files/${old.id}/content`;
+					imageUrls.set(item.path, url);
+					report.imageUrls.push({ path: item.path, url });
+				}
+				report.skipped.push({ path: item.path, reason: 'already exists' });
+				continue;
+			}
+			const target =
+				old && strategy === 'copy'
+					? copyTargetPath(item.path, taken)
+					: { path: item.path, filename: item.filename };
+			taken.add(target.path);
+			if (item.kind === 'image') {
+				const image = new File([item.file], target.filename, {
+					type: item.file.type || 'application/octet-stream'
+				});
+				const created = await submit(item, image, 'image');
+				const url = `/api/v1/files/${created.fileId}/content`;
+				imageUrls.set(item.path, url);
+				report.imageUrls.push({ path: item.path, url });
+				report.succeeded.push({ path: item.path, kind: 'image', fileId: created.fileId });
+			} else {
+				const text = await item.file.text();
+				if (parseImageRefs(text).some((ref) => /^(?:data|blob):/i.test(ref.dest))) {
+					throw new Error('Embedded or temporary image URLs cannot be imported');
+				}
+				const analysis = analyzeMarkdownNote(item.path, text, [...plan.paths], {});
+				const refs = parseImageRefs(text).length;
+				if (refs > MAX_IMAGE_REFS_PER_NOTE)
+					report.refHeavyFiles.push({ path: item.path, imageRefs: refs });
+				report.orphanImages.push(...analysis.orphanImages);
+				const missing: { raw: string; path: string }[] = [];
+				const original = rewriteImageRefs(
+					text,
+					(ref, path) => {
+						if (ref.external) return null;
+						const url = path && imageUrls.get(path);
+						if (url) return { form: 'url' as const, url };
+						missing.push({ raw: ref.raw, path: path ?? ref.dest });
+						return null;
+					},
+					{ mdDir: item.dir }
+				).content;
+				const indexText = rewriteImageRefs(
+					text,
+					(ref, path) => ({
+						form: 'text' as const,
+						text:
+							ref.alt?.trim() && !/(?:https?:|data:|\/api\/v1\/files\/|[\/\\])/i.test(ref.alt)
+								? ref.alt.trim().slice(0, 120)
+								: knowledgeImageMarker(path || 'image')
+					}),
+					{ mdDir: item.dir }
+				).content;
+				const readable = missing.length
+					? `${original}\n\n> ⚠️ Missing images: ${missing.map((m) => m.path).join(', ')}`
+					: original;
+				const output = new File([readable], target.filename, { type: 'text/markdown' });
+				const created = await submit(item, output, 'markdown', indexText);
+				if (missing.length) {
+					report.missingImages.push(...missing.map((m) => ({ mdPath: item.path, ...m })));
+					report.failed.push({
+						path: item.path,
+						reason: 'Referenced images are missing or were not confirmed',
+						stage: 'dependency',
+						fileId: created.fileId,
+						operationId: created.operationId
+					});
+				} else report.succeeded.push({ path: item.path, kind: 'markdown', fileId: created.fileId });
+			}
+			if (
+				old &&
+				strategy === 'overwrite' &&
+				old.id &&
+				!report.failed.some((failure) => failure.path === item.path)
+			) {
+				try {
+					await deps.removeFileFromKnowledgeById(token, knowledgeId, old.id);
+				} catch (error) {
+					report.succeeded = report.succeeded.filter((entry) => entry.path !== item.path);
+					report.failed.push({
+						path: item.path,
+						reason: `Replacement created; old file remains: ${reasonOf(error)}`,
+						stage: 'cleanup',
+						cleanupStatus: 'failed'
+					});
+				}
+			}
+		} catch (error) {
+			const detail = error instanceof KnowledgeImportError ? error : null;
+			report.failed.push({
+				path: item.path,
+				reason: reasonOf(error),
+				stage: detail?.stage || 'upload',
+				cleanupStatus: detail?.cleanupStatus,
+				fileId: detail?.fileId,
+				operationId: (error as any)?.operationId
+			});
+		} finally {
+			report.processed++;
+			onProgress?.({ processed: report.processed, total: report.total, current: item.path });
+		}
 	}
-
-	if (cancelled) {
-		report.status = 'cancelled';
-		report.warnings.push('import cancelled; already submitted files are kept');
-	}
+	const hasProblems =
+		report.failed.length > 0 || report.invalidPaths.length > 0 || report.missingImages.length > 0;
+	report.status = cancelled
+		? 'cancelled'
+		: hasProblems
+			? report.succeeded.length || report.skipped.length
+				? 'completed_with_errors'
+				: 'failed'
+			: 'completed';
 	report.finishedAt = Date.now();
 	return report;
 };

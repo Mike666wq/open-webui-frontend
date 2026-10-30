@@ -4487,5 +4487,9 @@
 	"Orphan images ({{count}})": "Orphan images ({{count}})",
 	"Files with many image references ({{count}})": "Files with many image references ({{count}})",
 	"Image access addresses ({{count}})": "Image access addresses ({{count}})",
-	"Warnings ({{count}})": "Warnings ({{count}})"
+	"Warnings ({{count}})": "Warnings ({{count}})",
+	"Import completed with errors": "Import completed with errors",
+	"Report storage unavailable; the report may not be available after refresh.": "Report storage unavailable; the report may not be available after refresh.",
+	"Not processed": "Not processed",
+	"Invalid paths": "Invalid paths"
 }

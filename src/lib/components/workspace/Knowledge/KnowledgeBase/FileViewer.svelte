@@ -1,5 +1,9 @@
 <script lang="ts">
 	import { focusLayer } from '$lib/components/common/focusLayer';
+	import {
+		blobToImageDataUrl,
+		renderAuthenticatedImportImages
+	} from '$lib/components/notes/markdown-import';
 	let expanded = false;
 	import { getContext, onDestroy, onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
@@ -29,6 +33,7 @@
 	export let saving = false;
 	const i18n = getContext<any>('i18n');
 	let previewData: Record<string, any> = {};
+	let rawImportedMarkdown: string | null = null;
 	let loading = false;
 	let indexedLoading = false;
 	let previewError = '';
@@ -107,6 +112,7 @@
 		loading = true;
 		previewError = '';
 		previewData = {};
+		rawImportedMarkdown = null;
 		sourceToggle = false;
 		if (objectUrl) URL.revokeObjectURL(objectUrl);
 		objectUrl = '';
@@ -156,7 +162,17 @@
 				) ||
 				mime.includes('json')
 			) {
-				data = { fileContent: await blob.text() };
+				let text = await blob.text();
+				if (
+					(file.meta?.data as any)?.markdown_import?.version === 2 &&
+					/\.(md|markdown|txt)$/i.test(name)
+				) {
+					rawImportedMarkdown = text;
+					text = await renderAuthenticatedImportImages(text, async (id) =>
+						blobToImageDataUrl(await getFileBlobById(localStorage.token, id, { signal }))
+					);
+				}
+				data = { fileContent: text };
 				if (mime === 'text/csv' && ext !== 'csv') previewName = `${name}.csv`;
 				if (mime === 'text/html' && !/^html?$/.test(ext)) previewName = `${name}.html`;
 				if (mime.includes('json') && !/^(json|jsonc|jsonl|json5|ipynb)$/.test(ext))
@@ -322,6 +338,7 @@
 				selectedFile={previewName}
 				fileLoading={loading || !originalLoaded}
 				{...previewData}
+				{...showRaw && rawImportedMarkdown !== null ? { fileContent: rawImportedMarkdown } : {}}
 				readOnly
 				allowScripts={false}
 				bind:showRaw

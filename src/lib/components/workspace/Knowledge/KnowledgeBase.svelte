@@ -35,6 +35,11 @@
 	import AddTextContentModal from './KnowledgeBase/AddTextContentModal.svelte';
 	import ImportFolderModal from './KnowledgeBase/ImportFolderModal.svelte';
 	import type { FolderImportReport } from './KnowledgeBase/knowledge-import';
+	import {
+		clearImportReports,
+		loadImportReport,
+		saveImportReport
+	} from './KnowledgeBase/import-report';
 
 	import SyncConfirmDialog from '../../common/ConfirmDialog.svelte';
 	import ConfirmDialog from '../../common/ConfirmDialog.svelte';
@@ -48,6 +53,15 @@
 	let showAddTextContentModal = false;
 	let showImportFolderModal = false;
 	let lastFolderImportReport: FolderImportReport | null = null;
+	let reportStorageUnavailable = false;
+	let reportUserId = '';
+	const cleanupReportsOnLogout = () => {
+		if (reportUserId && !localStorage.getItem('token')) {
+			try {
+				clearImportReports(sessionStorage, reportUserId);
+			} catch {}
+		}
+	};
 
 	let showSyncConfirmModal = false;
 	let pendingSyncFiles: Array<{ path: string; filename: string; file: File }> | null = null;
@@ -71,11 +85,11 @@
 		meta?: any;
 	};
 
-	let id = null;
+	let id = '';
 	let knowledge: Knowledge | null = null;
 	let isExternalKnowledge = false;
 
-	let inputFiles = null;
+	let inputFiles: FileList | null = null;
 	let fileItems: any[] = [];
 	let currentDirectoryId: string | null = null;
 	let breadcrumbs: any[] = [];
@@ -121,7 +135,7 @@
 		}
 	};
 
-	const createFileFromText = (name, content) => {
+	const createFileFromText = (name: string, content: string) => {
 		const blob = new Blob([content], { type: 'text/plain' });
 		const file = blobToFile(blob, `${name}.txt`);
 
@@ -129,18 +143,16 @@
 		return file;
 	};
 
-	const uploadWeb = async (urls) => {
+	const uploadWeb = async (urls: unknown) => {
 		const targetDirectoryId = currentDirectoryId;
 		if (!knowledge) {
 			toast.error($i18n.t('Knowledge base not found.'));
 			return;
 		}
 
-		if (!Array.isArray(urls)) {
-			urls = [urls];
-		}
+		const urlList = Array.isArray(urls) ? urls : [urls];
 
-		const newFileItems = urls.map((url) => ({
+		const newFileItems = urlList.map((url: string) => ({
 			type: 'file',
 			file: '',
 			id: null,
@@ -232,7 +244,7 @@
 		}
 	};
 
-	const uploadFileHandler = async (file) => {
+	const uploadFileHandler = async (file: File) => {
 		const targetDirectoryId = currentDirectoryId;
 		console.log(file);
 
@@ -254,17 +266,16 @@
 			return null;
 		}
 
-		if (
-			($config?.file?.max_size ?? null) !== null &&
-			file.size > ($config?.file?.max_size ?? 0) * 1024 * 1024
-		) {
+		const configAny = $config as unknown as { file?: { max_size?: number | null } } | null;
+		const maxSize = configAny?.file?.max_size ?? null;
+		if (maxSize !== null && file.size > maxSize * 1024 * 1024) {
 			console.log('File exceeds max size limit:', {
 				fileSize: file.size,
-				maxSize: ($config?.file?.max_size ?? 0) * 1024 * 1024
+				maxSize: (maxSize ?? 0) * 1024 * 1024
 			});
 			toast.error(
 				$i18n.t(`File size should not exceed {{maxSize}} MB.`, {
-					maxSize: $config?.file?.max_size
+					maxSize: maxSize ?? 0
 				})
 			);
 			return;
@@ -272,6 +283,11 @@
 
 		fileItems = [fileItem, ...(fileItems ?? [])];
 		try {
+			if (!knowledge) {
+				toast.error($i18n.t('Knowledge base not found.'));
+				return;
+			}
+
 			let metadata = {
 				knowledge_id: knowledge.id,
 				directory_id: targetDirectoryId,
@@ -325,12 +341,12 @@
 	};
 
 	// Helper function to check if a path contains hidden folders
-	const hasHiddenFolder = (path) => {
-		return path.split('/').some((part) => part.startsWith('.'));
+	const hasHiddenFolder = (path: string) => {
+		return path.split('/').some((part: string) => part.startsWith('.'));
 	};
 
 	// Error handler
-	const handleUploadError = (error) => {
+	const handleUploadError = (error: Error) => {
 		if (error.name === 'AbortError') {
 			toast.info($i18n.t('Directory selection was cancelled'));
 		} else {
@@ -349,7 +365,9 @@
 				const collected: DirectoryFileEntry[] = [];
 
 				async function traverse(handle: FileSystemDirectoryHandle, dirPath = '') {
-					for await (const entry of handle.values()) {
+					for await (const entry of (
+						handle as FileSystemDirectoryHandle & { values(): AsyncIterable<FileSystemHandle> }
+					).values()) {
 						if (entry.name.startsWith('.')) continue;
 						const entryPath = dirPath ? `${dirPath}/${entry.name}` : entry.name;
 						if (hasHiddenFolder(entryPath)) continue;
@@ -357,13 +375,13 @@
 						if (entry.kind === 'file') {
 							let file: File;
 							try {
-								file = await entry.getFile();
+								file = await (entry as FileSystemFileHandle).getFile();
 							} catch (error) {
 								throw new Error(`"${entryPath}": ${error}`);
 							}
 							collected.push({ path: dirPath, filename: entry.name, file });
 						} else if (entry.kind === 'directory') {
-							await traverse(entry, entryPath);
+							await traverse(entry as FileSystemDirectoryHandle, entryPath);
 						}
 					}
 				}
@@ -376,7 +394,7 @@
 					const input = document.createElement('input');
 					input.type = 'file';
 					input.webkitdirectory = true;
-					input.directory = true;
+					(input as HTMLInputElement & { directory?: boolean }).directory = true;
 					input.multiple = true;
 					input.style.display = 'none';
 					document.body.appendChild(input);
@@ -411,7 +429,7 @@
 				});
 			}
 		} catch (error) {
-			handleUploadError(error);
+			handleUploadError(error instanceof Error ? error : new Error(String(error)));
 			return null;
 		}
 	};
@@ -468,6 +486,11 @@
 			});
 
 			const fileObject = new File([entry.file], entry.filename, { type: entry.file.type });
+			if (!knowledge) {
+				toast.error($i18n.t('Knowledge base not found.'));
+				return;
+			}
+
 			const uploadedFile = await uploadFile(localStorage.token, fileObject, {
 				knowledge_id: knowledge.id,
 				file_hash: entry.checksum,
@@ -617,7 +640,7 @@
 		}
 	};
 
-	let debounceTimeout = null;
+	let debounceTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	let dragged = false;
 
@@ -628,7 +651,7 @@
 		}
 
 		debounceTimeout = setTimeout(async () => {
-			if (knowledge.name.trim() === '' || knowledge.description.trim() === '') {
+			if (!knowledge || knowledge.name.trim() === '' || knowledge.description.trim() === '') {
 				toast.error($i18n.t('Please fill in all fields.'));
 				return;
 			}
@@ -700,7 +723,7 @@
 		return [];
 	};
 
-	const onDragOver = (e) => {
+	const onDragOver = (e: DragEvent) => {
 		e.preventDefault();
 
 		// Check if a file is being draggedOver.
@@ -715,7 +738,7 @@
 		dragged = false;
 	};
 
-	const onDrop = async (e) => {
+	const onDrop = async (e: DragEvent) => {
 		e.preventDefault();
 		dragged = false;
 
@@ -742,7 +765,7 @@
 							try {
 								directoryEntries.push(...(await collectDroppedEntryFiles(entry)));
 							} catch (error) {
-								handleUploadError(error);
+								handleUploadError(error instanceof Error ? error : new Error(String(error)));
 								return;
 							}
 						} else {
@@ -768,7 +791,19 @@
 	};
 
 	onMount(async () => {
-		id = $page.params.id;
+		id = $page.params.id ?? '';
+		if (!id) {
+			goto('/workspace/knowledge');
+			return;
+		}
+		reportUserId = $user?.id ?? '';
+		try {
+			if (reportUserId && id)
+				lastFolderImportReport = loadImportReport(sessionStorage, reportUserId, id);
+		} catch {
+			reportStorageUnavailable = true;
+		}
+		window.addEventListener('pagehide', cleanupReportsOnLogout);
 		const res = await getKnowledgeById(localStorage.token, id).catch((e) => {
 			toast.error(`${e}`);
 			return null;
@@ -776,7 +811,7 @@
 
 		if (res) {
 			knowledge = res;
-			if (!Array.isArray(knowledge?.access_grants)) {
+			if (knowledge && !Array.isArray(knowledge?.access_grants)) {
 				knowledge.access_grants = [];
 			}
 		} else {
@@ -790,7 +825,9 @@
 	});
 
 	onDestroy(() => {
-		clearTimeout(debounceTimeout);
+		cleanupReportsOnLogout();
+		window.removeEventListener('pagehide', cleanupReportsOnLogout);
+		if (debounceTimeout !== null) clearTimeout(debounceTimeout);
 		const dropZone = document.querySelector('body');
 		dropZone?.removeEventListener('dragover', onDragOver);
 		dropZone?.removeEventListener('drop', onDrop);
@@ -832,8 +869,11 @@
 	bind:show={showImportFolderModal}
 	knowledgeId={id ?? ''}
 	lastReport={lastFolderImportReport}
+	{reportStorageUnavailable}
 	on:completed={(e) => {
 		lastFolderImportReport = e.detail;
+		reportStorageUnavailable =
+			!reportUserId || !id || !saveImportReport(sessionStorage, reportUserId, id, e.detail);
 		init();
 	}}
 />
@@ -853,7 +893,7 @@
 			inputFiles = null;
 			const fileInputElement = document.getElementById('files-input');
 
-			if (fileInputElement) {
+			if (fileInputElement instanceof HTMLInputElement) {
 				fileInputElement.value = '';
 			}
 		} else {
@@ -875,7 +915,7 @@
 				$user?.role === 'admin'}
 			onChange={async () => {
 				try {
-					await updateKnowledgeAccessGrants(localStorage.token, id, knowledge.access_grants ?? []);
+					await updateKnowledgeAccessGrants(localStorage.token, id, knowledge?.access_grants ?? []);
 					toast.success($i18n.t('Saved'));
 				} catch (error) {
 					toast.error(`${error}`);
