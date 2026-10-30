@@ -5,8 +5,8 @@ import {
 	isMarkdownPath,
 	knowledgeImageMarker,
 	normalizeRelativePath,
-	parseImageRefs,
 	rewriteImageRefs,
+	scanMarkdownImages,
 	type ImportPreview
 } from '$lib/components/notes/markdown-import';
 import { computeFileHash } from '$lib/utils/hash';
@@ -272,6 +272,7 @@ export interface FolderImportReport {
 	skipped: SkippedEntry[];
 	failed: FailedEntry[];
 	missingImages: { mdPath: string; raw: string; path: string }[];
+	unsupportedImages: { mdPath: string; raw: string; reason: string }[];
 	orphanImages: string[];
 	invalidPaths: { relativePath: string; reason: string }[];
 	/** Documents whose image reference count exceeded the threshold (#10). */
@@ -344,6 +345,7 @@ export const runFolderImport = async (
 		skipped: [],
 		failed: [],
 		missingImages: [],
+		unsupportedImages: [],
 		orphanImages: [],
 		invalidPaths: [],
 		refHeavyFiles: [],
@@ -479,16 +481,17 @@ export const runFolderImport = async (
 				report.succeeded.push({ path: item.path, kind: 'image', fileId: created.fileId });
 			} else {
 				const text = await item.file.text();
-				if (parseImageRefs(text).some((ref) => /^(?:data|blob):/i.test(ref.dest))) {
+				const scan = scanMarkdownImages(text);
+				if (scan.refs.some((ref) => /^(?:data|blob):/i.test(ref.dest))) {
 					throw new Error('Embedded or temporary image URLs cannot be imported');
 				}
 				const analysis = analyzeMarkdownNote(item.path, text, [...plan.paths], {});
-				const refs = parseImageRefs(text).length;
+				const refs = scan.refs.length;
 				if (refs > MAX_IMAGE_REFS_PER_NOTE)
 					report.refHeavyFiles.push({ path: item.path, imageRefs: refs });
 				report.orphanImages.push(...analysis.orphanImages);
 				const missing: { raw: string; path: string }[] = [];
-				const original = rewriteImageRefs(
+				const originalRewrite = rewriteImageRefs(
 					text,
 					(ref, path) => {
 						if (ref.external) return null;
@@ -498,7 +501,14 @@ export const runFolderImport = async (
 						return null;
 					},
 					{ mdDir: item.dir }
-				).content;
+				);
+				const original = originalRewrite.content;
+				const unsupported = originalRewrite.outcomes
+					.filter((outcome) => outcome.status === 'unsupported')
+					.map((outcome) => ({
+						raw: outcome.raw,
+						reason: outcome.reason || 'Unsupported image reference'
+					}));
 				const indexText = rewriteImageRefs(
 					text,
 					(ref, path) => ({
@@ -515,6 +525,11 @@ export const runFolderImport = async (
 					: original;
 				const output = new File([readable], target.filename, { type: 'text/markdown' });
 				const created = await submit(item, output, 'markdown', indexText);
+				if (unsupported.length) {
+					report.unsupportedImages.push(
+						...unsupported.map((image) => ({ mdPath: item.path, ...image }))
+					);
+				}
 				if (missing.length) {
 					report.missingImages.push(...missing.map((m) => ({ mdPath: item.path, ...m })));
 					report.failed.push({
@@ -560,7 +575,10 @@ export const runFolderImport = async (
 		}
 	}
 	const hasProblems =
-		report.failed.length > 0 || report.invalidPaths.length > 0 || report.missingImages.length > 0;
+		report.failed.length > 0 ||
+		report.invalidPaths.length > 0 ||
+		report.missingImages.length > 0 ||
+		report.unsupportedImages.length > 0;
 	report.status = cancelled
 		? 'cancelled'
 		: hasProblems

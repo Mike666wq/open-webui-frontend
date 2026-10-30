@@ -29,6 +29,7 @@ const report = (): FolderImportReport => ({
 	skipped: [],
 	failed: [{ path: '/Users/private/x.md', reason: 'Bearer secret-token /Users/private/x.md' }],
 	missingImages: [],
+	unsupportedImages: [],
 	orphanImages: [],
 	invalidPaths: [],
 	refHeavyFiles: [],
@@ -57,5 +58,32 @@ describe('import report persistence', () => {
 			throw new Error('quota');
 		};
 		expect(saveImportReport(storage, 'alice', 'kb', report())).toBe(false);
+	});
+
+	it('persists bounded unsupported-image diagnostics and normalizes legacy reports', () => {
+		const storage = memory();
+		const value = report();
+		value.unsupportedImages = [
+			{
+				mdPath: 'notes/a.md',
+				raw: '![ref][id] https://example.test/private',
+				reason: 'Reference-style image is unsupported'
+			}
+		];
+		expect(saveImportReport(storage, 'alice', 'kb', value)).toBe(true);
+		const loaded = loadImportReport(storage, 'alice', 'kb');
+		expect(loaded?.unsupportedImages).toEqual([
+			{
+				mdPath: 'notes/a.md',
+				raw: '![ref][id] [url]',
+				reason: 'Reference-style image is unsupported'
+			}
+		]);
+
+		storage.setItem(
+			'owui:knowledge-import:v2:alice:legacy',
+			JSON.stringify({ ...report(), unsupportedImages: undefined })
+		);
+		expect(loadImportReport(storage, 'alice', 'legacy')?.unsupportedImages).toEqual([]);
 	});
 });

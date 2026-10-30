@@ -144,14 +144,34 @@ export interface ParsedImageRef {
 	decodedPath: string;
 	/** http(s):// external reference — kept as-is by the importer (#6). */
 	external: boolean;
+	/** Source form. HTML tags are rewritten at the `src` attribute only. */
+	syntax: 'markdown' | 'html';
+	/** Zero-based source offsets used for source-preserving rewrites. */
+	start: number;
+	end: number;
 }
 
-// Bare destinations reject whitespace per CommonMark; balanced single-level
-// parentheses are allowed so names like `a(1).png` still resolve.
-const IMAGE_REF_PATTERN =
-	/!\[([^\]\n]*)\]\(\s*(?:<([^>\n]*)>|((?:[^()\s]|\([^()\s]*\))+))(?:\s+(?:"([^"\n]*)"|'([^'\n]*)'))?\s*\)/g;
+export type UnsupportedImageKind = 'reference-style' | 'html' | 'malformed';
 
-const FENCE_PATTERN = /^\s{0,3}(?:```|~~~)/;
+export interface UnsupportedImageRef {
+	raw: string;
+	start: number;
+	end: number;
+	kind: UnsupportedImageKind;
+	reason: string;
+}
+
+export interface MarkdownImageScan {
+	refs: ParsedImageRef[];
+	unsupported: UnsupportedImageRef[];
+}
+
+interface MarkdownLine {
+	line: string;
+	start: number;
+	fenced: boolean;
+	inlineCode: Array<[number, number]>;
+}
 
 // CommonMark code spans protect their content from image rewriting.
 function inlineCodeRanges(line: string): Array<[number, number]> {
@@ -174,6 +194,87 @@ function inlineCodeRanges(line: string): Array<[number, number]> {
 	return ranges;
 }
 
+interface FenceMarker {
+	char: '`' | '~';
+	length: number;
+	info: string;
+}
+
+/**
+ * Recognize a fence even when it is the first child of a list item. Typora
+ * commonly writes `- ```bash`; treating that as ordinary text leaves the fence
+ * parser inverted for every later image in the document.
+ */
+function fenceMarker(line: string): FenceMarker | null {
+	let i = 0;
+	while (i < line.length) {
+		while (line[i] === ' ' || line[i] === '\t') i++;
+		if (line[i] !== '>') break;
+		i++;
+		if (line[i] === ' ' || line[i] === '\t') i++;
+	}
+
+	while (i < line.length) {
+		while (line[i] === ' ' || line[i] === '\t') i++;
+		const marker = /^(?:[-+*]|\d{1,9}[.)])[ \t]+/.exec(line.slice(i));
+		if (!marker) break;
+		i += marker[0].length;
+	}
+	while (line[i] === ' ' || line[i] === '\t') i++;
+
+	const char = line[i];
+	if (char !== '`' && char !== '~') return null;
+	let length = 0;
+	while (line[i + length] === char) length++;
+	if (length < 3) return null;
+	const info = line.slice(i + length).replace(/\r$/, '');
+	if (char === '`' && info.includes('`')) return null;
+	return { char, length, info };
+}
+
+function protectedMarkdownLines(markdown: string): MarkdownLine[] {
+	const lines: MarkdownLine[] = [];
+	let fence: { char: '`' | '~'; length: number } | null = null;
+	let offset = 0;
+	for (const rawLine of markdown.split('\n')) {
+		const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+		const marker = fenceMarker(line);
+		let fenced = false;
+		if (fence) {
+			fenced = true;
+			if (
+				marker &&
+				marker.char === fence.char &&
+				marker.length >= fence.length &&
+				marker.info.trim() === ''
+			) {
+				fence = null;
+			}
+		} else if (marker) {
+			fenced = true;
+			fence = { char: marker.char, length: marker.length };
+		}
+		lines.push({
+			line,
+			start: offset,
+			fenced,
+			inlineCode: fenced ? [] : inlineCodeRanges(line)
+		});
+		offset += rawLine.length + 1;
+	}
+	return lines;
+}
+
+function normalizeReferenceLabel(raw: string): string {
+	return raw.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function isEscaped(text: string, index: number): boolean {
+	let slashes = 0;
+	for (let i = index - 1; i >= 0 && text[i] === '\\'; i--) slashes++;
+	return slashes % 2 === 1;
+}
+
 /**
  * Strip the fragment/query part of a reference target. Raw `#` and `?` in a
  * bare destination start the fragment and are removed; inside `<...>` they are
@@ -192,7 +293,10 @@ function toImageRef(
 	wrapped: string | undefined,
 	bare: string | undefined,
 	doubleQuoted: string | undefined,
-	singleQuoted: string | undefined
+	singleQuoted: string | undefined,
+	syntax: ParsedImageRef['syntax'],
+	start: number,
+	end: number
 ): ParsedImageRef {
 	const destRaw = (wrapped ?? bare ?? '').trim();
 	const stripped = stripDestFragment(destRaw, wrapped !== undefined);
@@ -206,34 +310,323 @@ function toImageRef(
 		title,
 		dest: stripped,
 		decodedPath: decodePercentPath(stripped),
-		external: /^https?:\/\//i.test(stripped)
+		external: /^https?:\/\//i.test(stripped),
+		syntax,
+		start,
+		end
+	};
+}
+
+interface ParsedImageLocation {
+	ref?: ParsedImageRef;
+	unsupported?: UnsupportedImageRef;
+	/** Local line offset after the recognized construct. */
+	end: number;
+}
+
+function findClosingParen(line: string, open: number): number {
+	let depth = 1;
+	let quote: '"' | "'" | null = null;
+	for (let i = open + 1; i < line.length; i++) {
+		const char = line[i];
+		if (char === '\\') {
+			i++;
+			continue;
+		}
+		if (quote) {
+			if (char === quote) quote = null;
+			continue;
+		}
+		if ((char === '"' || char === "'") && i > 0 && /\s/.test(line[i - 1])) {
+			quote = char;
+			continue;
+		}
+		if (char === '(') depth++;
+		else if (char === ')' && --depth === 0) return i;
+		if (char === '\r') break;
+	}
+	return -1;
+}
+
+function splitBareDestination(value: string): {
+	dest: string;
+	doubleQuoted?: string;
+	singleQuoted?: string;
+} {
+	const trimmed = value.trim();
+	const title = /^(.*?)\s+(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)')\s*$/.exec(trimmed);
+	if (!title || !title[1].trim()) return { dest: trimmed };
+	return {
+		dest: title[1].trim(),
+		...(title[2] !== undefined ? { doubleQuoted: title[2] } : {}),
+		...(title[3] !== undefined ? { singleQuoted: title[3] } : {})
+	};
+}
+
+function parseMarkdownImage(
+	line: string,
+	start: number,
+	lineStart: number,
+	references: ReadonlySet<string>
+): ParsedImageLocation | null {
+	if (line[start] !== '!' || line[start + 1] !== '[' || isEscaped(line, start)) return null;
+
+	let closeAlt = -1;
+	for (let i = start + 2; i < line.length; i++) {
+		if (line[i] === '\\') {
+			i++;
+			continue;
+		}
+		if (line[i] === ']') {
+			closeAlt = i;
+			break;
+		}
+	}
+	if (closeAlt === -1) return null;
+	const alt = line.slice(start + 2, closeAlt);
+	const next = closeAlt + 1;
+
+	if (line[next] === '[') {
+		let closeReference = -1;
+		for (let i = next + 1; i < line.length; i++) {
+			if (line[i] === '\\') {
+				i++;
+				continue;
+			}
+			if (line[i] === ']') {
+				closeReference = i;
+				break;
+			}
+		}
+		const end = closeReference === -1 ? line.length : closeReference + 1;
+		const raw = line.slice(start, end);
+		return {
+			unsupported: {
+				raw,
+				start: lineStart + start,
+				end: lineStart + end,
+				kind: 'reference-style',
+				reason: '引用式图片暂不支持'
+			},
+			end
+		};
+	}
+
+	if (line[next] !== '(') {
+		if (references.has(normalizeReferenceLabel(alt))) {
+			const end = closeAlt + 1;
+			return {
+				unsupported: {
+					raw: line.slice(start, end),
+					start: lineStart + start,
+					end: lineStart + end,
+					kind: 'reference-style',
+					reason: '引用式图片暂不支持'
+				},
+				end
+			};
+		}
+		return null;
+	}
+
+	let targetStart = next + 1;
+	while (line[targetStart] === ' ' || line[targetStart] === '\t') targetStart++;
+
+	let end: number;
+	let wrapped: string | undefined;
+	let bare: string | undefined;
+	let doubleQuoted: string | undefined;
+	let singleQuoted: string | undefined;
+
+	if (line[targetStart] === '<') {
+		let closeAngle = -1;
+		for (let i = targetStart + 1; i < line.length; i++) {
+			if (line[i] === '\\') {
+				i++;
+				continue;
+			}
+			if (line[i] === '>') {
+				closeAngle = i;
+				break;
+			}
+		}
+		if (closeAngle !== -1) {
+			const tail = line.slice(closeAngle + 1);
+			const close = /^[ \t]*(?:(?:"([^"\n]*)"|'([^'\n]*)')[ \t]*)?\)/.exec(tail);
+			if (close) {
+				wrapped = line.slice(targetStart + 1, closeAngle);
+				doubleQuoted = close[1];
+				singleQuoted = close[2];
+				end = closeAngle + 1 + close[0].length;
+			} else end = -1;
+		} else end = -1;
+	} else {
+		const closeParen = findClosingParen(line, next);
+		if (closeParen !== -1) {
+			const parts = splitBareDestination(line.slice(next + 1, closeParen));
+			bare = parts.dest;
+			doubleQuoted = parts.doubleQuoted;
+			singleQuoted = parts.singleQuoted;
+			end = closeParen + 1;
+		} else end = -1;
+	}
+
+	if (end === -1 || (!wrapped && !bare)) {
+		const raw = line.slice(start);
+		return {
+			unsupported: {
+				raw,
+				start: lineStart + start,
+				end: lineStart + line.length,
+				kind: 'malformed',
+				reason: '图片语法不完整'
+			},
+			end: line.length
+		};
+	}
+
+	const raw = line.slice(start, end);
+	return {
+		ref: toImageRef(
+			raw,
+			alt,
+			wrapped,
+			bare,
+			doubleQuoted,
+			singleQuoted,
+			'markdown',
+			lineStart + start,
+			lineStart + end
+		),
+		end
+	};
+}
+
+function htmlAttribute(tag: string, name: string): string | null {
+	const body = tag.slice(4, -1);
+	const attributes =
+		/(?:^|\s)([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
+	for (const match of body.matchAll(attributes)) {
+		if (match[1].toLowerCase() === name) return match[2] ?? match[3] ?? match[4] ?? null;
+	}
+	return null;
+}
+
+function parseHtmlImage(line: string, start: number, lineStart: number): ParsedImageLocation | null {
+	if (
+		line.slice(start, start + 4).toLowerCase() !== '<img' ||
+		!/[\s/>]/.test(line[start + 4] ?? '') ||
+		isEscaped(line, start)
+	)
+		return null;
+
+	let quote: '"' | "'" | null = null;
+	let close = -1;
+	for (let i = start + 4; i < line.length; i++) {
+		const char = line[i];
+		if (quote) {
+			if (char === quote) quote = null;
+			continue;
+		}
+		if (char === '"' || char === "'") {
+			quote = char;
+			continue;
+		}
+		if (char === '>') {
+			close = i;
+			break;
+		}
+	}
+	const end = close === -1 ? line.length : close + 1;
+	const raw = line.slice(start, end);
+	if (close === -1) {
+		return {
+			unsupported: {
+				raw,
+				start: lineStart + start,
+				end: lineStart + end,
+				kind: 'html',
+				reason: '<img> 标签不完整'
+			},
+			end
+		};
+	}
+	const src = htmlAttribute(raw, 'src');
+	if (src === null || src.trim() === '') {
+		return {
+			unsupported: {
+				raw,
+				start: lineStart + start,
+				end: lineStart + end,
+				kind: 'html',
+				reason: '<img> 标签缺少静态 src'
+			},
+			end
+		};
+	}
+	return {
+		ref: toImageRef(
+			raw,
+			htmlAttribute(raw, 'alt') ?? '',
+			undefined,
+			src,
+			undefined,
+			undefined,
+			'html',
+			lineStart + start,
+			lineStart + end
+		),
+		end
 	};
 }
 
 /**
- * Parse every image reference in the Markdown body. References inside fenced
- * code blocks are ignored so rewriting never corrupts code samples. Known
- * limitations (acceptable for the Typora-style source corpus): reference-style
- * `![alt][def]` images and `<img>` HTML tags are not parsed, and image syntax
- * inside inline code spans is preserved.
+ * Scan Markdown and inline HTML images while preserving source offsets. Code
+ * spans, fenced code blocks and escaped markers are excluded. Unsupported
+ * reference-style images are reported separately rather than silently dropped.
  */
-export function parseImageRefs(markdown: string): ParsedImageRef[] {
+export function scanMarkdownImages(markdown: string): MarkdownImageScan {
+	const lines = protectedMarkdownLines(markdown);
+	const references = new Set<string>();
+	for (const item of lines) {
+		if (item.fenced) continue;
+		const definition = /^[ \t]{0,3}\[([^\]\n]+)\]:[ \t]*(?:<[^>\n]*>|\S)/.exec(item.line);
+		if (definition) references.add(normalizeReferenceLabel(definition[1]));
+	}
+
 	const refs: ParsedImageRef[] = [];
-	let inFence = false;
-	for (const line of markdown.split('\n')) {
-		if (FENCE_PATTERN.test(line)) {
-			inFence = !inFence;
-			continue;
-		}
-		if (inFence) continue;
-		const codeRanges = inlineCodeRanges(line);
-		for (const m of line.matchAll(IMAGE_REF_PATTERN)) {
-			if (codeRanges.some(([start, end]) => m.index! >= start && m.index! < end)) continue;
-			const [raw, alt, wrapped, bare, dq, sq] = m;
-			refs.push(toImageRef(raw, alt ?? '', wrapped, bare, dq, sq));
+	const unsupported: UnsupportedImageRef[] = [];
+	for (const item of lines) {
+		if (item.fenced) continue;
+		for (let i = 0; i < item.line.length; ) {
+			const codeRange = item.inlineCode.find(([start, end]) => i >= start && i < end);
+			if (codeRange) {
+				i = codeRange[1];
+				continue;
+			}
+			const parsed =
+				item.line[i] === '!'
+					? parseMarkdownImage(item.line, i, item.start, references)
+					: item.line[i] === '<'
+						? parseHtmlImage(item.line, i, item.start)
+						: null;
+			if (parsed) {
+				if (parsed.ref) refs.push(parsed.ref);
+				if (parsed.unsupported) unsupported.push(parsed.unsupported);
+				i = parsed.end;
+				continue;
+			}
+			i++;
 		}
 	}
-	return refs;
+	refs.sort((a, b) => a.start - b.start);
+	unsupported.sort((a, b) => a.start - b.start);
+	return { refs, unsupported };
+}
+
+/** Backwards-compatible supported-reference accessor. */
+export function parseImageRefs(markdown: string): ParsedImageRef[] {
+	return scanMarkdownImages(markdown).refs;
 }
 
 // ── Same-name directory rule (K17, interface_decisions #14) ─────────────────
@@ -259,6 +652,7 @@ export interface MarkdownNoteAnalysis {
 	outsideDirRefs: { raw: string; path: string }[];
 	externalRefs: ParsedImageRef[];
 	rejectedRefs: { raw: string; kind: PathRejectionKind; reason: string }[];
+	unsupportedRefs: UnsupportedImageRef[];
 }
 
 /**
@@ -274,7 +668,8 @@ export function analyzeMarkdownNote(
 	options?: { isImageFile?: (path: string) => boolean }
 ): MarkdownNoteAnalysis {
 	const isImage = options?.isImageFile ?? isImagePath;
-	const refs = parseImageRefs(markdown);
+	const scan = scanMarkdownImages(markdown);
+	const refs = scan.refs;
 	const existing = new Set(allFilePaths);
 	const mdDir = posixDirname(mdPath);
 	const title = noteTitleFromPath(mdPath);
@@ -329,7 +724,8 @@ export function analyzeMarkdownNote(
 		missingRefs,
 		outsideDirRefs,
 		externalRefs,
-		rejectedRefs
+		rejectedRefs,
+		unsupportedRefs: scan.unsupported
 	};
 }
 
@@ -344,7 +740,12 @@ export function analyzeMarkdownNote(
  */
 export type ResolvedImageTarget = { form: 'url'; url: string } | { form: 'text'; text: string };
 
-export type RewriteOutcomeStatus = 'rewritten' | 'unresolved' | 'external' | 'rejected';
+export type RewriteOutcomeStatus =
+	| 'rewritten'
+	| 'unresolved'
+	| 'external'
+	| 'rejected'
+	| 'unsupported';
 
 export interface RewriteOutcome {
 	raw: string;
@@ -374,67 +775,76 @@ export function rewriteImageRefs(
 	options?: { mdDir?: string }
 ): { content: string; outcomes: RewriteOutcome[] } {
 	const mdDir = options?.mdDir ?? '';
-	const outcomes: RewriteOutcome[] = [];
-	const outLines: string[] = [];
-	let inFence = false;
+	const scan = scanMarkdownImages(markdown);
+	const events: Array<{
+		start: number;
+		end: number;
+		replacement: string;
+		outcome: RewriteOutcome;
+	}> = [];
 
-	for (const line of markdown.split('\n')) {
-		if (FENCE_PATTERN.test(line)) {
-			inFence = !inFence;
-			outLines.push(line);
-			continue;
-		}
-		if (inFence) {
-			outLines.push(line);
-			continue;
-		}
-		const codeRanges = inlineCodeRanges(line);
-		outLines.push(
-			line.replace(IMAGE_REF_PATTERN, (raw, alt, wrapped, bare, dq, sq, offset) => {
-				if (codeRanges.some(([start, end]) => offset >= start && offset < end)) return raw;
-				const ref = toImageRef(raw, alt ?? '', wrapped, bare, dq, sq);
-				if (ref.external) {
-					const target = resolve(ref, null);
-					if (target) {
-						outcomes.push({
-							raw,
-							status: 'rewritten',
-							alt: ref.alt,
-							title: ref.title,
-							path: null,
-							from: ref.dest,
-							to: target.form === 'url' ? target.url : target.text
-						});
-						return target.form === 'url' ? buildUrlRef(ref, target.url) : target.text;
+	for (const ref of scan.refs) {
+		if (ref.external) {
+			const target = resolve(ref, null);
+			if (target) {
+				events.push({
+					start: ref.start,
+					end: ref.end,
+					replacement: rewriteTarget(ref, target),
+					outcome: {
+						raw: ref.raw,
+						status: 'rewritten',
+						alt: ref.alt,
+						title: ref.title,
+						path: null,
+						from: ref.dest,
+						to: target.form === 'url' ? target.url : target.text
 					}
-					outcomes.push({
-						raw,
+				});
+			} else {
+				events.push({
+					start: ref.start,
+					end: ref.end,
+					replacement: ref.raw,
+					outcome: {
+						raw: ref.raw,
 						status: 'external',
 						alt: ref.alt,
 						title: ref.title,
 						path: null,
 						from: ref.dest,
 						to: null
-					});
-					return raw;
+					}
+				});
+			}
+			continue;
+		}
+
+		const res = resolveRefPath(mdDir, ref.dest);
+		const path = res.ok ? res.path : null;
+		const target = resolve(ref, path);
+		if (target) {
+			events.push({
+				start: ref.start,
+				end: ref.end,
+				replacement: rewriteTarget(ref, target),
+				outcome: {
+					raw: ref.raw,
+					status: 'rewritten',
+					alt: ref.alt,
+					title: ref.title,
+					path,
+					from: ref.dest,
+					to: target.form === 'url' ? target.url : target.text
 				}
-				const res = resolveRefPath(mdDir, ref.dest);
-				const path = res.ok ? res.path : null;
-				const target = resolve(ref, path);
-				if (target) {
-					outcomes.push({
-						raw,
-						status: 'rewritten',
-						alt: ref.alt,
-						title: ref.title,
-						path,
-						from: ref.dest,
-						to: target.form === 'url' ? target.url : target.text
-					});
-					return target.form === 'url' ? buildUrlRef(ref, target.url) : target.text;
-				}
-				outcomes.push({
-					raw,
+			});
+		} else {
+			events.push({
+				start: ref.start,
+				end: ref.end,
+				replacement: ref.raw,
+				outcome: {
+					raw: ref.raw,
 					status: res.ok ? 'unresolved' : 'rejected',
 					alt: ref.alt,
 					title: ref.title,
@@ -442,18 +852,63 @@ export function rewriteImageRefs(
 					from: ref.dest,
 					to: null,
 					reason: res.ok ? undefined : res.rejection.reason
-				});
-				return raw;
-			})
-		);
+				}
+			});
+		}
 	}
 
-	return { content: outLines.join('\n'), outcomes };
+	for (const ref of scan.unsupported) {
+		events.push({
+			start: ref.start,
+			end: ref.end,
+			replacement: ref.raw,
+			outcome: {
+				raw: ref.raw,
+				status: 'unsupported',
+				alt: '',
+				title: null,
+				path: null,
+				from: null,
+				to: null,
+				reason: ref.reason
+			}
+		});
+	}
+
+	events.sort((a, b) => a.start - b.start);
+	let content = markdown;
+	for (let i = events.length - 1; i >= 0; i--) {
+		const event = events[i];
+		content = `${content.slice(0, event.start)}${event.replacement}${content.slice(event.end)}`;
+	}
+	return { content, outcomes: events.map((event) => event.outcome) };
 }
 
 /** Rebuild `![alt](url "title")` keeping alt/title, swapping only the URL. */
 function buildUrlRef(ref: ParsedImageRef, url: string): string {
 	return ref.title !== null ? `![${ref.alt}](${url} "${ref.title}")` : `![${ref.alt}](${url})`;
+}
+
+function replaceHtmlImageSrc(raw: string, url: string): string {
+	return raw.replace(
+		/(\s+src\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i,
+		(_match, prefix: string, doubleQuoted: string, singleQuoted: string, bare: string) => {
+			if (doubleQuoted !== undefined)
+				return `${prefix}"${url.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`;
+			if (singleQuoted !== undefined)
+				return `${prefix}'${url.replace(/&/g, '&amp;').replace(/'/g, '&#39;')}'`;
+			if (!bare || /["'\s]/.test(url))
+				return `${prefix}"${url.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`;
+			return `${prefix}${url}`;
+		}
+	);
+}
+
+function rewriteTarget(ref: ParsedImageRef, target: ResolvedImageTarget): string {
+	if (target.form === 'text') return target.text;
+	return ref.syntax === 'html'
+		? replaceHtmlImageSrc(ref.raw, target.url)
+		: buildUrlRef(ref, target.url);
 }
 
 // ── Dedup and idempotency keys (interface_decisions #4/#9) ───────────────────

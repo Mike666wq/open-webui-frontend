@@ -15,7 +15,8 @@ import {
 	parseImageRefs,
 	normalizeRelativePath,
 	resolveRefPath,
-	rewriteImageRefs
+	rewriteImageRefs,
+	scanMarkdownImages
 } from './markdown-import';
 
 // P-006 S1 — tests for the pure Markdown import core (K1/K2/K14/K17/K18).
@@ -34,7 +35,10 @@ describe('parseImageRefs (K1)', () => {
 			title: null,
 			dest: 'img/a.png',
 			decodedPath: 'img/a.png',
-			external: false
+			external: false,
+			syntax: 'markdown',
+			start: 0,
+			end: 17
 		});
 	});
 
@@ -101,6 +105,70 @@ describe('parseImageRefs (K1)', () => {
 			'![out](real.png)'
 		].join('\n');
 		expect(destsOf(md)).toEqual(['real.png']);
+	});
+
+	it('tracks list-item fences and does not invert every later image', () => {
+		const md = [
+			'- ```bash',
+			'  code',
+			'  ```',
+			'![real](real.png)',
+			'> 1. ````text',
+			'>    ![nested](inside.png)',
+			'>    ```',
+			'>    ````',
+			'![after](after.png)'
+		].join('\n');
+		expect(destsOf(md)).toEqual(['real.png', 'after.png']);
+	});
+
+	it('closes fences only with the same character and sufficient length', () => {
+		const md = ['````md', '```', '~~~', '![inside](inside.png)', '````', '![out](out.png)'].join(
+			'\n'
+		);
+		expect(destsOf(md)).toEqual(['out.png']);
+	});
+
+	it('accepts Typora bare spaces and balanced parentheses in destinations', () => {
+		expect(destsOf('![a](dir/截屏 17.02.02.png)')).toEqual(['dir/截屏 17.02.02.png']);
+		expect(destsOf('![a](dir/未命名设计图 (1)-x.jpg)')).toEqual([
+			'dir/未命名设计图 (1)-x.jpg'
+		]);
+		expect(parseImageRefs('![a](a b.png "title")')[0]).toMatchObject({
+			dest: 'a b.png',
+			title: 'title'
+		});
+	});
+
+	it('parses safe inline HTML images and preserves their source form', () => {
+		const html = '<img src="22.磁盘阵列/a.png" alt="图示" style="zoom:100%;" />';
+		const refs = parseImageRefs(html);
+		expect(refs).toHaveLength(1);
+		expect(refs[0]).toMatchObject({
+			raw: html,
+			alt: '图示',
+			dest: '22.磁盘阵列/a.png',
+			syntax: 'html',
+			start: 0,
+			end: html.length
+		});
+	});
+
+	it('reports reference-style images instead of silently dropping them', () => {
+		const md = '![full][id]\n![collapsed][]\n![shortcut]\n\n[id]: a.png\n[shortcut]: b.png';
+		const scan = scanMarkdownImages(md);
+		expect(scan.refs).toEqual([]);
+		expect(scan.unsupported.map((item) => item.raw)).toEqual([
+			'![full][id]',
+			'![collapsed][]',
+			'![shortcut]'
+		]);
+		expect(scan.unsupported.every((item) => item.kind === 'reference-style')).toBe(true);
+	});
+
+	it('does not report escaped image syntax', () => {
+		expect(parseImageRefs('\\![a](x.png) \\<img src="x.png">')).toEqual([]);
+		expect(scanMarkdownImages('\\![a](x.png)').unsupported).toEqual([]);
 	});
 
 	it('parses the real Typora sample shape (Chinese directory, long digit name)', () => {
@@ -297,6 +365,17 @@ describe('analyzeMarkdownNote (K17 same-name directory rule)', () => {
 		expect(res.dirImages).toEqual([]);
 		expect(res.orphanImages).toEqual([]);
 	});
+
+	it('surfaces unsupported reference-style images in the analysis', () => {
+		const res = analyzeMarkdownNote(
+			'notes/报告.md',
+			'![ref][id]\n\n[id]: 报告/a.png',
+			[...files, 'notes/报告.md']
+		);
+		expect(res.unsupportedRefs).toEqual([
+			expect.objectContaining({ raw: '![ref][id]', kind: 'reference-style' })
+		]);
+	});
 });
 
 describe('rewriteImageRefs', () => {
@@ -377,6 +456,33 @@ describe('rewriteImageRefs', () => {
 		expect(content).toBe('```\n![x](img/a.png)\n```\n![y](data://f)');
 		expect(outcomes).toHaveLength(1);
 		expect(outcomes[0].alt).toBe('y');
+	});
+
+	it('rewrites HTML src while preserving the tag and attributes', () => {
+		const md = '<img src="a.png" alt="图示" style="zoom:100%;" />';
+		const { content, outcomes } = rewriteImageRefs(md, () => ({
+			form: 'url',
+			url: 'data:image/png;base64,YQ=='
+		}));
+		expect(content).toBe('<img src="data:image/png;base64,YQ==" alt="图示" style="zoom:100%;" />');
+		expect(outcomes[0]).toMatchObject({ status: 'rewritten', path: 'a.png' });
+	});
+
+	it('rewrites list-fence images and leaves unsupported references untouched', () => {
+		const md = '- ```bash\n![inside](inside.png)\n  ```\n![out](out.png)\n![ref][id]\n[id]: ref.png';
+		const { content, outcomes } = rewriteImageRefs(md, (ref, path) =>
+			path === 'out.png' ? { form: 'url', url: 'data://out' } : null
+		);
+		expect(content).toContain('![inside](inside.png)');
+		expect(content).toContain('![out](data://out)');
+		expect(content).toContain('![ref][id]');
+		expect(outcomes.map((outcome) => outcome.status)).toEqual(['rewritten', 'unsupported']);
+	});
+
+	it('preserves CRLF and untouched source bytes', () => {
+		const md = 'before\r\n![a](a.png)\r\nafter';
+		const { content } = rewriteImageRefs(md, () => ({ form: 'url', url: 'data://a' }));
+		expect(content).toBe('before\r\n![a](data://a)\r\nafter');
 	});
 
 	it('builds the knowledge marker from the normalized path basename', () => {
@@ -528,6 +634,18 @@ describe('authenticated import image preview', () => {
 		expect(requested).toEqual([fileId]);
 		expect(result).toContain('data:image/png;base64,YQ==');
 		expect(result).toContain('https://example.test/x.png');
+	});
+
+	it('authenticates HTML img sources without changing their attributes', async () => {
+		const { renderAuthenticatedImportImages } = await import('./markdown-import');
+		const fileId = '00000000-0000-4000-8000-000000000002';
+		const result = await renderAuthenticatedImportImages(
+			`<img src="/api/v1/files/${fileId}/content" alt="图示" style="zoom:100%;" />`,
+			async () => 'data:image/png;base64,YQ=='
+		);
+		expect(result).toContain('src="data:image/png;base64,YQ=="');
+		expect(result).toContain('alt="图示"');
+		expect(result).toContain('style="zoom:100%;"');
 	});
 });
 

@@ -186,6 +186,31 @@ describe('P-006 r3 folder import', () => {
 		expect(state.imports[1].indexText).not.toContain('/api/v1/files/');
 	});
 
+	it('imports list-fence, space-path and HTML images while reporting reference-style ones', async () => {
+		const { deps, state } = makeDeps();
+		const markdown = [
+			'- ```bash',
+			'  code',
+			'  ```',
+			'![after](dir/截屏 17.02.02.png)',
+			'<img src="dir/截屏 17.02.02.png" alt="HTML 图" style="zoom:100%;" />',
+			'![ref][id]',
+			'[id]: dir/截屏 17.02.02.png'
+		].join('\n');
+		const report = await runFolderImport(deps, {
+			token: 't',
+			knowledgeId: 'kb',
+			entries: [entry('doc.md', markdown), entry('dir/截屏 17.02.02.png', 'bytes')]
+		});
+		expect(report.status).toBe('completed_with_errors');
+		expect(state.imports[1].text).toContain('![after](/api/v1/files/f1/content)');
+		expect(state.imports[1].text).toContain('src="/api/v1/files/f1/content"');
+		expect(state.imports[1].text).toContain('![ref][id]');
+		expect(report.unsupportedImages).toEqual([
+			expect.objectContaining({ mdPath: 'doc.md', raw: '![ref][id]' })
+		]);
+	});
+
 	it('places identical images in each target directory', async () => {
 		const { deps, state } = makeDeps();
 		const report = await runFolderImport(deps, {

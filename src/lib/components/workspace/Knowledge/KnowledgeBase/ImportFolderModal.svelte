@@ -434,6 +434,24 @@
 					</details>
 				{/if}
 
+				{#if r.unsupportedImages?.length > 0}
+					<details class="rounded-xl bg-gray-50 px-3 py-2 text-xs dark:bg-gray-850">
+						<summary class="cursor-pointer text-gray-700 dark:text-gray-200">
+							{$i18n.t('Unsupported images ({{count}})', {
+								count: r.unsupportedImages.length
+							})}
+						</summary>
+						<div class="mt-1 max-h-32 overflow-y-auto text-gray-500 dark:text-gray-400">
+							{#each r.unsupportedImages as item}
+								<div class="break-all select-text">
+									{item.mdPath} → {item.raw || item.reason}
+									{#if item.raw}<span class="text-gray-400"> — {item.reason}</span>{/if}
+								</div>
+							{/each}
+						</div>
+					</details>
+				{/if}
+
 				{#if r.orphanImages.length > 0}
 					<details class="rounded-xl bg-gray-50 px-3 py-2 text-xs dark:bg-gray-850">
 						<summary class="cursor-pointer text-gray-700 dark:text-gray-200">

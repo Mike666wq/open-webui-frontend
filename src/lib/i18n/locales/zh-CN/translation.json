@@ -4487,6 +4487,7 @@
 	"Succeeded": "成功",
 	"Directories created": "已创建目录",
 	"Missing images ({{count}})": "缺失图片（{{count}}）",
+	"Unsupported images ({{count}})": "不支持的图片（{{count}}）",
 	"Orphan images ({{count}})": "未被引用的图片（{{count}}）",
 	"Files with many image references ({{count}})": "图片引用过多的文件（{{count}}）",
 	"Image access addresses ({{count}})": "图片访问地址（{{count}}）",
