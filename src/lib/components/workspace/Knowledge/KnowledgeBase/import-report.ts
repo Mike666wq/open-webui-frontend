@@ -48,11 +48,11 @@ export function saveImportReport(
 				path: safePath(item.path),
 				raw: ''
 			})),
-				unsupportedImages: (report.unsupportedImages ?? []).map((item) => ({
-					mdPath: safePath(item.mdPath),
-					raw: safeReason(item.raw).slice(0, 240),
-					reason: safeReason(item.reason)
-				})),
+			unsupportedImages: (report.unsupportedImages ?? []).map((item) => ({
+				mdPath: safePath(item.mdPath),
+				raw: safeReason(item.raw).slice(0, 240),
+				reason: safeReason(item.reason)
+			})),
 			orphanImages: report.orphanImages.map(safePath),
 			refHeavyFiles: report.refHeavyFiles.map((item) => ({ ...item, path: safePath(item.path) })),
 			imageUrls: [],
@@ -81,10 +81,10 @@ export function loadImportReport(
 			!Array.isArray(report.failed)
 		)
 			return null;
-			return {
-				...report,
-				unsupportedImages: Array.isArray(report.unsupportedImages) ? report.unsupportedImages : []
-			} as FolderImportReport;
+		return {
+			...report,
+			unsupportedImages: Array.isArray(report.unsupportedImages) ? report.unsupportedImages : []
+		} as FolderImportReport;
 	} catch {
 		return null;
 	}

@@ -2431,7 +2431,7 @@ async function main() {
 				wallpaperPan: results.wallpaperPan.swipes,
 				catalogWarning: results.catalogWarning,
 				knowledgeImport: Object.keys(results.knowledgeImport),
-					knowledgeImagePreview: results.knowledgeImagePreview.length,
+				knowledgeImagePreview: results.knowledgeImagePreview.length,
 				settingsScrollable: true,
 				editorActionsReachable: true
 			})
