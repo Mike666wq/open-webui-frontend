@@ -441,6 +441,35 @@ export class FileContentError extends Error {
 	}
 }
 
+export type FilePreviewRequest = {
+	controller: AbortController;
+	generation: number;
+	signal: AbortSignal;
+};
+
+export const createFilePreviewSession = () => {
+	let active: FilePreviewRequest | null = null;
+	let generation = 0;
+
+	const cancel = () => {
+		generation += 1;
+		active?.controller.abort();
+		active = null;
+	};
+
+	const begin = (): FilePreviewRequest => {
+		cancel();
+		const controller = new AbortController();
+		active = { controller, generation, signal: controller.signal };
+		return active;
+	};
+
+	const isCurrent = (request: FilePreviewRequest) =>
+		active === request && !request.signal.aborted && request.generation === generation;
+
+	return { begin, cancel, isCurrent };
+};
+
 export const getFileBlobById = async (
 	token: string,
 	id: string,

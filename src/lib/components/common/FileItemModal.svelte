@@ -2,13 +2,18 @@
 	import type { WorkBook } from 'xlsx';
 	import DOMPurify from 'dompurify';
 
-	import { getContext, onMount, tick } from 'svelte';
+	import { getContext, onDestroy, onMount, tick } from 'svelte';
 
 	import { formatFileSize, getLineCount, safeLinkUrl } from '$lib/utils';
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
 	import { settings } from '$lib/stores';
 	import { getKnowledgeById } from '$lib/apis/knowledge';
-	import { getFileById, getFileContentById, getFileBlobById } from '$lib/apis/files';
+	import {
+		createFilePreviewSession,
+		getFileById,
+		getFileContentById,
+		getFileBlobById
+	} from '$lib/apis/files';
 	import {
 		blobToImageDataUrl,
 		renderAuthenticatedImportImages
@@ -42,6 +47,8 @@
 	let loading = false;
 	let importedMarkdown: string | null = null;
 	let importedMarkdownError = false;
+	const importedMarkdownSession = createFilePreviewSession();
+	let loadedItemKey: string | null = null;
 
 	let isPDF = false;
 	let isAudio = false;
@@ -204,6 +211,7 @@
 	};
 
 	const loadContent = async () => {
+		const previewRequest = importedMarkdownSession.begin();
 		selectedTab = '';
 		expandedContent = false;
 		importedMarkdown = null;
@@ -230,18 +238,33 @@
 			});
 
 			if (file) {
+				if (!importedMarkdownSession.isCurrent(previewRequest)) return;
 				item.file = file || {};
 				if (
 					file.meta?.data?.markdown_import?.version === 2 &&
 					/\.(md|markdown|txt)$/i.test(file.filename ?? '')
 				) {
 					try {
-						const original = await getFileBlobById(localStorage.token, file.id);
+						const original = await getFileBlobById(localStorage.token, file.id, {
+							signal: previewRequest.signal
+						});
+						if (!importedMarkdownSession.isCurrent(previewRequest)) return;
 						importedMarkdown = await renderAuthenticatedImportImages(
 							await original.text(),
-							async (id) => blobToImageDataUrl(await getFileBlobById(localStorage.token, id))
+							async (id) => {
+								if (!importedMarkdownSession.isCurrent(previewRequest)) {
+									throw new DOMException('Preview was closed', 'AbortError');
+								}
+								return blobToImageDataUrl(
+									await getFileBlobById(localStorage.token, id, {
+										signal: previewRequest.signal
+									})
+								);
+							}
 						);
-					} catch {
+					} catch (error) {
+						if (!importedMarkdownSession.isCurrent(previewRequest)) return;
+						importedMarkdown = null;
 						importedMarkdownError = true;
 					}
 				}
@@ -258,14 +281,35 @@
 				await loadPptxContent();
 			}
 
-			loading = false;
+			if (importedMarkdownSession.isCurrent(previewRequest)) {
+				loading = false;
+			}
 		}
 
 		await tick();
 	};
 
+	const clearImportedMarkdown = () => {
+		importedMarkdownSession.cancel();
+		importedMarkdown = null;
+		importedMarkdownError = false;
+		loading = false;
+	};
+
+	const closeModal = () => {
+		clearImportedMarkdown();
+		show = false;
+	};
+
 	$: if (show) {
-		loadContent();
+		const nextItemKey = `${item?.type ?? ''}:${item?.id ?? item?.tempId ?? ''}`;
+		if (nextItemKey !== loadedItemKey) {
+			loadedItemKey = nextItemKey;
+			loadContent();
+		}
+	} else {
+		loadedItemKey = null;
+		clearImportedMarkdown();
 	}
 
 	onMount(() => {
@@ -273,6 +317,10 @@
 		if (item?.context === 'full') {
 			enableFullContent = true;
 		}
+	});
+
+	onDestroy(() => {
+		clearImportedMarkdown();
 	});
 </script>
 
@@ -301,9 +349,7 @@
 
 				<div>
 					<button
-						on:click={() => {
-							show = false;
-						}}
+						on:click={closeModal}
 					>
 						<XMark />
 					</button>
