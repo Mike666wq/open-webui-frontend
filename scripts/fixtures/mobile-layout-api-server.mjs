@@ -357,16 +357,17 @@ const readingFile = {
 	has_original: true,
 	data: { status: 'completed' }
 };
-const v2PreviewImageId = 'fixture-v2-image';
+const v2PreviewFileId = '00000000-0000-4000-8000-000000000001';
+const v2PreviewImageId = '00000000-0000-4000-8000-000000000002';
 const v2PreviewMarkdown = [
 	'# 图片预览验收',
 	'',
-	'![Markdown 图片](/api/v1/files/fixture-v2-image/content)',
+	`![Markdown 图片](/api/v1/files/${v2PreviewImageId}/content)`,
 	'',
-	'<img src="/api/v1/files/fixture-v2-image/content" alt="HTML 图片" style="zoom:100%;" />'
+	`<img src="/api/v1/files/${v2PreviewImageId}/content" alt="HTML 图片" style="zoom:100%;" />`
 ].join('\n');
 const v2PreviewFile = {
-	id: 'fixture-v2-markdown',
+	id: v2PreviewFileId,
 	filename: '图片预览验收.md',
 	meta: {
 		name: '图片预览验收.md',
@@ -826,17 +827,17 @@ const server = createServer(async (request, response) => {
 		response.end(readingPdf());
 		return;
 	}
-	if (request.method === 'GET' && url.pathname === '/api/v1/files/fixture-v2-markdown') {
+	if (request.method === 'GET' && url.pathname === `/api/v1/files/${v2PreviewFileId}`) {
 		send(response, 200, v2PreviewFile);
 		return;
 	}
-	if (request.method === 'GET' && url.pathname === '/api/v1/files/fixture-v2-markdown/content') {
+	if (request.method === 'GET' && url.pathname === `/api/v1/files/${v2PreviewFileId}/content`) {
 		event('v2-markdown-original-load');
 		response.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' });
 		response.end(v2PreviewMarkdown);
 		return;
 	}
-	if (request.method === 'GET' && url.pathname === '/api/v1/files/fixture-v2-image/content') {
+	if (request.method === 'GET' && url.pathname === `/api/v1/files/${v2PreviewImageId}/content`) {
 		event('v2-markdown-image-load');
 		response.writeHead(200, { 'Content-Type': 'image/png' });
 		response.end(v2PreviewPng);
@@ -848,7 +849,7 @@ const server = createServer(async (request, response) => {
 			const directoryId = url.searchParams.get('directory_id');
 			event('knowledge-import-listing', { directory_id: directoryId });
 			send(response, 200, {
-					items: [v2PreviewFile],
+				items: [v2PreviewFile],
 				directories:
 					directoryId === ''
 						? [
