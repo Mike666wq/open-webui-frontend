@@ -302,9 +302,8 @@ describe('analyzeMarkdownNote (K17 same-name directory rule)', () => {
 describe('rewriteImageRefs', () => {
 	it('rewrites mapped references to new URLs preserving alt and title', () => {
 		const md = '![alt](img/a.png "标题")\n![b](img/missing.png)';
-		const { content, outcomes } = rewriteImageRefs(
-			md,
-			(ref, path) => (path === 'img/a.png' ? { form: 'url', url: 'data://f1' } : null)
+		const { content, outcomes } = rewriteImageRefs(md, (ref, path) =>
+			path === 'img/a.png' ? { form: 'url', url: 'data://f1' } : null
 		);
 		expect(content).toBe('![alt](data://f1 "标题")\n![b](img/missing.png)');
 		expect(outcomes).toHaveLength(2);
@@ -412,7 +411,9 @@ describe('idempotency keys and meta (#4/#9)', () => {
 		// Different name, size or hash prefix produce different keys.
 		expect(crossBatchAssetKey('a.png', 12, h1)).not.toBe(crossBatchAssetKey('a.png', 13, h1));
 		expect(crossBatchAssetKey('a.png', 12, h1)).not.toBe(crossBatchAssetKey('b.png', 12, h1));
-		expect(crossBatchAssetKey('a.png', 12, h1)).not.toBe(crossBatchAssetKey('a.png', 12, 'b'.repeat(64)));
+		expect(crossBatchAssetKey('a.png', 12, h1)).not.toBe(
+			crossBatchAssetKey('a.png', 12, 'b'.repeat(64))
+		);
 	});
 });
 
@@ -472,7 +473,7 @@ describe('buildImportPreview (K18)', () => {
 
 	it('supports a custom conflictKeyOf (evaluated against existingKeys)', () => {
 		const preview = buildImportPreview([{ relativePath: 'a/f.png' }, { relativePath: 'b/f.png' }], {
-			conflictKeyOf: (file) => file.filename,
+			conflictKeyOf: (file: { filename?: string }) => file.filename ?? '',
 			existingKeys: new Set(['f.png'])
 		});
 		expect(preview.conflicts.map((c) => c.key)).toEqual(['f.png', 'f.png']);
@@ -509,5 +510,33 @@ describe('path helpers', () => {
 		expect(isMarkdownPath('a.markdown')).toBe(true);
 		expect(isMarkdownPath('a.txt')).toBe(true);
 		expect(isMarkdownPath('a.png')).toBe(false);
+	});
+});
+
+describe('authenticated import image preview', () => {
+	it('resolves only same-origin v2 file images and leaves external images untouched', async () => {
+		const { renderAuthenticatedImportImages } = await import('./markdown-import');
+		const fileId = '00000000-0000-4000-8000-000000000001';
+		const requested: string[] = [];
+		const result = await renderAuthenticatedImportImages(
+			`![local](/api/v1/files/${fileId}/content)\n![remote](https://example.test/x.png)`,
+			async (id) => {
+				requested.push(id);
+				return 'data:image/png;base64,YQ==';
+			}
+		);
+		expect(requested).toEqual([fileId]);
+		expect(result).toContain('data:image/png;base64,YQ==');
+		expect(result).toContain('https://example.test/x.png');
+	});
+});
+
+describe('inline code safety', () => {
+	it('does not interpret image syntax inside inline code spans', async () => {
+		const { rewriteImageRefs, parseImageRefs } = await import('./markdown-import');
+		const text = '`![code](secret.png)` and ![image](good.png)';
+		expect(parseImageRefs(text)).toHaveLength(1);
+		const output = rewriteImageRefs(text, () => ({ form: 'text', text: '[image]' })).content;
+		expect(output).toBe('`![code](secret.png)` and [image]');
 	});
 });

@@ -4490,5 +4490,9 @@
 	"Orphan images ({{count}})": "未被引用的图片（{{count}}）",
 	"Files with many image references ({{count}})": "图片引用过多的文件（{{count}}）",
 	"Image access addresses ({{count}})": "图片访问地址（{{count}}）",
-	"Warnings ({{count}})": "警告（{{count}}）"
+	"Warnings ({{count}})": "警告（{{count}}）",
+	"Import completed with errors": "导入完成，但部分项目存在问题",
+	"Report storage unavailable; the report may not be available after refresh.": "报告存储不可用，刷新后可能无法查看。",
+	"Not processed": "未处理",
+	"Invalid paths": "无效路径"
 }

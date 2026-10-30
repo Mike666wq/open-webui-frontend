@@ -153,6 +153,27 @@ const IMAGE_REF_PATTERN =
 
 const FENCE_PATTERN = /^\s{0,3}(?:```|~~~)/;
 
+// CommonMark code spans protect their content from image rewriting.
+function inlineCodeRanges(line: string): Array<[number, number]> {
+	const ranges: Array<[number, number]> = [];
+	const runs = [...line.matchAll(/`+/g)];
+	for (let i = 0; i < runs.length; i++) {
+		const start = runs[i].index!;
+		if (start > 0 && line[start - 1] === '\\') continue;
+		const end = runs.findIndex(
+			(run, j) =>
+				j > i &&
+				run[0].length === runs[i][0].length &&
+				!(run.index! > 0 && line[run.index! - 1] === '\\')
+		);
+		if (end >= 0) {
+			ranges.push([start, runs[end].index! + runs[end][0].length]);
+			i = end;
+		}
+	}
+	return ranges;
+}
+
 /**
  * Strip the fragment/query part of a reference target. Raw `#` and `?` in a
  * bare destination start the fragment and are removed; inside `<...>` they are
@@ -177,7 +198,7 @@ function toImageRef(
 	const stripped = stripDestFragment(destRaw, wrapped !== undefined);
 	const title =
 		doubleQuoted !== undefined || singleQuoted !== undefined
-			? (doubleQuoted ?? singleQuoted) ?? null
+			? (doubleQuoted ?? singleQuoted ?? null)
 			: null;
 	return {
 		raw,
@@ -194,7 +215,7 @@ function toImageRef(
  * code blocks are ignored so rewriting never corrupts code samples. Known
  * limitations (acceptable for the Typora-style source corpus): reference-style
  * `![alt][def]` images and `<img>` HTML tags are not parsed, and image syntax
- * inside inline code spans on a line is still matched.
+ * inside inline code spans is preserved.
  */
 export function parseImageRefs(markdown: string): ParsedImageRef[] {
 	const refs: ParsedImageRef[] = [];
@@ -205,7 +226,9 @@ export function parseImageRefs(markdown: string): ParsedImageRef[] {
 			continue;
 		}
 		if (inFence) continue;
+		const codeRanges = inlineCodeRanges(line);
 		for (const m of line.matchAll(IMAGE_REF_PATTERN)) {
+			if (codeRanges.some(([start, end]) => m.index! >= start && m.index! < end)) continue;
 			const [raw, alt, wrapped, bare, dq, sq] = m;
 			refs.push(toImageRef(raw, alt ?? '', wrapped, bare, dq, sq));
 		}
@@ -260,10 +283,7 @@ export function analyzeMarkdownNote(
 	const imageDir = allFilePaths.some((p) => p.startsWith(dirPrefix)) ? imageDirCandidate : null;
 	const dirImages = imageDir
 		? allFilePaths.filter(
-				(p) =>
-					p.startsWith(dirPrefix) &&
-					!p.slice(dirPrefix.length).includes('/') &&
-					isImage(p)
+				(p) => p.startsWith(dirPrefix) && !p.slice(dirPrefix.length).includes('/') && isImage(p)
 			)
 		: [];
 
@@ -368,8 +388,10 @@ export function rewriteImageRefs(
 			outLines.push(line);
 			continue;
 		}
+		const codeRanges = inlineCodeRanges(line);
 		outLines.push(
-			line.replace(IMAGE_REF_PATTERN, (raw, alt, wrapped, bare, dq, sq) => {
+			line.replace(IMAGE_REF_PATTERN, (raw, alt, wrapped, bare, dq, sq, offset) => {
+				if (codeRanges.some(([start, end]) => offset >= start && offset < end)) return raw;
 				const ref = toImageRef(raw, alt ?? '', wrapped, bare, dq, sq);
 				if (ref.external) {
 					const target = resolve(ref, null);
@@ -517,7 +539,12 @@ export interface ImportPreviewOptions {
 	/** Conflict keys already present at the import target (#9). */
 	existingKeys?: ReadonlySet<string>;
 	/** Conflict key function; defaults to the normalized relative path. */
-	conflictKeyOf?: (file: { relativePath: string; directory: string; filename: string }) => string;
+	conflictKeyOf?: (file: {
+		relativePath: string;
+		path: string;
+		dir: string;
+		filename: string;
+	}) => string;
 	/**
 	 * Markdown bodies keyed by relative path. When provided, orphan images in
 	 * same-name directories are counted (K17); without it orphanImageCount is 0.
@@ -542,8 +569,7 @@ export function buildImportPreview(
 	files: readonly PreviewInputFile[],
 	options: ImportPreviewOptions = {}
 ): ImportPreview {
-	const keyOf =
-		options.conflictKeyOf ?? ((file: { relativePath: string }) => file.relativePath);
+	const keyOf = options.conflictKeyOf ?? ((file: { relativePath: string }) => file.relativePath);
 	const existingKeys = options.existingKeys;
 
 	const valid: { relativePath: string; path: string; dir: string; filename: string }[] = [];
@@ -570,7 +596,12 @@ export function buildImportPreview(
 		const parentList = ensureDirList(segments.slice(0, -1).join('/'));
 		let node = dirNodes.get(dirPath);
 		if (!node) {
-			node = { name: segments[segments.length - 1], path: dirPath, type: 'directory', children: [] };
+			node = {
+				name: segments[segments.length - 1],
+				path: dirPath,
+				type: 'directory',
+				children: []
+			};
 			dirNodes.set(dirPath, node);
 			parentList.push(node);
 		}
@@ -588,7 +619,11 @@ export function buildImportPreview(
 			path: entry.path,
 			type: nodeType(entry.path)
 		});
-		if (entry.path.endsWith('.md') || entry.path.endsWith('.markdown') || entry.path.endsWith('.txt')) {
+		if (
+			entry.path.endsWith('.md') ||
+			entry.path.endsWith('.markdown') ||
+			entry.path.endsWith('.txt')
+		) {
 			markdownCount++;
 		} else if (isImagePath(entry.path)) {
 			imageCount++;
@@ -638,4 +673,40 @@ export function buildImportPreview(
 		conflicts,
 		invalidPaths
 	};
+}
+
+/** Resolve only protected same-origin v2 image URLs for an authenticated preview.
+ * Data URLs are ephemeral render values; the stored Markdown is never modified. */
+export async function renderAuthenticatedImportImages(
+	markdown: string,
+	load: (fileId: string) => Promise<string>
+): Promise<string> {
+	const pattern =
+		/^\/api\/v1\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/content$/i;
+	const resolved = new Map<string, string>();
+	for (const ref of parseImageRefs(markdown)) {
+		const match = ref.dest.match(pattern);
+		if (match && !resolved.has(match[1])) {
+			const image = await load(match[1]);
+			if (!/^data:image\//i.test(image)) throw new Error('Invalid authenticated image');
+			resolved.set(match[1], image);
+		}
+	}
+	return rewriteImageRefs(markdown, (ref) => {
+		const match = ref.dest.match(pattern);
+		const image = match && resolved.get(match[1]);
+		return image ? { form: 'url', url: image } : null;
+	}).content;
+}
+
+export function blobToImageDataUrl(blob: Blob): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () =>
+			typeof reader.result === 'string'
+				? resolve(reader.result)
+				: reject(new Error('Invalid image'));
+		reader.onerror = () => reject(new Error('Unable to read image'));
+		reader.readAsDataURL(blob);
+	});
 }

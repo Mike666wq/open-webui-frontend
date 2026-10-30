@@ -311,6 +311,349 @@ async function chatGeometry(cdp, width) {
 	return geometry;
 }
 
+async function assertKnowledgeImportGeometry(cdp, label) {
+	const geometry = await cdp.evaluate(`
+		(() => {
+			const bounds = (element) => {
+				if (!element) return null;
+				const rect = element.getBoundingClientRect();
+				return {
+					left: rect.left,
+					top: rect.top,
+					right: rect.right,
+					bottom: rect.bottom,
+					width: rect.width,
+					height: rect.height,
+					scrollWidth: element.scrollWidth,
+					clientWidth: element.clientWidth
+				};
+			};
+			const anchor = document.querySelector('[data-testid="knowledge-import-modal"]');
+			const dialog = anchor?.closest('[role="dialog"]');
+			const surface = dialog?.querySelector(':scope > div');
+			const content = anchor?.nextElementSibling;
+			const report = document.querySelector('[data-testid="knowledge-import-report"]');
+			return {
+				viewport: { width: innerWidth, height: innerHeight },
+				page: {
+					scrollWidth: document.documentElement.scrollWidth,
+					clientWidth: document.documentElement.clientWidth
+				},
+				dialog: bounds(dialog),
+				surface: bounds(surface),
+				content: bounds(content),
+				report: bounds(report)
+			};
+		})()
+	`);
+	assert.ok(geometry.dialog, `${label}: import dialog missing`);
+	assert.ok(
+		geometry.page.scrollWidth <= geometry.page.clientWidth + 1,
+		`${label}: page has horizontal overflow: ${JSON.stringify(geometry.page)}`
+	);
+	for (const [name, rect] of Object.entries({
+		dialog: geometry.dialog,
+		surface: geometry.surface,
+		content: geometry.content
+	})) {
+		assert.ok(rect, `${label}: ${name} missing`);
+		assert.ok(rect.left >= -0.5, `${label}: ${name} crosses left edge`);
+		assert.ok(rect.right <= geometry.viewport.width + 0.5, `${label}: ${name} crosses right edge`);
+	}
+	if (geometry.report) {
+		assert.ok(
+			geometry.report.scrollWidth <= geometry.report.clientWidth + 1,
+			`${label}: report has horizontal overflow: ${JSON.stringify(geometry.report)}`
+		);
+	}
+	return geometry;
+}
+
+async function openKnowledgeImport(cdp) {
+	await cdp.click(
+		`[...document.querySelectorAll('button')].find(
+			(button) => ['Add Content', '添加内容'].includes(button.getAttribute('aria-label'))
+		)`,
+		'knowledge add content'
+	);
+	await cdp.waitForExpression(
+		`[...document.querySelectorAll('button')].some(
+			(button) => ['Import Markdown folder', '导入 Markdown 文件夹'].includes(button.textContent.trim())
+		)`,
+		'Markdown folder import menu item'
+	);
+	await cdp.click(
+		`[...document.querySelectorAll('button')].find(
+			(button) => ['Import Markdown folder', '导入 Markdown 文件夹'].includes(button.textContent.trim())
+		)`,
+		'Markdown folder import'
+	);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[data-testid="knowledge-import-choose"]'))`,
+		'Markdown folder selection screen'
+	);
+}
+
+async function chooseKnowledgeImportFiles(cdp) {
+	await cdp.click(
+		`document.querySelector('[data-testid="knowledge-import-choose"]')`,
+		'choose import folder'
+	);
+	await waitForValue(
+		() =>
+			cdp.evaluate(
+				`[...document.querySelectorAll('input[type="file"]')].some(
+					(input) => input.webkitdirectory === true
+				)`
+			),
+		Boolean,
+		'folder file input'
+	);
+	await cdp.evaluate(`
+		(() => {
+			const input = [...document.querySelectorAll('input[type="file"]')].find(
+				(candidate) => candidate.webkitdirectory === true
+			);
+			if (!input) throw new Error('folder file input disappeared');
+			const transfer = new DataTransfer();
+			const files = [
+				{
+					name: 'pic.png',
+					relativePath: 'fixture-root/a/pic.png',
+					type: 'image/png',
+					body: 'synthetic-png'
+				},
+				{
+					name: 'doc.md',
+					relativePath: 'fixture-root/a/doc.md',
+					type: 'text/markdown',
+					body: '# 可读正文\\n\\n![示意图](pic.png)'
+				},
+				{
+					name: 'broken.md',
+					relativePath: 'fixture-root/b/broken.md',
+					type: 'text/markdown',
+					body: '# 索引失败夹具'
+				}
+			];
+			for (const spec of files) {
+				const file = new File([spec.body], spec.name, { type: spec.type });
+				Object.defineProperty(file, 'webkitRelativePath', {
+					value: spec.relativePath,
+					configurable: true
+				});
+				transfer.items.add(file);
+			}
+			input.files = transfer.files;
+			input.dispatchEvent(new Event('change', { bubbles: true }));
+		})()
+	`);
+	await cdp.waitForExpression(
+		`Boolean(
+			document.querySelector('[data-testid="knowledge-import-start"]') &&
+			document.querySelector('[data-testid="knowledge-import-modal"]')?.parentElement?.textContent.includes('3') &&
+			document.querySelector('[data-testid="knowledge-import-modal"]')?.parentElement?.textContent.includes('2')
+		)`,
+		'folder import preview counts'
+	);
+}
+
+async function startKnowledgeImportWithKeyboard(cdp) {
+	await cdp.evaluate(
+		`document.querySelector('[data-testid="knowledge-import-start"]')?.focus()`
+	);
+	await cdp.send('Input.dispatchKeyEvent', {
+		type: 'keyDown',
+		key: 'Enter',
+		code: 'Enter',
+		windowsVirtualKeyCode: 13,
+		nativeVirtualKeyCode: 13,
+		text: '\r',
+		unmodifiedText: '\r'
+	});
+	await cdp.send('Input.dispatchKeyEvent', {
+		type: 'keyUp',
+		key: 'Enter',
+		code: 'Enter',
+		windowsVirtualKeyCode: 13,
+		nativeVirtualKeyCode: 13
+	});
+}
+
+async function closeKnowledgeImport(cdp) {
+	await cdp.send('Input.dispatchKeyEvent', {
+		type: 'keyDown',
+		key: 'Escape',
+		code: 'Escape',
+		windowsVirtualKeyCode: 27
+	});
+	await cdp.send('Input.dispatchKeyEvent', {
+		type: 'keyUp',
+		key: 'Escape',
+		code: 'Escape',
+		windowsVirtualKeyCode: 27
+	});
+	await cdp.waitForExpression(
+		`!document.querySelector('[data-testid="knowledge-import-modal"]')`,
+		'import dialog closed'
+	);
+}
+
+async function knowledgeImportFlow(cdp, viewport, { cancel = false, refresh = false } = {}) {
+	await cdp.send('Emulation.setDeviceMetricsOverride', {
+		width: viewport.width,
+		height: viewport.height,
+		deviceScaleFactor: 2,
+		mobile: true
+	});
+	await cdp.send('Emulation.setTouchEmulationEnabled', {
+		enabled: true,
+		maxTouchPoints: 5
+	});
+	await cdp.navigate(
+		`${origin}/workspace/knowledge/import-kb`,
+		`Boolean(
+			document.querySelector('[data-testid="knowledge-import-modal"]') ||
+			[...document.querySelectorAll('button')].some(
+				(button) => ['Add Content', '添加内容'].includes(button.getAttribute('aria-label'))
+			)
+		)`
+	);
+	await openKnowledgeImport(cdp);
+	const selection = await assertKnowledgeImportGeometry(
+		cdp,
+		`${viewport.name} import selection`
+	);
+	await cdp.screenshot(`knowledge-import-selection-${viewport.name}.png`);
+	await chooseKnowledgeImportFiles(cdp);
+	const preview = await assertKnowledgeImportGeometry(
+		cdp,
+		`${viewport.name} import preview`
+	);
+	await cdp.screenshot(`knowledge-import-preview-${viewport.name}.png`);
+	await startKnowledgeImportWithKeyboard(cdp);
+	await cdp.waitForExpression(
+		`Boolean(document.querySelector('[data-testid="knowledge-import-cancel"]'))`,
+		`${viewport.name} import running`
+	);
+	const running = await assertKnowledgeImportGeometry(
+		cdp,
+		`${viewport.name} import running`
+	);
+	await cdp.screenshot(`knowledge-import-running-${viewport.name}.png`);
+	if (cancel) {
+		await cdp.click(
+			`document.querySelector('[data-testid="knowledge-import-cancel"]')`,
+			'cancel import'
+		);
+		await cdp.waitForExpression(
+			`document.querySelector('[data-testid="knowledge-import-report"]')?.textContent.includes('导入已取消') ||
+			 document.querySelector('[data-testid="knowledge-import-report"]')?.textContent.includes('Import cancelled')`,
+			`${viewport.name} cancelled report`
+		);
+	} else {
+		await cdp.waitForExpression(
+			`document.querySelector('[data-testid="knowledge-import-report"]')?.textContent.includes('导入完成，但部分项目存在问题') ||
+			 document.querySelector('[data-testid="knowledge-import-report"]')?.textContent.includes('Import completed with errors')`,
+			`${viewport.name} partial failure report`
+		);
+		assert.match(
+			await cdp.evaluate(
+				`document.querySelector('[data-testid="knowledge-import-report"]')?.textContent ?? ''`
+			),
+			/b\/broken\.md.*index: Synthetic index failure \(pending\)/
+		);
+		const summary = `document.querySelector('[data-testid="knowledge-import-report"] details[open] summary')`;
+		await cdp.evaluate(`(${summary})?.focus()`);
+		await cdp.send('Input.dispatchKeyEvent', {
+			type: 'keyDown',
+			key: 'Enter',
+			code: 'Enter',
+			windowsVirtualKeyCode: 13,
+			nativeVirtualKeyCode: 13,
+			text: '\r',
+			unmodifiedText: '\r'
+		});
+		await cdp.send('Input.dispatchKeyEvent', {
+			type: 'keyUp',
+			key: 'Enter',
+			code: 'Enter',
+			windowsVirtualKeyCode: 13,
+			nativeVirtualKeyCode: 13
+		});
+		assert.equal(
+			await cdp.evaluate(
+				`document.querySelector('[data-testid="knowledge-import-report"] details')?.open`
+			),
+			false,
+			`${viewport.name} failure details close by keyboard`
+		);
+		await cdp.send('Input.dispatchKeyEvent', {
+			type: 'keyDown',
+			key: 'Enter',
+			code: 'Enter',
+			windowsVirtualKeyCode: 13,
+			nativeVirtualKeyCode: 13,
+			text: '\r',
+			unmodifiedText: '\r'
+		});
+		await cdp.send('Input.dispatchKeyEvent', {
+			type: 'keyUp',
+			key: 'Enter',
+			code: 'Enter',
+			windowsVirtualKeyCode: 13,
+			nativeVirtualKeyCode: 13
+		});
+		assert.equal(
+			await cdp.evaluate(
+				`document.querySelector('[data-testid="knowledge-import-report"] details')?.open`
+			),
+			true,
+			`${viewport.name} failure details open by keyboard`
+		);
+	}
+	const report = await assertKnowledgeImportGeometry(cdp, `${viewport.name} import report`);
+	await cdp.screenshot(`knowledge-import-report-${viewport.name}.png`);
+	const storedStatus = await cdp.evaluate(`
+		(() => {
+			const key = Object.keys(sessionStorage).find((entry) =>
+				entry.startsWith('owui:knowledge-import:v2:fixture-user:import-kb')
+			);
+			return key ? JSON.parse(sessionStorage.getItem(key)).status : null;
+		})()
+	`);
+	assert.equal(storedStatus, cancel ? 'cancelled' : 'completed_with_errors');
+	await closeKnowledgeImport(cdp);
+
+	if (refresh) {
+		await cdp.navigate(
+			`${origin}/workspace/knowledge/import-kb`,
+			`[...document.querySelectorAll('button')].some(
+				(button) => ['Add Content', '添加内容'].includes(button.getAttribute('aria-label'))
+			)`
+		);
+		await openKnowledgeImport(cdp);
+		await cdp.waitForExpression(
+			`[...document.querySelectorAll('button')].some(
+				(button) => ['Last import report', '上次导入报告'].includes(button.textContent.trim())
+			)`,
+			'persisted last import report'
+		);
+		await cdp.click(
+			`[...document.querySelectorAll('button')].find(
+				(button) => ['Last import report', '上次导入报告'].includes(button.textContent.trim())
+			)`,
+			'open persisted import report'
+		);
+		await cdp.waitForExpression(
+			`Boolean(document.querySelector('[data-testid="knowledge-import-report"]'))`,
+			'persisted import report details'
+		);
+		await closeKnowledgeImport(cdp);
+	}
+	return { selection, preview, running, report, storedStatus };
+}
+
 async function openSettings(cdp) {
 	const userMenuVisible = await cdp.evaluate(`
 		Boolean(
@@ -1656,6 +1999,21 @@ async function main() {
 			'restore all navigation'
 		);
 
+		results.knowledgeImport = {};
+		for (const viewport of [
+			{ name: '390x844', width: 390, height: 844 },
+			{ name: '489x550', width: 489, height: 550 }
+		]) {
+			results.knowledgeImport[viewport.name] = await knowledgeImportFlow(client, viewport, {
+				refresh: viewport.name === '390x844'
+			});
+		}
+		results.knowledgeImport['489x550-cancelled'] = await knowledgeImportFlow(
+			client,
+			{ name: '489x550-cancelled', width: 489, height: 550 },
+			{ cancel: true }
+		);
+
 		await client.send('Emulation.setScrollbarsHidden', { hidden: false });
 		await client.navigate(
 			`${origin}/workspace/knowledge/reading-kb`,
@@ -2026,6 +2384,7 @@ async function main() {
 				viewports: viewports.map(({ name }) => name),
 				wallpaperPan: results.wallpaperPan.swipes,
 				catalogWarning: results.catalogWarning,
+				knowledgeImport: Object.keys(results.knowledgeImport),
 				settingsScrollable: true,
 				editorActionsReachable: true
 			})

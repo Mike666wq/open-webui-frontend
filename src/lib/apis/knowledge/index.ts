@@ -1183,3 +1183,108 @@ export const batchCreateKnowledgeDirectories = async (
 
 	return res;
 };
+
+export type KnowledgeImportFile = {
+	file: File;
+	directoryId: string | null;
+	sourcePath: string;
+	sourceHash: string;
+	operationId: string;
+	kind: 'markdown' | 'image';
+	indexText?: string;
+};
+
+export type KnowledgeImportResult = {
+	file_id: string;
+	directory_id: string | null;
+	source_path: string;
+	operation_id: string;
+	status: 'completed' | 'unconfirmed';
+	indexed: boolean;
+};
+
+export class KnowledgeImportError extends Error {
+	constructor(
+		message: string,
+		public stage = 'confirmation',
+		public cleanupStatus = 'not_needed',
+		public fileId?: string,
+		public unconfirmed = false
+	) {
+		super(message);
+	}
+}
+
+export const importKnowledgeFile = async (
+	token: string,
+	id: string,
+	item: KnowledgeImportFile
+): Promise<KnowledgeImportResult> => {
+	const form = new FormData();
+	form.append('file', item.file);
+	if (item.directoryId) form.append('directory_id', item.directoryId);
+	form.append('source_path', item.sourcePath);
+	form.append('source_hash', item.sourceHash);
+	form.append('operation_id', item.operationId);
+	form.append('kind', item.kind);
+	if (item.indexText !== undefined) form.append('index_text', item.indexText);
+	let response: Response;
+	try {
+		response = await fetch(`${WEBUI_API_BASE_URL}/knowledge/${id}/import/file`, {
+			method: 'POST',
+			headers: { authorization: `Bearer ${token}` },
+			body: form
+		});
+	} catch {
+		throw new KnowledgeImportError(
+			'The server response was lost; check the operation before retrying.',
+			'confirmation',
+			'pending',
+			undefined,
+			true
+		);
+	}
+	if (!response.ok) {
+		const body = await response.json().catch(() => ({}));
+		const detail = body?.detail;
+		if (
+			response.status === 404 &&
+			(typeof detail !== 'object' || detail?.stage !== 'authorization')
+		) {
+			throw new KnowledgeImportError(
+				'This server does not support safe folder imports; upgrade the backend.',
+				'validation'
+			);
+		}
+		throw new KnowledgeImportError(
+			typeof detail === 'string' ? detail : detail?.message || `Import failed (${response.status})`,
+			detail?.stage || 'validation',
+			detail?.cleanup_status || 'not_needed',
+			detail?.file_id,
+			detail?.code === 'operation_unconfirmed'
+		);
+	}
+	return response.json();
+};
+
+export const getKnowledgeImportOperation = async (
+	token: string,
+	id: string,
+	operationId: string
+): Promise<KnowledgeImportResult> => {
+	const response = await fetch(
+		`${WEBUI_API_BASE_URL}/knowledge/${id}/import/operations/${operationId}`,
+		{
+			headers: { authorization: `Bearer ${token}` }
+		}
+	);
+	if (!response.ok)
+		throw new KnowledgeImportError(
+			'Could not confirm the operation.',
+			'confirmation',
+			'pending',
+			undefined,
+			true
+		);
+	return response.json();
+};
