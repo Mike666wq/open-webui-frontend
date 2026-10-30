@@ -654,6 +654,51 @@ async function knowledgeImportFlow(cdp, viewport, { cancel = false, refresh = fa
 	return { selection, preview, running, report, storedStatus };
 }
 
+async function authenticatedMarkdownImageFlow(cdp) {
+	await cdp.send('Emulation.setDeviceMetricsOverride', {
+		width: 390,
+		height: 844,
+		deviceScaleFactor: 2,
+		mobile: true
+	});
+	await cdp.send('Emulation.setTouchEmulationEnabled', {
+		enabled: true,
+		maxTouchPoints: 5
+	});
+	await cdp.navigate(
+		`${origin}/workspace/knowledge/import-kb`,
+		"document.querySelector('#collection-container')?.textContent.includes('图片预览验收.md')"
+	);
+	await cdp.click(
+		`[...document.querySelectorAll('#collection-container button')].find(
+			(button) => button.textContent.includes('图片预览验收.md')
+		)`,
+		'open authenticated Markdown image fixture'
+	);
+	await cdp.waitForExpression(
+		`(() => {
+			const images = [...document.querySelectorAll('.file-reader img[src^="data:image/"]')];
+			return images.length === 2 && images.every((image) => image.complete && image.naturalWidth > 0);
+		})()`,
+		'authenticated Markdown and HTML images render'
+	);
+	await cdp.screenshot('knowledge-authenticated-markdown-images.png');
+	const images = await cdp.evaluate(
+		`[...document.querySelectorAll('.file-reader img[src^="data:image/"]')].map((image) => ({
+			alt: image.alt,
+			src: image.src.slice(0, 22),
+			width: image.naturalWidth,
+			height: image.naturalHeight
+		}))`
+	);
+	assert.deepEqual(
+		images.map((image) => image.alt).sort(),
+		['HTML 图片', 'Markdown 图片']
+	);
+	assert.ok(images.every((image) => image.src === 'data:image/png;base64,'));
+	return images;
+}
+
 async function openSettings(cdp) {
 	const userMenuVisible = await cdp.evaluate(`
 		Boolean(
@@ -2013,6 +2058,7 @@ async function main() {
 			{ name: '489x550-cancelled', width: 489, height: 550 },
 			{ cancel: true }
 		);
+		results.knowledgeImagePreview = await authenticatedMarkdownImageFlow(client);
 
 		await client.send('Emulation.setScrollbarsHidden', { hidden: false });
 		await client.navigate(
@@ -2385,6 +2431,7 @@ async function main() {
 				wallpaperPan: results.wallpaperPan.swipes,
 				catalogWarning: results.catalogWarning,
 				knowledgeImport: Object.keys(results.knowledgeImport),
+					knowledgeImagePreview: results.knowledgeImagePreview.length,
 				settingsScrollable: true,
 				editorActionsReachable: true
 			})

@@ -4484,6 +4484,7 @@
 	"Succeeded": "Succeeded",
 	"Directories created": "Directories created",
 	"Missing images ({{count}})": "Missing images ({{count}})",
+	"Unsupported images ({{count}})": "Unsupported images ({{count}})",
 	"Orphan images ({{count}})": "Orphan images ({{count}})",
 	"Files with many image references ({{count}})": "Files with many image references ({{count}})",
 	"Image access addresses ({{count}})": "Image access addresses ({{count}})",
