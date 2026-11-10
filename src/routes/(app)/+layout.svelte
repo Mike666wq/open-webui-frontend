@@ -394,7 +394,14 @@
 		setupKeyboardShortcuts();
 
 		if ($user?.role === 'admin' && ($settings?.showChangelog ?? true)) {
-			showChangelog.set($settings?.version !== $config.version);
+			// P-007 K18: `$settings.version` only advances after a successful settings
+			// write, so a deployment where that write does not stick re-opened the
+			// changelog on every load. `localStorage.version` is the per-browser
+			// record ChangelogModal writes when the user dismisses it; prefer it and
+			// fall back to the server value. Manual re-open from About/General still
+			// calls `showChangelog.set(true)` directly and is unaffected.
+			const seenVersion = localStorage.version ?? $settings?.version;
+			showChangelog.set(seenVersion !== $config.version);
 		}
 
 		if ($user?.role === 'admin' || ($user?.permissions?.chat?.temporary ?? true)) {

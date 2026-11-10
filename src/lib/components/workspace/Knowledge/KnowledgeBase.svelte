@@ -44,6 +44,7 @@
 	import SyncConfirmDialog from '../../common/ConfirmDialog.svelte';
 	import ConfirmDialog from '../../common/ConfirmDialog.svelte';
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte';
+	import Clipboard from '$lib/components/icons/Clipboard.svelte';
 	import AccessButton from '$lib/components/common/AccessButton.svelte';
 	import AccessControlModal from '../common/AccessControlModal.svelte';
 	import FilesOverlay from '$lib/components/chat/MessageInput/FilesOverlay.svelte';
@@ -955,13 +956,17 @@
 				/>
 				<button
 					type="button"
-					title={$i18n.t('Click to copy ID')}
-					class="max-w-[40%] shrink-0 truncate font-mono"
+					title={`${$i18n.t('Click to copy ID')} — ${id}`}
+					aria-label={$i18n.t('Copy knowledge base ID')}
+					class="flex shrink-0 items-center gap-1 rounded-md px-1 font-mono text-[0.6875rem] text-gray-400 transition hover:bg-gray-100/60 hover:text-gray-700 dark:hover:bg-gray-800/60 dark:hover:text-gray-200"
 					on:click={() => {
 						copyToClipboard(id);
 						toast.success($i18n.t('ID copied to clipboard'));
-					}}>{id}</button
+					}}
 				>
+					<span class="max-w-[5.5rem] truncate">{id.slice(0, 8)}</span>
+					<Clipboard className="size-3 shrink-0" strokeWidth="1.8" />
+				</button>
 			</div>
 		</div>
 		<div class="mb-2 min-h-0 flex-1">

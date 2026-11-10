@@ -2,6 +2,12 @@
 	import { getContext } from 'svelte';
 	const i18n = getContext('i18n');
 
+	/**
+	 * The TipTap editor these buttons drive. Typed explicitly so optional chaining
+	 * resolves to Editor instead of `never`; before this, every call site emitted a
+	 * spurious "Property 'chain' does not exist on type 'never'" diagnostic.
+	 * @type {import('@tiptap/core').Editor | null}
+	 */
 	export let editor = null;
 
 	import Bold from '$lib/components/icons/Bold.svelte';
@@ -14,6 +20,16 @@
 	import NumberedList from '$lib/components/icons/NumberedList.svelte';
 	import Strikethrough from '$lib/components/icons/Strikethrough.svelte';
 	import Underline from '$lib/components/icons/Underline.svelte';
+
+	// P-007 K19: blockquote, table, horizontal rule, highlight, superscript and
+	// subscript were reachable only through keyboard shortcuts or bare text
+	// glyphs. They now use the same icon/markup pattern as the rest of the bar.
+	import Blockquote from '$lib/components/icons/Blockquote.svelte';
+	import Grid from '$lib/components/icons/Grid.svelte';
+	import Highlighter from '$lib/components/icons/Highlighter.svelte';
+	import Minus from '$lib/components/icons/Minus.svelte';
+	import Subscript from '$lib/components/icons/Subscript.svelte';
+	import Superscript from '$lib/components/icons/Superscript.svelte';
 
 	import Tooltip from '../Tooltip.svelte';
 	import CheckBox from '$lib/components/icons/CheckBox.svelte';
@@ -186,29 +202,114 @@
 		</button>
 	</Tooltip>
 
-	<Tooltip placement="top" content={$i18n.t('Blockquote (Mod+Shift+B)')}>
-		<button type="button" aria-label={$i18n.t('Blockquote (Mod+Shift+B)')} class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5" on:click={() => editor?.chain().focus().toggleBlockquote().run()}>❝</button>
+	<Tooltip placement="top" content={$i18n.t('Blockquote')}>
+		<button
+			on:click={() => editor?.chain().focus().toggleBlockquote().run()}
+			class="{editor?.isActive('blockquote')
+				? 'bg-gray-50 dark:bg-gray-700'
+				: ''} hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5 transition-all"
+			type="button"
+			aria-label={$i18n.t('Blockquote')}
+		>
+			<Blockquote />
+		</button>
 	</Tooltip>
-	<Tooltip placement="top" content={$i18n.t('Insert table (3×3)')}>
-		<button type="button" aria-label={$i18n.t('Insert table (3×3)')} class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5" on:click={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>▦</button>
+
+	<Tooltip placement="top" content={$i18n.t('Insert table')}>
+		<button
+			on:click={() =>
+				editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+			class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5 transition-all"
+			type="button"
+			aria-label={$i18n.t('Insert table')}
+		>
+			<Grid />
+		</button>
 	</Tooltip>
+
 	{#if editor?.isActive('table')}
-		<Tooltip placement="top" content={$i18n.t('Add table row')}><button type="button" aria-label={$i18n.t('Add table row')} on:click={() => editor?.chain().focus().addRowAfter().run()}>+R</button></Tooltip>
-		<Tooltip placement="top" content={$i18n.t('Delete table row')}><button type="button" aria-label={$i18n.t('Delete table row')} on:click={() => editor?.chain().focus().deleteRow().run()}>−R</button></Tooltip>
-		<Tooltip placement="top" content={$i18n.t('Add table column')}><button type="button" aria-label={$i18n.t('Add table column')} on:click={() => editor?.chain().focus().addColumnAfter().run()}>+C</button></Tooltip>
-		<Tooltip placement="top" content={$i18n.t('Delete table column')}><button type="button" aria-label={$i18n.t('Delete table column')} on:click={() => editor?.chain().focus().deleteColumn().run()}>−C</button></Tooltip>
+		<Tooltip placement="top" content={$i18n.t('Add table row')}>
+			<button
+				on:click={() => editor?.chain().focus().addRowAfter().run()}
+				class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg px-1.5 py-1 text-xs transition-all"
+				type="button"
+				aria-label={$i18n.t('Add table row')}>+R</button
+			>
+		</Tooltip>
+		<Tooltip placement="top" content={$i18n.t('Delete table row')}>
+			<button
+				on:click={() => editor?.chain().focus().deleteRow().run()}
+				class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg px-1.5 py-1 text-xs transition-all"
+				type="button"
+				aria-label={$i18n.t('Delete table row')}>-R</button
+			>
+		</Tooltip>
+		<Tooltip placement="top" content={$i18n.t('Add table column')}>
+			<button
+				on:click={() => editor?.chain().focus().addColumnAfter().run()}
+				class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg px-1.5 py-1 text-xs transition-all"
+				type="button"
+				aria-label={$i18n.t('Add table column')}>+C</button
+			>
+		</Tooltip>
+		<Tooltip placement="top" content={$i18n.t('Delete table column')}>
+			<button
+				on:click={() => editor?.chain().focus().deleteColumn().run()}
+				class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg px-1.5 py-1 text-xs transition-all"
+				type="button"
+				aria-label={$i18n.t('Delete table column')}>-C</button
+			>
+		</Tooltip>
 	{/if}
-	<Tooltip placement="top" content={$i18n.t('Horizontal rule (Mod+Shift+H)')}>
-		<button type="button" aria-label={$i18n.t('Horizontal rule (Mod+Shift+H)')} class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5" on:click={() => editor?.chain().focus().setHorizontalRule().run()}>—</button>
+
+	<Tooltip placement="top" content={$i18n.t('Horizontal rule')}>
+		<button
+			on:click={() => editor?.chain().focus().setHorizontalRule().run()}
+			class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5 transition-all"
+			type="button"
+			aria-label={$i18n.t('Horizontal rule')}
+		>
+			<Minus />
+		</button>
 	</Tooltip>
-	<Tooltip placement="top" content={$i18n.t('Highlight (Mod+Shift+M)')}>
-		<button type="button" aria-label={$i18n.t('Highlight (Mod+Shift+M)')} class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5" on:click={() => editor?.chain().focus().toggleHighlight().run()}>🖍</button>
+
+	<Tooltip placement="top" content={$i18n.t('Highlight')}>
+		<button
+			on:click={() => editor?.chain().focus().toggleHighlight().run()}
+			class="{editor?.isActive('highlight')
+				? 'bg-gray-50 dark:bg-gray-700'
+				: ''} hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5 transition-all"
+			type="button"
+			aria-label={$i18n.t('Highlight')}
+		>
+			<Highlighter />
+		</button>
 	</Tooltip>
-	<Tooltip placement="top" content={$i18n.t('Superscript (Mod+Shift+Up)')}>
-		<button type="button" aria-label={$i18n.t('Superscript (Mod+Shift+Up)')} class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5" on:click={() => editor?.chain().focus().toggleMark('superscript').run()}>xⁿ</button>
+
+	<Tooltip placement="top" content={$i18n.t('Superscript')}>
+		<button
+			on:click={() => editor?.chain().focus().toggleMark('superscript').run()}
+			class="{editor?.isActive('superscript')
+				? 'bg-gray-50 dark:bg-gray-700'
+				: ''} hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5 transition-all"
+			type="button"
+			aria-label={$i18n.t('Superscript')}
+		>
+			<Superscript />
+		</button>
 	</Tooltip>
-	<Tooltip placement="top" content={$i18n.t('Subscript (Mod+Shift+Down)')}>
-		<button type="button" aria-label={$i18n.t('Subscript (Mod+Shift+Down)')} class="hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5" on:click={() => editor?.chain().focus().toggleMark('subscript').run()}>xₙ</button>
+
+	<Tooltip placement="top" content={$i18n.t('Subscript')}>
+		<button
+			on:click={() => editor?.chain().focus().toggleMark('subscript').run()}
+			class="{editor?.isActive('subscript')
+				? 'bg-gray-50 dark:bg-gray-700'
+				: ''} hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg p-1.5 transition-all"
+			type="button"
+			aria-label={$i18n.t('Subscript')}
+		>
+			<Subscript />
+		</button>
 	</Tooltip>
 
 	<EmojiPicker
