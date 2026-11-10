@@ -156,3 +156,44 @@ describe('P-007 K20: dead AIMenu component is gone', () => {
 		expect(editor).not.toContain('AIMenu');
 	});
 });
+
+describe('P-007: every new user-facing string has a real translation key', () => {
+	const zh = JSON.parse(read('i18n/locales/zh-CN/translation.json'));
+	const en = JSON.parse(read('i18n/locales/en-US/translation.json'));
+
+	const strings = [
+		'Upload',
+		'Upload files to this knowledge base',
+		'Drop files here, or use Upload',
+		'AI assistant',
+		'AI assistant: summarise or rewrite this note',
+		'Summarise or rewrite this note with AI',
+		'Summarise or rewrite this note',
+		'Copy knowledge base ID',
+		'Blockquote',
+		'Insert table',
+		'Horizontal rule',
+		'Highlight',
+		'Superscript',
+		'Subscript',
+		'Add table row',
+		'Delete table row',
+		'Add table column',
+		'Delete table column'
+	];
+
+	it('is present in zh-CN and en-US', () => {
+		for (const key of strings) {
+			expect(zh[key], `zh-CN missing "${key}"`).toBeTruthy();
+			expect(en[key], `en-US missing "${key}"`).toBeTruthy();
+		}
+	});
+
+	it('translates rather than echoing English for the Chinese locale', () => {
+		// Keys whose English value is identical to the key are legitimate, but the
+		// Chinese value must differ or the UI would silently stay English.
+		for (const key of ['Upload', 'AI assistant', 'Blockquote', 'Highlight', 'Superscript']) {
+			expect(zh[key], `zh-CN did not translate "${key}"`).not.toBe(key);
+		}
+	});
+});
