@@ -33,6 +33,10 @@
 			label: $i18n.t('settings.admin.models.builtinTools.knowledge.label'),
 			description: $i18n.t('settings.admin.models.builtinTools.knowledge.description')
 		},
+		knowledge_manage: {
+			label: $i18n.t('settings.admin.models.builtinTools.knowledgeManage.label'),
+			description: $i18n.t('settings.admin.models.builtinTools.knowledgeManage.description')
+		},
 		files: {
 			label: $i18n.t('settings.admin.models.builtinTools.files.label'),
 			description: $i18n.t('settings.admin.models.builtinTools.files.description')

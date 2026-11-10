@@ -2938,6 +2938,8 @@
 	"settings.admin.models.builtinTools.imageGeneration.label": "Image Generation",
 	"settings.admin.models.builtinTools.knowledge.description": "Browse and query knowledge bases",
 	"settings.admin.models.builtinTools.knowledge.label": "Knowledge Base",
+	"settings.admin.models.builtinTools.knowledgeManage.description": "Let the AI create, edit and delete knowledge bases and their files; deletions still require user confirmation",
+	"settings.admin.models.builtinTools.knowledgeManage.label": "Knowledge write",
 	"settings.admin.models.builtinTools.memory.description": "Search and manage user memories",
 	"settings.admin.models.builtinTools.memory.label": "Memory",
 	"settings.admin.models.builtinTools.notes.description": "Search, view, and manage user notes",
