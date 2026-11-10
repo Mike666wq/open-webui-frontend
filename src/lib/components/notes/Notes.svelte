@@ -432,7 +432,7 @@
 			<div class="flex w-full items-center">
 				<div class="flex items-center gap-1 py-1 min-w-0">
 					<span class="min-w-fit px-1 text-sm select-none">{$i18n.t('Notes')}</span>
-					<span class="text-sm text-gray-500 dark:text-gray-500">
+					<span class="text-sm mist-text-muted">
 						{total === null ? '' : formatNumber(total)}
 					</span>
 				</div>
@@ -617,7 +617,7 @@
 							{/if}
 
 							{#each groupedNotes as [timeRange, notesList], idx}
-								<div class="w-full px-2 pb-1 text-xs text-gray-500 dark:text-gray-500">
+								<div class="w-full px-2 pb-1 text-xs mist-text-muted">
 									{$i18n.t(timeRange)}
 								</div>
 
@@ -635,7 +635,7 @@
 												}}
 											>
 												<div class="flex min-w-0 flex-1 items-center gap-2">
-													<Tooltip content={note.title} className="min-w-0" placement="top-start">
+													<Tooltip content={note.title} className="min-w-0 flex-1" placement="top-start">
 														<div
 															dir="auto"
 															class="h-[1.25rem] truncate text-[length:var(--mist-text-sm)] leading-5 text-gray-800 group-hover:underline dark:text-gray-200"
@@ -661,7 +661,7 @@
 
 												<div class="ml-2 flex shrink-0 items-center justify-end gap-2">
 													<div
-														class="hidden max-w-44 shrink-0 truncate text-right text-[length:var(--mist-text-xs)] leading-5 text-gray-500 dark:text-gray-500 md:block"
+														class="hidden max-w-44 shrink-0 truncate text-right text-[length:var(--mist-text-xs)] leading-5 mist-text-muted md:block"
 													>
 														<Tooltip
 															content={note?.user?.email ?? $i18n.t('Deleted User')}
@@ -836,7 +836,7 @@
 
 												<a href={`/notes/${note.id}`} class="mt-1 flex min-h-0 flex-1 flex-col">
 													<div
-														class="line-clamp-3 text-xs leading-5 text-gray-500 dark:text-gray-500"
+														class="line-clamp-3 text-xs leading-5 mist-text-muted"
 													>
 														{#if note.data?.content?.md}
 															{note.data?.content?.md}
@@ -846,7 +846,7 @@
 													</div>
 
 													<div
-														class="mt-auto flex w-full items-center justify-between gap-2 pt-3 text-[length:var(--mist-text-xs)] leading-4 text-gray-500 dark:text-gray-500"
+														class="mt-auto flex w-full items-center justify-between gap-2 pt-3 text-[length:var(--mist-text-xs)] leading-4 mist-text-muted"
 													>
 														<Tooltip
 															content={note?.user?.email ?? $i18n.t('Deleted User')}

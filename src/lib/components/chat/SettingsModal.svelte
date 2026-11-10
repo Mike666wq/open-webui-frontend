@@ -145,17 +145,20 @@
 	let personalSettingGroups: Record<string, string> = {};
 	let adminSettingGroups: Record<string, string> = {};
 
+	// Groups must stay contiguous with the tab order above, otherwise the same
+	// heading is rendered more than once and the list reads as duplicated.
 	$: personalSettingGroups = {
 		general: $i18n.t('Basics'),
 		interface: $i18n.t('Basics'),
 		appearance: $i18n.t('Preferences'),
-		notifications: $i18n.t('Basics'),
-		shortcuts: $i18n.t('Basics'),
+		notifications: $i18n.t('Preferences'),
+		shortcuts: $i18n.t('Preferences'),
 		connections: $i18n.t('Services'),
 		tools: $i18n.t('Services'),
-		personalization: $i18n.t('Preferences'),
-		audio: $i18n.t('Preferences'),
+		personalization: $i18n.t('Experience'),
+		audio: $i18n.t('Experience'),
 		data_controls: $i18n.t('Data'),
+		resources: $i18n.t('Data'),
 		usage: $i18n.t('Data'),
 		archived_chats: $i18n.t('Data'),
 		account: $i18n.t('Profile'),
@@ -579,7 +582,7 @@
 
 		<SettingsTabRail previousLabel={$i18n.t('Previous')} nextLabel={$i18n.t('Next')}>
 			<span
-				class="hidden md:block text-[0.6875rem] mist-text-muted px-2 mt-1.5 mb-0.5"
+				class="hidden md:block shrink-0 text-[0.6875rem] font-semibold uppercase tracking-wide text-[var(--mist-ink)] px-2 mt-1.5 mb-0.5"
 			>
 				{$i18n.t('Personal')}
 			</span>
@@ -797,9 +800,9 @@
 
 			{#if $user?.role === 'admin' && filteredAdminSettings.length > 0}
 				<div
-					class="hidden md:block shrink-0 self-stretch h-px mx-1 my-2 bg-gray-100/40 dark:bg-white/[0.025]"
+					class="hidden md:block shrink-0 self-stretch h-px mx-1 my-3 bg-gray-200 dark:bg-white/[0.08]"
 				></div>
-				<span class="hidden md:block text-[0.6875rem] mist-text-muted px-2 mb-0.5">
+				<span class="hidden md:block shrink-0 text-[0.6875rem] font-semibold uppercase tracking-wide text-[var(--mist-ink)] px-2 mb-0.5">
 					{$i18n.t('Admin')}
 				</span>
 
