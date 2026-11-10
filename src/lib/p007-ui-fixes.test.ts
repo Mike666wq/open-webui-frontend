@@ -3,6 +3,14 @@ import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
+import {
+	contrastRatio,
+	effectiveSurface,
+	relativeLuminance,
+	themeColorTokens
+} from './appearance/color';
+import { PRESET_PALETTES } from './appearance/schema';
+
 const dir = dirname(fileURLToPath(import.meta.url)); // .../src/lib
 const read = (p: string) => readFileSync(join(dir, p), 'utf8');
 
@@ -62,6 +70,25 @@ describe('P-007 K16: knowledge base upload affordance is discoverable', () => {
 
 	it('states the drag-and-drop target in words', () => {
 		expect(browser).toContain("$i18n.t('Drop files here, or use Upload')");
+	});
+
+	it('keeps the hint readable when the button label collapses on narrow screens', () => {
+		// Deliberate tradeoff: below the `sm` breakpoint the button shows only its
+		// icon (avoids overflow at 320px), so the drag hint must NOT be hidden
+		// responsively or upload would become undiscoverable.
+		expect(browser).toContain('<span class="hidden sm:inline">{$i18n.t(\'Upload\')}</span>');
+
+		const hintIndex = browser.indexOf("$i18n.t('Drop files here, or use Upload')");
+		expect(hintIndex).toBeGreaterThan(-1);
+
+		const before = browser.slice(Math.max(0, hintIndex - 240), hintIndex);
+		const tagStart = before.lastIndexOf('<p');
+		expect(tagStart, 'drag hint <p> not found before its text').toBeGreaterThan(-1);
+
+		const hintTag = before.slice(tagStart);
+		expect(hintTag).toContain('class="mist-text-muted');
+		expect(hintTag).not.toMatch(/\bhidden\b/);
+		expect(hintTag).not.toMatch(/\bsm:/);
 	});
 
 	it('keeps the existing "+" menu and its sync/reset entries', () => {
@@ -195,5 +222,65 @@ describe('P-007: every new user-facing string has a real translation key', () =>
 		for (const key of ['Upload', 'AI assistant', 'Blockquote', 'Highlight', 'Superscript']) {
 			expect(zh[key], `zh-CN did not translate "${key}"`).not.toBe(key);
 		}
+	});
+});
+
+describe('P-007 K14: --mist-muted clears WCAG AA in both themes, by computation', () => {
+	// The caption renders as `color: var(--mist-muted)` over the reading surface.
+	// Both values come from themeColorTokens(), so resolve them instead of
+	// asserting a hardcoded hex: css-vars.ts maps --mist-muted <- tokens.muted and
+	// --mist-effective-surface-rgb <- tokens.effectiveSurfaceRgb.
+	const surfaces = [
+		{ name: 'no wallpaper', glassAlpha: 0.5, scrim: 0.4, wallpaperLuminance: null },
+		{ name: 'black wallpaper', glassAlpha: 0.5, scrim: 0.4, wallpaperLuminance: 0 },
+		{ name: 'bright wallpaper', glassAlpha: 0.5, scrim: 0.4, wallpaperLuminance: 1 },
+		{ name: 'dense dark glass', glassAlpha: 0.85, scrim: 0.7, wallpaperLuminance: 0.1 },
+		{ name: 'dense bright glass', glassAlpha: 0.85, scrim: 0.7, wallpaperLuminance: 0.9 }
+	];
+
+	const presets = Object.keys(PRESET_PALETTES) as Array<keyof typeof PRESET_PALETTES>;
+
+	it('the css variables the caption consumes are wired to those tokens', () => {
+		const cssVars = read('appearance/css-vars.ts');
+		expect(cssVars).toContain("setVariable(root, '--mist-muted', tokens.muted)");
+		expect(cssVars).toContain(
+			"setVariable(root, '--mist-effective-surface-rgb', tokens.effectiveSurfaceRgb)"
+		);
+	});
+
+	for (const preset of presets) {
+		for (const mode of ['light', 'dark'] as const) {
+			it(`${preset} / ${mode} stays at or above 4.5:1`, () => {
+				const colors = PRESET_PALETTES[preset][mode];
+
+				for (const wallpaper of surfaces) {
+					const tokens = themeColorTokens(colors, wallpaper);
+					const background = effectiveSurface(colors, wallpaper);
+					const ratio = contrastRatio(tokens.muted, background);
+
+					expect(
+						ratio,
+						`${preset}/${mode}/${wallpaper.name}: --mist-muted ${tokens.muted} on ${background} = ${ratio.toFixed(2)}:1`
+					).toBeGreaterThanOrEqual(4.5);
+				}
+			});
+		}
+	}
+
+	it('the dark theme really is dark, so this is not a surrogate for light', () => {
+		for (const preset of presets) {
+			const surface = effectiveSurface(PRESET_PALETTES[preset].dark, surfaces[0]);
+			expect(relativeLuminance(surface), `${preset} dark surface ${surface}`).toBeLessThan(0.25);
+		}
+	});
+
+	it('--mist-muted is dimmer than --mist-ink but still legible', () => {
+		const colors = PRESET_PALETTES['mist-blue'].dark;
+		const tokens = themeColorTokens(colors, surfaces[0]);
+		const background = effectiveSurface(colors, surfaces[0]);
+
+		expect(contrastRatio(tokens.muted, background)).toBeLessThan(
+			contrastRatio(tokens.ink, background)
+		);
 	});
 });
