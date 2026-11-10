@@ -211,7 +211,7 @@
 			return 'text-[#4f7a5a] dark:text-[#8db395]';
 		}
 		if (isSharedModel(model)) {
-			return 'text-[#4f6f93] dark:text-[#8ba6c6]';
+			return 'text-[#3a5678] dark:text-[#8ba6c6]';
 		}
 		return 'mist-text-muted';
 	};

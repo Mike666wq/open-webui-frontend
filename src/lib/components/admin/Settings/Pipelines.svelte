@@ -430,8 +430,7 @@
 													{:else if (valves_spec.properties[property]?.type ?? null) === 'boolean'}
 														<AdminSettingRow
 															label={valves[property] ? $i18n.t('Enabled') : $i18n.t('Disabled')}
-															labelClassName="mist-text-muted"
-															let:labelId
+																			let:labelId
 														>
 															<Switch bind:state={valves[property]} ariaLabelledbyId={labelId} />
 														</AdminSettingRow>

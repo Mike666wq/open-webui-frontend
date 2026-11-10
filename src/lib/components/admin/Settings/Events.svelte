@@ -756,7 +756,7 @@
 		</div>
 
 		{#if webhooks.length === 0}
-			<div class="text-xs text-gray-400 dark:text-gray-500">
+			<div class="text-xs mist-text-muted">
 				{$i18n.t('No event webhooks configured.')}
 			</div>
 		{/if}

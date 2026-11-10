@@ -328,7 +328,6 @@
 					<AdminSettingRow
 						label={$i18n.t('settings.admin.general.memorySystemContext.label')}
 						description={$i18n.t('settings.admin.general.memorySystemContext.description')}
-						labelClassName="text-gray-500 dark:text-gray-500"
 						let:labelId
 					>
 						<Switch
@@ -355,7 +354,6 @@
 					<AdminSettingRow
 						label={$i18n.t('settings.admin.general.modelResponseMode.label')}
 						description={$i18n.t('settings.admin.general.modelResponseMode.description')}
-						labelClassName="text-gray-500 dark:text-gray-500"
 						let:labelId
 					>
 						<SettingsSelect
@@ -451,7 +449,7 @@
 						</button>
 
 						<button
-							class="shrink-0 text-[0.6875rem] text-gray-400 transition hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300"
+							class="shrink-0 text-[0.6875rem] mist-text-muted transition hover:text-[var(--mist-ink)]"
 							type="button"
 							on:click={() => {
 								showUserUiDefaults = !showUserUiDefaults;
@@ -471,7 +469,7 @@
 
 								{#if Object.keys(defaultInterfaceSettings).length > 0}
 									<button
-										class="shrink-0 text-[0.6875rem] text-gray-400 transition hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300"
+										class="shrink-0 text-[0.6875rem] mist-text-muted transition hover:text-[var(--mist-ink)]"
 										type="button"
 										on:click={() => {
 											defaultInterfaceSettings = {};
