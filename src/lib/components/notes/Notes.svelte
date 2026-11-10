@@ -650,7 +650,7 @@
 															.format('LLLL')}
 													>
 														<div
-															class="shrink-0 truncate text-[length:var(--mist-text-xs)] leading-5 text-gray-400 dark:text-gray-600"
+															class="shrink-0 truncate text-[length:var(--mist-text-xs)] leading-5 mist-text-muted"
 														>
 															{dayjs(note.updated_at / 1000000)
 																.locale($i18n.language)

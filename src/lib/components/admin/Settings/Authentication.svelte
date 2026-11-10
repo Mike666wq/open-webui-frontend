@@ -231,7 +231,7 @@
 							<a
 								href="https://docs.openwebui.com/reference/api-endpoints"
 								target="_blank"
-								class="mt-1 block text-[0.6875rem] text-gray-400 underline hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300"
+								class="mt-1 block text-[0.6875rem] mist-text-muted underline hover:text-[var(--mist-ink)]"
 							>
 								{$i18n.t('To learn more about available endpoints, visit our documentation.')}
 							</a>
@@ -269,7 +269,7 @@
 						ariaLabel={$i18n.t('Require an authenticator for all users')}
 					/>
 				</AdminSettingRow>
-				<p class="-mt-1 text-[0.6875rem] leading-4 text-gray-400 dark:text-gray-600">
+				<p class="-mt-1 text-[0.6875rem] leading-4 mist-text-muted">
 					{$i18n.t('Changes sign out all devices. Users enroll on their next sign-in.')}
 				</p>
 				{#if adminConfig.ENABLE_MFA}
@@ -493,7 +493,7 @@
 						bind:value={LDAP_SERVER.search_filters}
 					/>
 					<a
-						class="mt-1 block text-[0.6875rem] text-gray-400 underline hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300"
+						class="mt-1 block text-[0.6875rem] mist-text-muted underline hover:text-[var(--mist-ink)]"
 						href="https://ldap.com/ldap-filters/"
 						target="_blank"
 					>

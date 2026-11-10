@@ -115,7 +115,7 @@
 			{#if evaluationConfig.ENABLE_EVALUATION_ARENA_MODELS}
 				<AdminSettingSection title={$i18n.t('settings.admin.evaluations.sections.models.title')}>
 					<div class="mb-2 flex items-center justify-between">
-						<div class="text-xs text-gray-600 dark:text-gray-400">
+						<div class="text-xs mist-text-muted">
 							{$i18n.t('settings.admin.evaluations.arenaModels.label')}
 						</div>
 
@@ -144,7 +144,7 @@
 								/>
 							{/each}
 						{:else}
-							<div class="text-center text-[0.6875rem] text-gray-400 dark:text-gray-600">
+							<div class="text-center text-[0.6875rem] mist-text-muted">
 								{$i18n.t(
 									`Using the default arena model with all models. Click the plus button to add custom models.`
 								)}

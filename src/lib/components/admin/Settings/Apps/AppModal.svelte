@@ -231,7 +231,7 @@
 	</div>
 	{#if showScopes}
 		<div class="px-5 pb-4 text-sm dark:text-gray-200">
-			<p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
+			<p class="mb-3 text-xs mist-text-muted">
 				{scopeMode === 'requested'
 					? $i18n.t('Enter the scopes requested by the app.')
 					: app
@@ -263,7 +263,7 @@
 							<div slot="label" class="break-words">
 								{$i18n.t(scopeLabels[scope] ?? scope)}
 								{#if scopeLabels[scope]}<div
-										class="mt-0.5 break-all font-mono text-[0.6875rem] text-gray-400 dark:text-gray-600"
+										class="mt-0.5 break-all font-mono text-[0.6875rem] mist-text-muted"
 									>
 										{scope}
 									</div>{/if}
@@ -286,7 +286,7 @@
 							/>
 						</AdminSettingRow>
 					{:else}
-						<p class="py-3 text-xs text-gray-400 dark:text-gray-600">
+						<p class="py-3 text-xs mist-text-muted">
 							{scopeQuery ? $i18n.t('No matching scopes.') : $i18n.t('No scopes requested.')}
 						</p>
 					{/each}
@@ -395,7 +395,7 @@
 					{/if}
 					<AdminSettingSection title={$i18n.t('Connection')}>
 						<div class="flex items-center gap-2">
-							<p class="min-w-0 flex-1 break-all text-xs text-gray-600 dark:text-gray-400">{url}</p>
+							<p class="min-w-0 flex-1 break-all text-xs mist-text-muted">{url}</p>
 							{#if app}
 								<Tooltip content={$i18n.t('Update app')}>
 									<button
@@ -461,7 +461,7 @@
 					<AdminSettingSection>
 						<AdminSettingRow label={$i18n.t('Scopes')}>
 							<div class="flex items-center gap-3 text-xs">
-								<span class="text-gray-400 dark:text-gray-600"
+								<span class="mist-text-muted"
 									>{$i18n.t('{{COUNT}} selected', {
 										COUNT: scopes.length
 									})}</span

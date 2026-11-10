@@ -98,7 +98,7 @@
 					>{$i18n.t('Some provider catalogs are unavailable. Other models remain usable.')}</summary
 				>
 				{#each catalogErrors as failure}
-					<p class="text-xs text-amber-600">
+					<p class="text-xs text-amber-700 dark:text-amber-400">
 						{failure.connection_name} · HTTP {failure.status} · {$i18n.t(
 							'Unavailable or legacy model'
 						)}
@@ -110,7 +110,7 @@
 			</details>{/if}
 		{#if error}<p class="text-xs text-red-500">{error}</p>
 			<button type="button" on:click={load}>{$i18n.t('Retry')}</button>{/if}
-		{#if !loading && !error && !options.length}<p class="text-xs text-amber-600">
+		{#if !loading && !error && !options.length}<p class="text-xs text-amber-700 dark:text-amber-400">
 				{$i18n.t('No models for this purpose. Configure model capabilities in Connections.')}
 			</p>
 			<button

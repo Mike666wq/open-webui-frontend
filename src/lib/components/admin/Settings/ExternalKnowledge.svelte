@@ -796,7 +796,7 @@
 
 <div class="flex w-full flex-col justify-between text-xs">
 	<div class="mb-2 flex items-center justify-between">
-		<div class="flex items-center gap-2 leading-none text-gray-600 dark:text-gray-400">
+		<div class="flex items-center gap-2 leading-none mist-text-muted">
 			<div>{$i18n.t('settings.admin.integrations.externalKnowledge.title')}</div>
 			<ExperimentalBadge />
 		</div>
@@ -875,13 +875,13 @@
 			<Spinner />
 		</div>
 	{:else if items.length === 0}
-		<div class="text-[0.6875rem] text-gray-400 dark:text-gray-600">
+		<div class="text-[0.6875rem] mist-text-muted">
 			{$i18n.t('No external knowledge sources configured.')}
 		</div>
 	{/if}
 
 	{#if items.length === 0}
-		<div class="text-[0.6875rem] text-gray-400 dark:text-gray-600">
+		<div class="text-[0.6875rem] mist-text-muted">
 			{$i18n.t('Test must pass before a source is created.')}
 		</div>
 	{/if}

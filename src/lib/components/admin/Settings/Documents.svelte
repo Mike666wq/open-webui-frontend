@@ -638,14 +638,14 @@
 						</Tooltip>
 						<button
 							type="button"
-							class="mt-1 text-[0.6875rem] text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300"
+							class="mt-1 text-[0.6875rem] mist-text-muted transition-colors hover:text-[var(--mist-ink)]"
 							on:click={() =>
 								(showExternalDocumentLoaderHeadersHint = !showExternalDocumentLoaderHeadersHint)}
 						>
 							{$i18n.t('settings.admin.documents.headerVariables.label')}
 						</button>
 						{#if showExternalDocumentLoaderHeadersHint}
-							<div class="mt-1 text-[0.6875rem] leading-5 text-gray-500 dark:text-gray-400">
+							<div class="mt-1 text-[0.6875rem] leading-5 mist-text-muted">
 								<div>{$i18n.t('No additional headers are sent unless configured.')}</div>
 								<div>
 									{$i18n.t('Example')}:
@@ -1161,7 +1161,7 @@
 								</button>
 							{/if}
 						</div>
-						<div class="mt-1 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+						<div class="mt-1 text-[0.6875rem] mist-text-muted">
 							{$i18n.t(
 								'After changing the embedding model, reindex knowledge, knowledge search, and memory vectors for changes to take effect.'
 							)}
@@ -1400,7 +1400,7 @@
 											class="h-2 w-full cursor-pointer appearance-none rounded-lg dark:bg-gray-700"
 										/>
 										<div
-											class="flex justify-between py-0.5 text-[0.6875rem] text-gray-400 dark:text-gray-600"
+											class="flex justify-between py-0.5 text-[0.6875rem] mist-text-muted"
 										>
 											<div>{$i18n.t('semantic')}</div>
 											<div>{$i18n.t('lexical')}</div>
@@ -1439,7 +1439,7 @@
 					</Tooltip>
 
 					{#if RAGConfig.RAG_TEMPLATE && (RAGConfig.RAG_TEMPLATE.match(/\[context\]/g) || []).length + (RAGConfig.RAG_TEMPLATE.match(/\{\{CONTEXT\}\}/g) || []).length > 1}
-						<div class="mt-1 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+						<div class="mt-1 text-[0.6875rem] mist-text-muted">
 							{$i18n.t(
 								'This template contains multiple context placeholders ([context] or {{CONTEXT}}). Context will be injected at each occurrence.'
 							)}

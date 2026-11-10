@@ -238,7 +238,7 @@
 					{#if webConfig.WEB_SEARCH_ENGINE === 'ollama_cloud'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.ollamaCloudApiKey.label')}
 								</div>
 
@@ -256,7 +256,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'perplexity_search'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.perplexitySearchApiUrl.label')}
 								</div>
 
@@ -276,7 +276,7 @@
 
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.perplexityApiKey.label')}
 								</div>
 
@@ -294,7 +294,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'searxng'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-left text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-left text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.searxngQueryUrl.label')}
 								</div>
 
@@ -312,7 +312,7 @@
 								</div>
 							</div>
 							<div class="mb-2.5 flex w-full flex-col">
-								<div class=" self-left text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-left text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.searxngSearchLanguageAllEnEsDeFrEtc.label')}
 								</div>
 
@@ -333,7 +333,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'yacy'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.yacyInstanceUrl.label')}
 								</div>
 
@@ -353,7 +353,7 @@
 						<div class="mb-2.5 flex w-full flex-col">
 							<div class="flex gap-2">
 								<div class="w-full">
-									<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+									<div class=" self-center text-xs mist-text-muted mb-1">
 										{$i18n.t('settings.admin.web.yacyUsername.label')}
 									</div>
 
@@ -366,7 +366,7 @@
 								</div>
 
 								<div class="w-full">
-									<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+									<div class=" self-center text-xs mist-text-muted mb-1">
 										{$i18n.t('settings.admin.web.yacyPassword.label')}
 									</div>
 
@@ -381,7 +381,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'google_pse'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.googlePseApiKey.label')}
 								</div>
 
@@ -392,7 +392,7 @@
 								/>
 							</div>
 							<div class="mt-1.5">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.googlePseEngineId.label')}
 								</div>
 
@@ -412,7 +412,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'brave'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.braveSearchApiKey.label')}
 								</div>
 
@@ -426,7 +426,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'brave_llm_context'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.braveSearchApiKey.label')}
 								</div>
 
@@ -437,7 +437,7 @@
 								/>
 							</div>
 							<div class="mt-1.5">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.contextTokens.label')}
 								</div>
 
@@ -460,7 +460,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'kagi'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.kagiSearchApiKey.label')}
 								</div>
 
@@ -474,7 +474,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'mojeek'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.mojeekSearchApiKey.label')}
 								</div>
 
@@ -488,7 +488,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'bocha'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.bochaSearchApiKey.label')}
 								</div>
 
@@ -502,7 +502,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'serpstack'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.serpstackApiKey.label')}
 								</div>
 
@@ -516,7 +516,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'serper'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.serperApiKey.label')}
 								</div>
 
@@ -530,7 +530,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'serphouse'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.serphouseApiKey.label')}
 								</div>
 
@@ -541,7 +541,7 @@
 								/>
 							</div>
 							<div class="mt-1.5">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.serphouseDomain.label')}
 								</div>
 
@@ -561,7 +561,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'serply'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.serplyApiKey.label')}
 								</div>
 
@@ -575,7 +575,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'tavily'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.tavilyApiKey.label')}
 								</div>
 
@@ -589,7 +589,7 @@
 
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.tavilySearchDepth.label')}
 								</div>
 								<SettingsSelect bind:value={webConfig.TAVILY_SEARCH_DEPTH} className="w-full">
@@ -603,7 +603,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'staan'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('Staan API Key')}
 								</div>
 
@@ -647,7 +647,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'searchapi'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.searchapiApiKey.label')}
 								</div>
 
@@ -658,7 +658,7 @@
 								/>
 							</div>
 							<div class="mt-1.5">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.searchapiEngine.label')}
 								</div>
 
@@ -678,7 +678,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'serpapi'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.serpapiApiKey.label')}
 								</div>
 
@@ -689,7 +689,7 @@
 								/>
 							</div>
 							<div class="mt-1.5">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.serpapiEngine.label')}
 								</div>
 
@@ -709,7 +709,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'jina'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.jinaApiBaseUrl.label')}
 								</div>
 
@@ -727,7 +727,7 @@
 							</div>
 
 							<div class="mt-2">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.jinaApiKey.label')}
 								</div>
 
@@ -741,7 +741,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'bing'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.bingSearchV7Endpoint.label')}
 								</div>
 
@@ -759,7 +759,7 @@
 							</div>
 
 							<div class="mt-2">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.bingSearchV7SubscriptionKey.label')}
 								</div>
 
@@ -773,7 +773,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'exa'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.exaApiKey.label')}
 								</div>
 
@@ -803,7 +803,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'perplexity'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.perplexityApiKey.label')}
 								</div>
 
@@ -817,7 +817,7 @@
 
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class="self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class="self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.perplexityModel.label')}
 								</div>
 								<input
@@ -838,7 +838,7 @@
 
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.perplexitySearchContextUsage.label')}
 								</div>
 								<SettingsSelect
@@ -854,7 +854,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'microsoft_web_iq'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.microsoftWebIqApiBaseUrl.label')}
 								</div>
 
@@ -872,7 +872,7 @@
 							</div>
 
 							<div class="mt-2">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.microsoftWebIqApiKey.label')}
 								</div>
 
@@ -884,7 +884,7 @@
 							</div>
 
 							<div class="mt-2">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.language.label')}
 								</div>
 
@@ -900,7 +900,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'sougou'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.sougouSearchApiSid.label')}
 								</div>
 
@@ -913,7 +913,7 @@
 						</div>
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.sougouSearchApiSk.label')}
 								</div>
 
@@ -927,7 +927,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'firecrawl'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.firecrawlApiBaseUrl.label')}
 								</div>
 
@@ -945,7 +945,7 @@
 							</div>
 
 							<div class="mt-2">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.firecrawlApiKey.label')}
 								</div>
 
@@ -957,7 +957,7 @@
 							</div>
 
 							<div class="mt-2">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.firecrawlTimeoutS.label')}
 								</div>
 
@@ -977,7 +977,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'external'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.externalWebSearchUrl.label')}
 								</div>
 
@@ -995,7 +995,7 @@
 							</div>
 
 							<div class="mt-2">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.externalWebSearchApiKey.label')}
 								</div>
 
@@ -1009,7 +1009,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'yandex'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.yandexWebSearchUrl.label')}
 								</div>
 
@@ -1027,7 +1027,7 @@
 							</div>
 
 							<div class="mt-2">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.yandexWebSearchApiKey.label')}
 								</div>
 
@@ -1039,7 +1039,7 @@
 							</div>
 
 							<div class="mb-2.5">
-								<div class=" mb-1 text-xs text-gray-600 dark:text-gray-400">
+								<div class=" mb-1 text-xs mist-text-muted">
 									{$i18n.t('settings.admin.web.yandexWebSearchConfig.label')}
 								</div>
 
@@ -1062,7 +1062,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'youcom'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.youComApiKey.label')}
 								</div>
 
@@ -1076,7 +1076,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'linkup'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.linkupApiKey.label')}
 								</div>
 
@@ -1088,7 +1088,7 @@
 							</div>
 
 							<div class="mt-2">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.parameters.label')}
 								</div>
 
@@ -1102,7 +1102,7 @@
 					{:else if webConfig.WEB_SEARCH_ENGINE === 'openserp'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.openserpUrl.label')}
 								</div>
 
@@ -1123,7 +1123,7 @@
 					{#if webConfig.WEB_SEARCH_ENGINE === 'duckduckgo'}
 						<div class="mb-2.5 flex w-full flex-col">
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.ddgsBackend.label')}
 								</div>
 
@@ -1155,7 +1155,7 @@
 					>
 						<div class="flex gap-2">
 							<div class="w-full">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.searchResultCount.label')}
 								</div>
 
@@ -1168,7 +1168,7 @@
 							</div>
 
 							<div class="w-full">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									<Tooltip
 										content={$i18n.t('settings.admin.web.searchResultCount.description')}
 										placement="top-start"
@@ -1267,7 +1267,7 @@
 
 				{#if webConfig.WEB_LOADER_ENGINE === 'exa'}
 					{#if webConfig.WEB_SEARCH_ENGINE === 'exa'}
-						<p class="text-xs text-gray-500 dark:text-gray-400">
+						<p class="text-xs mist-text-muted">
 							{$i18n.t('Exa search and web loading share the API key configured above.')}
 						</p>
 					{:else}
@@ -1306,7 +1306,7 @@
 				{:else if webConfig.WEB_LOADER_ENGINE === 'playwright'}
 					<div class="mb-2.5 flex w-full flex-col">
 						<div>
-							<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+							<div class=" self-center text-xs mist-text-muted mb-1">
 								{$i18n.t('settings.admin.web.playwrightWebsocketUrl.label')}
 							</div>
 
@@ -1324,7 +1324,7 @@
 						</div>
 
 						<div class="mt-2">
-							<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+							<div class=" self-center text-xs mist-text-muted mb-1">
 								{$i18n.t('settings.admin.web.playwrightTimeoutMs.label')}
 							</div>
 
@@ -1343,7 +1343,7 @@
 				{:else if webConfig.WEB_LOADER_ENGINE === 'firecrawl' && webConfig.WEB_SEARCH_ENGINE !== 'firecrawl'}
 					<div class="mb-2.5 flex w-full flex-col">
 						<div>
-							<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+							<div class=" self-center text-xs mist-text-muted mb-1">
 								{$i18n.t('settings.admin.web.firecrawlApiBaseUrl.label')}
 							</div>
 
@@ -1361,7 +1361,7 @@
 						</div>
 
 						<div class="mt-2">
-							<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+							<div class=" self-center text-xs mist-text-muted mb-1">
 								{$i18n.t('settings.admin.web.firecrawlApiKey.label')}
 							</div>
 
@@ -1375,7 +1375,7 @@
 				{:else if webConfig.WEB_LOADER_ENGINE === 'tavily'}
 					<div class="mb-2.5 flex w-full flex-col">
 						<div>
-							<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+							<div class=" self-center text-xs mist-text-muted mb-1">
 								{$i18n.t('settings.admin.web.tavilyExtractDepth.label')}
 							</div>
 
@@ -1394,7 +1394,7 @@
 
 						{#if webConfig.WEB_SEARCH_ENGINE !== 'tavily'}
 							<div class="mt-2">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.tavilyApiKey.label')}
 								</div>
 
@@ -1410,7 +1410,7 @@
 					<div class="mb-2.5 flex w-full flex-col">
 						{#if webConfig.WEB_SEARCH_ENGINE !== 'microsoft_web_iq'}
 							<div>
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.microsoftWebIqApiBaseUrl.label')}
 								</div>
 
@@ -1428,7 +1428,7 @@
 							</div>
 
 							<div class="mt-2">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.microsoftWebIqApiKey.label')}
 								</div>
 
@@ -1440,7 +1440,7 @@
 							</div>
 
 							<div class="mt-2">
-								<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+								<div class=" self-center text-xs mist-text-muted mb-1">
 									{$i18n.t('settings.admin.web.language.label')}
 								</div>
 
@@ -1457,7 +1457,7 @@
 				{:else if webConfig.WEB_LOADER_ENGINE === 'external'}
 					<div class="mb-2.5 flex w-full flex-col">
 						<div>
-							<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+							<div class=" self-center text-xs mist-text-muted mb-1">
 								{$i18n.t('settings.admin.web.externalWebLoaderUrl.label')}
 							</div>
 
@@ -1475,7 +1475,7 @@
 						</div>
 
 						<div class="mt-2">
-							<div class=" self-center text-xs text-gray-600 dark:text-gray-400 mb-1">
+							<div class=" self-center text-xs mist-text-muted mb-1">
 								{$i18n.t('settings.admin.web.externalWebLoaderApiKey.label')}
 							</div>
 

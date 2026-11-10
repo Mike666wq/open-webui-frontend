@@ -314,7 +314,7 @@
 				</div>
 			{:else}
 				<table
-					class="w-full text-sm text-left text-gray-500 dark:text-gray-400 table-auto max-w-full px-2"
+					class="w-full text-sm text-left mist-text-muted table-auto max-w-full px-2"
 				>
 					<thead class="text-xs text-gray-800 uppercase bg-transparent dark:text-gray-200">
 						<tr class=" border-b-[1.5px] border-gray-50 dark:border-gray-850/30">
@@ -443,7 +443,7 @@
 											{#if feedback.data?.sibling_model_ids}
 												<Tooltip content={feedback.data?.model_id} placement="top-start">
 													<div
-														class="font-normal text-gray-600 dark:text-gray-400 flex-1 line-clamp-1"
+														class="font-normal mist-text-muted flex-1 line-clamp-1"
 													>
 														{feedback.data?.model_id}
 													</div>
@@ -451,7 +451,7 @@
 
 												<Tooltip content={feedback.data.sibling_model_ids.join(', ')}>
 													<div
-														class=" text-[0.65rem] text-gray-600 dark:text-gray-400 line-clamp-1"
+														class=" text-[0.65rem] mist-text-muted line-clamp-1"
 													>
 														{#if feedback.data.sibling_model_ids.length > 2}
 															<!-- {$i18n.t('and {{COUNT}} more')} -->
@@ -467,7 +467,7 @@
 											{:else}
 												<Tooltip content={feedback.data?.model_id} placement="top-start">
 													<div
-														class="text-sm font-normal text-gray-600 dark:text-gray-400 flex-1 py-1.5 line-clamp-1"
+														class="text-sm font-normal mist-text-muted flex-1 py-1.5 line-clamp-1"
 													>
 														{feedback.data?.model_id}
 													</div>

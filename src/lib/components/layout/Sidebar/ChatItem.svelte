@@ -545,7 +545,7 @@
 
 	<!-- Time ago indicator -->
 	{#if (updatedAt ?? createdAt) && !showInlineActions && !($mobile && !readonly)}
-		<div class="shrink-0 self-center text-[0.625rem] text-gray-400 dark:text-gray-500 pl-2">
+		<div class="shrink-0 self-center text-[0.6875rem] mist-text-muted pl-2">
 			{formatTimeAgo((updatedAt ?? createdAt) as number)}
 		</div>
 	{/if}

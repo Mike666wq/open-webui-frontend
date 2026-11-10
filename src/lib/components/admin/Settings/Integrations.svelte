@@ -193,7 +193,7 @@
 				>
 					<div>
 						<div class="mb-2 flex items-center justify-between">
-							<div class="text-xs text-gray-600 dark:text-gray-400">
+							<div class="text-xs mist-text-muted">
 								{$i18n.t('settings.admin.integrations.externalToolServers.label')}
 							</div>
 
@@ -226,12 +226,12 @@
 						</div>
 
 						{#if (servers ?? []).length === 0}
-							<div class="text-[0.6875rem] text-gray-400 dark:text-gray-600">
+							<div class="text-[0.6875rem] mist-text-muted">
 								{$i18n.t('No tool server connections configured.')}
 							</div>
 						{/if}
 
-						<div class="mt-1 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+						<div class="mt-1 text-[0.6875rem] mist-text-muted">
 							{$i18n.t('Connect to your own OpenAPI compatible external tool servers.')}
 						</div>
 					</div>
@@ -240,7 +240,7 @@
 				<AdminSettingSection title={$i18n.t('settings.admin.integrations.sections.terminal.title')}>
 					<div>
 						<div class="mb-2 flex items-center justify-between">
-							<div class="text-xs text-gray-600 dark:text-gray-400">
+							<div class="text-xs mist-text-muted">
 								{$i18n.t('settings.admin.integrations.openTerminal.label')}
 							</div>
 
@@ -319,12 +319,12 @@
 						</div>
 
 						{#if terminalConnections.length === 0}
-							<div class="text-[0.6875rem] text-gray-400 dark:text-gray-600">
+							<div class="text-[0.6875rem] mist-text-muted">
 								{$i18n.t('No terminal connections configured.')}
 							</div>
 						{/if}
 
-						<div class="mt-1 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+						<div class="mt-1 text-[0.6875rem] mist-text-muted">
 							{$i18n.t(
 								'Connect to Open Terminal instances. Admins and users granted access can use file browsing and terminal tools through these servers.'
 							)}

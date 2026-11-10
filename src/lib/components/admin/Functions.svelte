@@ -459,7 +459,7 @@
 			{#if (filteredItems ?? []).length !== 0}
 				<div class="my-1">
 					<div
-						class="flex w-full items-center gap-2 px-1.5 pb-0.5 text-xs text-gray-400 dark:text-gray-600"
+						class="flex w-full items-center gap-2 px-1.5 pb-0.5 text-xs mist-text-muted"
 					>
 						<button
 							class="flex min-w-0 flex-1 items-center gap-1 py-0.5 text-left"
@@ -544,7 +544,7 @@
 														.format('LLLL')}
 												>
 													<div
-														class="shrink-0 truncate text-[0.6875rem] leading-5 text-gray-400 dark:text-gray-600"
+														class="shrink-0 truncate text-[0.6875rem] leading-5 mist-text-muted"
 													>
 														{dayjs(func.updated_at * 1000)
 															.locale($i18n.language)
@@ -561,7 +561,7 @@
 												placement="top-start"
 											>
 												<div
-													class="mt-0.5 truncate text-[0.6875rem] leading-4 text-gray-400 dark:text-gray-600"
+													class="mt-0.5 truncate text-[0.6875rem] leading-4 mist-text-muted"
 												>
 													{resolveLocalizedResource(func, $i18n.language, 'description')}
 												</div>

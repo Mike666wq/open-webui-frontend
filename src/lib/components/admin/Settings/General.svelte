@@ -138,7 +138,7 @@
 			<AdminSettingSection first>
 				<div class="flex items-start justify-between gap-4">
 					<div class="min-w-0 text-xs">
-						<div class="text-gray-600 dark:text-gray-400">
+						<div class="mist-text-muted">
 							{$i18n.t('settings.admin.general.version.label')}
 						</div>
 						<div class="mt-1 flex flex-wrap gap-x-1 text-gray-700 dark:text-gray-200">
@@ -166,7 +166,7 @@
 						</div>
 
 						<button
-							class="mt-0.5 text-xs text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300"
+							class="mt-0.5 text-xs mist-text-muted transition-colors hover:text-[var(--mist-ink)]"
 							type="button"
 							on:click={() => {
 								showChangelog.set(true);
@@ -192,10 +192,10 @@
 				<div class="text-xs">
 					<div class="flex items-start justify-between gap-4">
 						<div class="min-w-0">
-							<div class="text-gray-600 dark:text-gray-400">
+							<div class="mist-text-muted">
 								{$i18n.t('settings.admin.general.help.label')}
 							</div>
-							<div class="mt-0.5 text-gray-400 dark:text-gray-600">
+							<div class="mt-0.5 mist-text-muted">
 								<!-- LICENSE covers this Open WebUI wordmark.
 								Do not alter, remove, obscure, or replace it except as LICENSE permits:
 								https://docs.openwebui.com/license. -->
@@ -204,7 +204,7 @@
 						</div>
 
 						<a
-							class="shrink-0 text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-white"
+							class="shrink-0 mist-text-muted transition-colors hover:text-[var(--mist-ink)]"
 							href="https://docs.openwebui.com/"
 							target="_blank"
 						>
@@ -212,19 +212,19 @@
 						</a>
 					</div>
 
-					<div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-gray-400 dark:text-gray-600">
+					<div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 mist-text-muted">
 						<a
-							class="hover:text-gray-700 dark:hover:text-gray-300"
+							class="hover:text-[var(--mist-ink)]"
 							href="https://discord.gg/5rJgQTnV4s"
 							target="_blank">Discord</a
 						>
 						<a
-							class="hover:text-gray-700 dark:hover:text-gray-300"
+							class="hover:text-[var(--mist-ink)]"
 							href="https://twitter.com/OpenWebUI"
 							target="_blank">X</a
 						>
 						<a
-							class="hover:text-gray-700 dark:hover:text-gray-300"
+							class="hover:text-[var(--mist-ink)]"
 							href="https://github.com/open-webui/open-webui"
 							target="_blank">GitHub</a
 						>
@@ -235,7 +235,7 @@
 					<!-- LICENSE covers this Open WebUI license attribution.
 					Do not alter, remove, obscure, or replace it except as LICENSE permits:
 					https://docs.openwebui.com/license. -->
-					<div class="text-gray-600 dark:text-gray-400">
+					<div class="mist-text-muted">
 						{$i18n.t('settings.admin.general.license.label')}
 					</div>
 
@@ -264,7 +264,7 @@
 						{/if}
 					{:else}
 						<a
-							class="mt-0.5 block text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300"
+							class="mt-0.5 block mist-text-muted transition-colors hover:text-[var(--mist-ink)]"
 							href="https://docs.openwebui.com/enterprise"
 							target="_blank"
 						>
@@ -443,7 +443,7 @@
 							}}
 						>
 							<div>{$i18n.t('Default Interface Settings')}</div>
-							<div class="mt-1.5 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+							<div class="mt-1.5 text-[0.6875rem] mist-text-muted">
 								{$i18n.t(
 									'Set system-wide interface defaults for every account. Personal settings override these defaults.'
 								)}
@@ -464,7 +464,7 @@
 					{#if showUserUiDefaults}
 						<div class="mt-0.5 space-y-2">
 							<div class="flex items-center justify-between gap-4 py-0.5">
-								<div class="text-[0.6875rem] text-gray-400 dark:text-gray-600">
+								<div class="text-[0.6875rem] mist-text-muted">
 									{Object.keys(defaultInterfaceSettings).length}
 									{$i18n.t('settings configured')}
 								</div>
@@ -494,7 +494,7 @@
 
 				<div>
 					<div class="mb-1 flex min-h-7 w-full items-center justify-between gap-2">
-						<div class="min-w-0 text-xs text-gray-600 dark:text-gray-400">
+						<div class="min-w-0 text-xs mist-text-muted">
 							{$i18n.t('settings.admin.general.banners.label')}
 						</div>
 						<div class="flex shrink-0 items-center gap-1">
@@ -502,7 +502,7 @@
 								<LanguageModeSelect bind:value={bannerLocale} className="w-fit" />
 							{/if}
 							<button
-								class="flex size-6 items-center justify-center text-gray-400 dark:text-gray-600"
+								class="flex size-6 items-center justify-center mist-text-muted"
 								type="button"
 								aria-label={$i18n.t('settings.admin.general.addBanner.label')}
 								on:click={() => {
@@ -525,7 +525,7 @@
 							</button>
 						</div>
 					</div>
-					<div class="mb-2 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+					<div class="mb-2 text-[0.6875rem] mist-text-muted">
 						{$i18n.t('Create announcements shown to users in the app.')}
 					</div>
 					<Banners bind:banners locale={bannerLocale} />

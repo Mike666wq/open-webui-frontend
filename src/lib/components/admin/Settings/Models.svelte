@@ -213,7 +213,7 @@
 		if (isSharedModel(model)) {
 			return 'text-[#4f6f93] dark:text-[#8ba6c6]';
 		}
-		return 'text-gray-500 dark:text-gray-400';
+		return 'mist-text-muted';
 	};
 
 	$: defaultModelIdSet = new Set(defaultModelIds);
@@ -1161,7 +1161,7 @@
 									: ''}"
 								id="model-item-{model.id}"
 							>
-								<div class="self-center pr-1 -ml-1 text-gray-400 dark:text-gray-600">
+								<div class="self-center pr-1 -ml-1 mist-text-muted">
 									<Tooltip content={$i18n.t('Drag to reorder')}>
 										<EllipsisVertical className="size-4 cursor-move model-item-handle" />
 									</Tooltip>
@@ -1229,7 +1229,7 @@
 
 												{#if defaultModelIdSet.has(model.id)}
 													<span
-														class="shrink-0 text-[0.6875rem] font-normal leading-4 text-gray-500 dark:text-gray-400"
+														class="shrink-0 text-[0.6875rem] font-normal leading-4 mist-text-muted"
 													>
 														{$i18n.t('Selected')}
 													</span>
@@ -1237,7 +1237,7 @@
 
 												{#if defaultPinnedModelIdSet.has(model.id)}
 													<span
-														class="shrink-0 text-[0.6875rem] font-normal leading-4 text-gray-500 dark:text-gray-400"
+														class="shrink-0 text-[0.6875rem] font-normal leading-4 mist-text-muted"
 													>
 														{$i18n.t('Pinned')}
 													</span>
@@ -1274,7 +1274,7 @@
 													model.id
 												)
 													? 'text-gray-900 dark:text-white'
-													: 'text-gray-500 dark:text-gray-400 dark:hover:text-white'}"
+													: 'mist-text-muted dark:hover:text-white'}"
 												type="button"
 												aria-label={defaultModelIdSet.has(model.id)
 													? $i18n.t('Remove Selected Model')
@@ -1297,7 +1297,7 @@
 													model.id
 												)
 													? 'text-gray-900 dark:text-white'
-													: 'text-gray-500 dark:text-gray-400 dark:hover:text-white'}"
+													: 'mist-text-muted dark:hover:text-white'}"
 												type="button"
 												aria-label={defaultPinnedModelIdSet.has(model.id)
 													? $i18n.t('Remove Pinned Model')

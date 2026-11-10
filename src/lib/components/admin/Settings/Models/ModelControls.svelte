@@ -138,14 +138,14 @@
 	<div
 		class="grid grid-cols-[7rem_minmax(0,1fr)_auto] items-center gap-2 px-1 py-1.5 text-xs sm:grid-cols-[8rem_minmax(0,1fr)_auto]"
 	>
-		<span class="text-xs font-normal text-gray-600 dark:text-gray-400"
+		<span class="text-xs font-normal mist-text-muted"
 			><ModelSettingsLabel
 				label={$i18n.t('Model controls')}
 				description={$i18n.t('Let people choose approved parameter presets in chat.')}
 			/></span
 		>
 		<p
-			class="truncate text-gray-500 dark:text-gray-400"
+			class="truncate mist-text-muted"
 			title={$i18n.t('Let people choose approved parameter presets in chat.')}
 		>
 			{$i18n.t('Let people choose approved parameter presets in chat.')}
@@ -177,11 +177,11 @@
 				>
 					<span class="truncate">{control.label}</span>
 					<span class="flex min-w-0 items-center gap-3 text-xs">
-						<span class="truncate text-gray-400 dark:text-gray-600"
+						<span class="truncate mist-text-muted"
 							>{$i18n.t('Default option')}: {control.options[control.default ?? '']?.label ??
 								$i18n.t('None')}</span
 						>
-						<span class="text-gray-500 dark:text-gray-400">{$i18n.t('Edit')}</span>
+						<span class="mist-text-muted">{$i18n.t('Edit')}</span>
 					</span>
 				</button>
 				<button
@@ -214,7 +214,7 @@
 		<form class="space-y-2.5" on:submit|preventDefault|stopPropagation={apply}>
 			<div class="grid grid-cols-[minmax(0,1fr)_minmax(0,8rem)] gap-4">
 				<label class="block min-w-0 text-xs leading-4">
-					<span class="text-xs font-normal text-gray-600 dark:text-gray-400">{$i18n.t('Name')}</span
+					<span class="text-xs font-normal mist-text-muted">{$i18n.t('Name')}</span
 					>
 					<input
 						bind:this={nameInput}
@@ -226,7 +226,7 @@
 					/>
 				</label>
 				<label class="block min-w-0 text-xs leading-4">
-					<span class="text-xs font-normal text-gray-600 dark:text-gray-400"
+					<span class="text-xs font-normal mist-text-muted"
 						>{$i18n.t('Default option')}</span
 					>
 					<NativeSelect
@@ -243,13 +243,13 @@
 				</label>
 			</div>
 			<label class="block text-xs leading-4">
-				<span class="text-xs font-normal text-gray-600 dark:text-gray-400"
+				<span class="text-xs font-normal mist-text-muted"
 					>{$i18n.t('Description')}</span
 				>
 				<input class={inputClass} placeholder={$i18n.t('Optional')} bind:value={description} />
 			</label>
 			<div class="flex items-center justify-between">
-				<span class="text-xs font-normal text-gray-600 dark:text-gray-400"
+				<span class="text-xs font-normal mist-text-muted"
 					>{$i18n.t('Display')}</span
 				>
 				<div class="flex gap-1">
@@ -268,7 +268,7 @@
 				</div>
 			</div>
 			<div>
-				<span class="text-xs font-normal text-gray-600 dark:text-gray-400"
+				<span class="text-xs font-normal mist-text-muted"
 					>{$i18n.t('Options')}</span
 				>
 				<div class="divide-y divide-gray-100/60 dark:divide-gray-850/60" use:sortable={moveOption}>
@@ -315,7 +315,7 @@
 				</button>
 			</div>
 			{#if display === 'slider' && options.length < 2}
-				<p class="text-xs text-gray-500 dark:text-gray-400">
+				<p class="text-xs mist-text-muted">
 					{$i18n.t('Add at least two options for a slider.')}
 				</p>
 			{/if}

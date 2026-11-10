@@ -92,14 +92,14 @@
 			</div>
 
 			{#if folder.owner_name}
-				<div class="shrink-0 text-[0.625rem] text-gray-400 dark:text-gray-600 pr-1">
+				<div class="shrink-0 text-[0.6875rem] mist-text-muted pr-1">
 					{folder.owner_name}
 				</div>
 			{/if}
 
 			{#if !isWritable}
 				<div
-					class="shrink-0 text-[0.625rem] text-gray-400 dark:text-gray-600"
+					class="shrink-0 text-[0.6875rem] mist-text-muted"
 					title={$i18n.t('Read only')}
 				>
 					<Eye className="size-3" />

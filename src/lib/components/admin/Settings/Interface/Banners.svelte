@@ -42,7 +42,7 @@
 		>
 			<Tooltip content={$i18n.t('Reorder')}>
 				<div
-					class="item-handle flex h-6 w-3 shrink-0 cursor-move items-center justify-center text-gray-400 dark:text-gray-600"
+					class="item-handle flex h-6 w-3 shrink-0 cursor-move items-center justify-center mist-text-muted"
 				>
 					<EllipsisVertical className="size-3.5" />
 				</div>

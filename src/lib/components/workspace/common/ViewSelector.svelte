@@ -48,7 +48,7 @@
 <!-- <button
 	class="min-w-fit outline-none p-1.5 {selectedTag === ''
 		? ''
-		: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition capitalize"
+		: 'mist-text-muted hover:text-[var(--mist-ink)]'} transition capitalize"
 	on:click={() => {
 		selectedTag = '';
 	}}
@@ -59,7 +59,7 @@
 <button
 	class="min-w-fit outline-none p-1.5 {selectedTag === ''
 		? ''
-		: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition capitalize"
+		: 'mist-text-muted hover:text-[var(--mist-ink)]'} transition capitalize"
 	on:click={() => {
 		selectedTag = '';
 	}}
@@ -70,7 +70,7 @@
 <button
 	class="min-w-fit outline-none p-1.5 {selectedTag === ''
 		? ''
-		: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition capitalize"
+		: 'mist-text-muted hover:text-[var(--mist-ink)]'} transition capitalize"
 	on:click={() => {
 		selectedTag = '';
 	}}
