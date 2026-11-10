@@ -5252,7 +5252,7 @@
 								{#if suggestedPrompts.length > 0}
 									<div class="flex flex-1 items-end px-5 pb-8">
 										<div class="w-full">
-											<div class="mb-2 text-[0.75rem] text-gray-300 dark:text-gray-700">
+											<div class="mist-text-muted mb-2 text-[0.75rem]">
 												{$i18n.t('Suggested prompts')}
 											</div>
 											<div class="flex flex-col">

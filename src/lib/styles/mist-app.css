@@ -1080,3 +1080,17 @@ html[data-owui-appearance='on']
 	) {
 	text-shadow: none;
 }
+
+/*
+ * P-007 K14: the embedded chat's "Suggested prompts" caption used a fixed light
+ * grey (`text-gray-300` / `dark:text-gray-700`), which measured about 1.4:1 on
+ * the glass surface — far below WCAG AA. Use the secondary text token instead:
+ * `applyAppearanceCss()` derives it with `ensureReadableText(..., target = 4.5)`,
+ * so it stays legible in both themes and under any wallpaper.
+ *
+ * `.mist-text-muted` is the shared hook for muted captions added by P-007;
+ * it never overrides the existing P-004 contrast tokens.
+ */
+.mist-text-muted {
+	color: var(--mist-muted);
+}

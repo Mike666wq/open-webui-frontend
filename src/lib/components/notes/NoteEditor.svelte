@@ -1233,16 +1233,21 @@ ${content}
 									on:click={() => (expandedNote = !expandedNote)}
 									>{$i18n.t(expandedNote ? 'Exit full screen' : 'Full screen')}</button
 								>
-								<Tooltip content={$i18n.t('Chat')} placement="top">
-									<button
-										type="button"
-										class="p-1 bg-transparent hover:bg-white/5 transition rounded-lg"
-										aria-label={$i18n.t('Chat')}
-										on:click={openNoteChat}
-									>
-										<ChatBubbleOval className="size-4" strokeWidth="1.8" />
-									</button>
-								</Tooltip>
+								<!-- P-007 K17: a bare icon hid the fact that the assistant can edit
+								this note. Reuses the same openNoteChat state — no second panel. -->
+								<button
+									type="button"
+									class="flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-xs"
+									aria-label={$i18n.t('AI assistant: summarise or rewrite this note')}
+									title={$i18n.t('Summarise or rewrite this note with AI')}
+									on:click={openNoteChat}
+								>
+									<ChatBubbleOval className="size-3.5" strokeWidth="1.8" />
+									<span>{$i18n.t('AI assistant')}</span>
+								</button>
+								<span class="mist-text-muted hidden shrink-0 text-xs lg:inline">
+									{$i18n.t('Summarise or rewrite this note')}
+								</span>
 
 								{#if note?.write_access}
 									<Tooltip content={$i18n.t('Save to knowledge base')} placement="top">

@@ -13,6 +13,7 @@
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import Search from '$lib/components/icons/Search.svelte';
 	import AdjustmentsHorizontal from '$lib/components/icons/AdjustmentsHorizontal.svelte';
+	import ArrowUpCircle from '$lib/components/icons/ArrowUpCircle.svelte';
 	import { newViewerState, type KnowledgeFile, type KnowledgeDirectory } from './types';
 
 	export let knowledge: { id: string; name: string; write_access?: boolean };
@@ -191,7 +192,17 @@
 					</DropdownMenu>
 				</div></Dropdown
 			>
-			{#if knowledge.write_access}<AddContentMenu
+			{#if knowledge.write_access}<button
+					type="button"
+					class="flex h-7 shrink-0 items-center gap-1 rounded-lg border border-gray-200 px-1.5 text-xs text-gray-600 transition hover:bg-gray-100/60 hover:text-gray-900 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800/60 dark:hover:text-gray-100"
+					title={$i18n.t('Upload files to this knowledge base')}
+					on:click={() => onUpload('files', null, [])}
+				>
+					<ArrowUpCircle className="size-3.5" strokeWidth="1.8" />
+					<span class="hidden sm:inline">{$i18n.t('Upload')}</span>
+				</button>
+
+				<AddContentMenu
 					onUpload={(data: { type: string }) => {
 						if (data.type === 'new_directory') {
 							query = '';
@@ -202,6 +213,11 @@
 					onReset={() => guard(onReset)}
 				/>{/if}
 		</div>
+		{#if knowledge.write_access && !syncing}
+			<p class="mist-text-muted truncate px-3 pb-1 text-[0.6875rem]">
+				{$i18n.t('Drop files here, or use Upload')}
+			</p>
+		{/if}
 		{#if syncing}<p class="px-3 py-1 text-xs text-gray-500">{syncing}</p>{/if}
 		<Files
 			bind:this={tree}
