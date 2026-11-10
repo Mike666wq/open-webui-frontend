@@ -4515,5 +4515,6 @@
 	"Add table column": "添加列",
 	"Delete table column": "删除列",
 	"Copy knowledge base ID": "复制知识库 ID",
-	"Workspace ID (required in this region)": "此区域需要工作区 ID"
+	"Workspace ID (required in this region)": "此区域需要工作区 ID",
+	"This provider connection is private, so only you can use it. Share it to let other users use image generation.": "该服务商连接是私有的，只有你能使用。共享后其他用户才能使用图像生成。"
 }

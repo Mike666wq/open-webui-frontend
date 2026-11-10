@@ -4511,5 +4511,6 @@
 	"Delete table row": "Delete table row",
 	"Add table column": "Add table column",
 	"Delete table column": "Delete table column",
-	"Copy knowledge base ID": "Copy knowledge base ID"
+	"Copy knowledge base ID": "Copy knowledge base ID",
+	"This provider connection is private, so only you can use it. Share it to let other users use image generation.": "This provider connection is private, so only you can use it. Share it to let other users use image generation."
 }
