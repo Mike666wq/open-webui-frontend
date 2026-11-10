@@ -310,3 +310,6 @@ cypress/videos
 cypress/screenshots
 .vscode/settings.json
 .cptr
+
+# ui-audit output (scripts/ui-audit.mjs)
+artifacts/ui-audit/
