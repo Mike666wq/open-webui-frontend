@@ -39,25 +39,48 @@
 	$: purposes = view?.purposes ?? [];
 	$: candidates = view?.candidates ?? {};
 
-	const candidatesFor = (purpose: string): MediaAssignmentCandidate[] => candidates[purpose] ?? [];
+	const candidatesFor = (purpose: string): MediaAssignmentCandidate[] =>
+		candidates[purpose] ?? [];
 
-	const draftOf = (purpose: string) =>
-		drafts[purpose] ?? {
-			connectionId: '',
-			modelId: ''
-		};
+	const draftOf = (purpose: string) => drafts[purpose] ?? { connectionId: '', modelId: '' };
 
-	const selectedCandidate = (purpose: string): MediaAssignmentCandidate | null => {
-		const draft = draftOf(purpose);
-		return candidatesFor(purpose).find((row) => row.connection_id === draft.connectionId) ?? null;
-	};
+	/*
+	 * Models in the second dropdown depend on the connection picked in the
+	 * first. A reactive statement only tracks variables it references directly
+	 * — a helper function reading `drafts` inside its own body does not count,
+	 * so the list never rebuilt and the row could not be assigned. Read
+	 * `drafts` here at the top level to make the dependency real.
+	 */
+	let modelOptions: Record<string, MediaAssignmentCandidate['models']> = {};
+	$: modelOptions = Object.fromEntries(
+		(purposes ?? []).map((row) => {
+			const draft = drafts[row.purpose];
+			const connectionId = draft?.connectionId ?? '';
+			const candidate =
+				(candidates[row.purpose] ?? []).find((item) => item.connection_id === connectionId) ??
+				null;
+			return [row.purpose, candidate?.models ?? []];
+		})
+	);
 
-	const assignBlocked = (purpose: MediaAssignmentPurpose): string => {
-		const draft = draftOf(purpose.purpose);
-		if (!draft.connectionId) return '选择一条服务商连接';
-		if (!draft.modelId) return '选择一个模型';
-		return '';
-	};
+	/*
+	 * Same staleness trap as the model list: Svelte does not re-evaluate a
+	 * function call in the markup unless a variable it mentions changes, and
+	 * this one only mentions the helper. Derive the blocked reason from
+	 * `drafts` in a reactive statement so the assign button really enables.
+	 */
+	let assignBlocked: Record<string, string> = {};
+	$: assignBlocked = Object.fromEntries(
+		(purposes ?? []).map((row) => {
+			const draft = drafts[row.purpose];
+			const reason = !draft?.connectionId
+				? 'settings.admin.media.selectConnection'
+				: !draft.modelId
+					? 'settings.admin.media.selectModel'
+					: '';
+			return [row.purpose, reason];
+		})
+	);
 
 	const load = async () => {
 		loading = true;
@@ -78,7 +101,7 @@
 	};
 
 	const assign = async (purpose: MediaAssignmentPurpose) => {
-		const draft = draftOf(purpose.purpose);
+		const draft = drafts[purpose.purpose] ?? { connectionId: '', modelId: '' };
 		busyPurpose = purpose.purpose;
 		try {
 			const updated = await assignMediaPurpose(purpose.purpose, draft.connectionId, draft.modelId);
@@ -175,7 +198,7 @@
 							>
 							<select
 								class="w-52 rounded-lg border border-gray-100 bg-transparent px-2 py-1 text-xs dark:border-gray-850"
-								value={draftOf(purpose.purpose).connectionId}
+								value={drafts[purpose.purpose]?.connectionId ?? ''}
 								on:change={(event) => {
 									const connectionId = (event.currentTarget as HTMLSelectElement).value;
 									drafts = {
@@ -204,20 +227,20 @@
 							>
 							<select
 								class="w-56 rounded-lg border border-gray-100 bg-transparent px-2 py-1 text-xs dark:border-gray-850"
-								value={draftOf(purpose.purpose).modelId}
+								value={drafts[purpose.purpose]?.modelId ?? ''}
 								on:change={(event) => {
 									const modelId = (event.currentTarget as HTMLSelectElement).value;
 									drafts = {
 										...drafts,
 										[purpose.purpose]: {
-											connectionId: draftOf(purpose.purpose).connectionId,
+											connectionId: drafts[purpose.purpose]?.connectionId ?? '',
 											modelId
 										}
 									};
 								}}
 							>
 								<option value="">未选择</option>
-								{#each selectedCandidate(purpose.purpose)?.models ?? [] as model (model.id)}
+								{#each modelOptions[purpose.purpose] ?? [] as model (model.id)}
 									<option value={model.id}>
 										{model.display_name}
 										{model.verification === 'untested' ? '（未测试）' : ''}
@@ -229,15 +252,15 @@
 						<button
 							class="rounded-lg bg-black px-3 py-1.5 text-xs text-white disabled:opacity-40 dark:bg-white dark:text-black"
 							type="button"
-							disabled={busyPurpose === purpose.purpose || assignBlocked(purpose) !== ''}
-							title={assignBlocked(purpose)}
+							disabled={busyPurpose === purpose.purpose || (assignBlocked[purpose.purpose] ?? '') !== ''}
+							title={assignBlocked[purpose.purpose] ? $i18n.t(assignBlocked[purpose.purpose]) : ''}
 							on:click={() => assign(purpose)}
 						>
 							{$i18n.t('settings.admin.media.assign')}
 						</button>
 					</div>
 
-					{#if selectedCandidate(purpose.purpose)?.models.length === 0}
+					{#if (drafts[purpose.purpose]?.connectionId ?? '') && (modelOptions[purpose.purpose] ?? []).length === 0}
 						<p class="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
 							{emptyWhitelistHint(purpose.label, $i18n.t)}
 						</p>

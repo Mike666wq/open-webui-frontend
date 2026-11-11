@@ -4537,5 +4537,7 @@
 	"settings.admin.media.mode.legacy": "旧配置",
 	"settings.admin.media.mode.unconfigured": "未配置",
 	"settings.admin.media.keyMissing": "尚未设置密钥",
-	"settings.admin.media.noModelsHint": "该连接下还没有 {{purpose}} 模型，先到服务商连接里添加并启用再回来指派。"
+	"settings.admin.media.noModelsHint": "该连接下还没有 {{purpose}} 模型，先到服务商连接里添加并启用再回来指派。",
+	"settings.admin.media.selectConnection": "请先选择一条服务商连接",
+	"settings.admin.media.selectModel": "请先选择一个模型"
 }

@@ -4533,5 +4533,7 @@
 	"settings.admin.media.mode.legacy": "Legacy settings",
 	"settings.admin.media.mode.unconfigured": "Not configured",
 	"settings.admin.media.keyMissing": "No key stored yet",
-	"settings.admin.media.noModelsHint": "This connection has no {{purpose}} model yet. Add and enable one under the provider connection, then come back to assign."
+	"settings.admin.media.noModelsHint": "This connection has no {{purpose}} model yet. Add and enable one under the provider connection, then come back to assign.",
+	"settings.admin.media.selectConnection": "Select a provider connection first",
+	"settings.admin.media.selectModel": "Select a model first"
 }
