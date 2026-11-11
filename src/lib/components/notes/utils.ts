@@ -1,3 +1,4 @@
+import { describeApiError } from '$lib/utils/api-error';
 import DOMPurify from 'dompurify';
 import { toast } from 'svelte-sonner';
 
@@ -131,7 +132,7 @@ export const createNoteHandler = async (title: string, md?: string, html?: strin
 		meta: null,
 		access_grants: []
 	}).catch((error) => {
-		toast.error(`${error}`);
+		toast.error(describeApiError(error));
 		return null;
 	});
 

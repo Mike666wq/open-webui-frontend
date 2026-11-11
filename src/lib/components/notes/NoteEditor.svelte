@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { describeApiError } from '$lib/utils/api-error';
 	import { focusLayer } from '$lib/components/common/focusLayer';
 	let expandedNote = false;
 	import NoteOutline from './NoteOutline.svelte';
@@ -216,7 +217,7 @@
 		autoFormat = true;
 		loading = true;
 		const res = await getNoteById(localStorage.token, id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 
@@ -760,7 +761,7 @@ ${content}
 		noteChatLoading = true;
 		const chat = await getNoteChatById(localStorage.token, note.id).catch((error) => {
 			console.error('[note-chat] open failed', { noteId: note?.id, error });
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 		const chats = chat
@@ -801,7 +802,7 @@ ${content}
 		try {
 			const chat = await createNoteChatById(localStorage.token, note.id).catch((error) => {
 				console.error('[note-chat] create failed', { noteId: note?.id, error });
-				toast.error(`${error}`);
+				toast.error(describeApiError(error));
 				return null;
 			});
 			const chats = chat
@@ -827,7 +828,7 @@ ${content}
 
 		const deleted = await deleteChatById(localStorage.token, chatId).catch((error) => {
 			console.error('[note-chat] delete failed', { noteId: note?.id, chatId, error });
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 
@@ -844,7 +845,7 @@ ${content}
 			if (!nextChat) {
 				nextChat = await getNoteChatById(localStorage.token, note.id).catch((error) => {
 					console.error('[note-chat] recreate failed after delete', { noteId: note?.id, error });
-					toast.error(`${error}`);
+					toast.error(describeApiError(error));
 					return null;
 				});
 				chats = nextChat ? [nextChat] : [];
@@ -867,14 +868,14 @@ ${content}
 			try {
 				await downloadPdf(note);
 			} catch (error) {
-				toast.error(`${error}`);
+				toast.error(describeApiError(error));
 			}
 		}
 	};
 
 	const deleteNoteHandler = async (id) => {
 		const res = await deleteNoteById(localStorage.token, id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 
@@ -1050,7 +1051,7 @@ ${content}
 					await updateNoteAccessGrants(localStorage.token, id, note.access_grants ?? []);
 					toast.success($i18n.t('Saved'));
 				} catch (error) {
-					toast.error(`${error}`);
+					toast.error(describeApiError(error));
 				}
 			}
 		}}
@@ -1342,7 +1343,7 @@ ${content}
 											note.data.content.html,
 											true
 										).catch((error) => {
-											toast.error(`${error}`);
+											toast.error(describeApiError(error));
 											return null;
 										});
 

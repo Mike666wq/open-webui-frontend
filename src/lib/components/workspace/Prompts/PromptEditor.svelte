@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { describeApiError } from '$lib/utils/api-error';
 	import { onMount, onDestroy, tick, getContext } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
@@ -160,7 +161,7 @@
 			}
 		} catch (error) {
 			historyError = true;
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 		} finally {
 			historyLoading = false;
 		}
@@ -212,7 +213,7 @@
 				content: result.content_diff.join('\n')
 			};
 		} catch (error) {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 		} finally {
 			comparing = false;
 		}
@@ -259,7 +260,7 @@
 				}
 			}
 		} catch (error) {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 		} finally {
 			loading = false;
 		}
@@ -294,7 +295,7 @@
 			selectVersion();
 			toast.success($i18n.t('Production version updated'));
 		} catch (error) {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 		} finally {
 			loading = false;
 		}
@@ -308,7 +309,7 @@
 			await loadHistory(true);
 			toast.success($i18n.t('Version deleted'));
 		} catch (error) {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 		} finally {
 			loading = false;
 		}
@@ -350,7 +351,7 @@
 					originalCommand = savedCommand;
 					originalTags = savedTags;
 				} catch (error) {
-					toast.error(`${error}`);
+					toast.error(describeApiError(error));
 				}
 			});
 		}, 500);
@@ -404,7 +405,7 @@
 				await updatePromptAccessGrants(localStorage.token, prompt.id, accessGrants);
 				toast.success($i18n.t('Saved'));
 			} catch (error) {
-				toast.error(`${error}`);
+				toast.error(describeApiError(error));
 			}
 		}
 	}}

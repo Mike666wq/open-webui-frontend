@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { describeApiError } from '$lib/utils/api-error';
 	import WorkspaceAccessModal from '$lib/components/workspace/common/WorkspaceAccessModal.svelte';
 	let accessModal: WorkspaceAccessModal;
 	import { marked } from 'marked';
@@ -85,7 +86,7 @@
 	const downloadHandler = async (type) => {
 		// Fetch the full note since the list response may not contain full content
 		const note = await getNoteById(localStorage.token, selectedNote.id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 
@@ -101,14 +102,14 @@
 			try {
 				await downloadPdf(note);
 			} catch (error) {
-				toast.error(`${error}`);
+				toast.error(describeApiError(error));
 			}
 		}
 	};
 
 	const deleteNoteHandler = async (id) => {
 		const res = await deleteNoteById(localStorage.token, id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 
@@ -147,7 +148,7 @@
 				meta: null,
 				access_grants: []
 			}).catch((error) => {
-				toast.error(`${error}`);
+				toast.error(describeApiError(error));
 				return null;
 			});
 
@@ -386,7 +387,7 @@
 					await inputFilesHandler(Array.from(importDocumentFiles));
 					toast.success($i18n.t('Imported notes successfully'));
 				} catch (error) {
-					toast.error(`${error}`);
+					toast.error(describeApiError(error));
 				} finally {
 					importDocumentFiles = null;
 					notesImportInputElement.value = '';

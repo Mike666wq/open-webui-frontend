@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { describeApiError } from '$lib/utils/api-error';
 	import { toast } from 'svelte-sonner';
 	import { v4 as uuidv4 } from 'uuid';
 
@@ -919,7 +920,7 @@
 					await updateKnowledgeAccessGrants(localStorage.token, id, knowledge?.access_grants ?? []);
 					toast.success($i18n.t('Saved'));
 				} catch (error) {
-					toast.error(`${error}`);
+					toast.error(describeApiError(error));
 				}
 			}}
 			accessRoles={['read', 'write']}

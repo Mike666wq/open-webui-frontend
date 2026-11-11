@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { describeApiError } from '$lib/utils/api-error';
 	import { v4 as uuidv4 } from 'uuid';
 	import WorkspaceAccessModal from './common/WorkspaceAccessModal.svelte';
 	let accessModal: WorkspaceAccessModal;
@@ -157,7 +158,7 @@
 				label: $i18n.t('Export JSON'),
 				onClick: async () => {
 					const _skills = await exportSkills(localStorage.token).catch((error) => {
-						toast.error(`${error}`);
+						toast.error(describeApiError(error));
 						return null;
 					});
 					if (_skills) {
@@ -191,7 +192,7 @@
 				sortDirection,
 				signal
 			).catch((error) => {
-				if (!signal.aborted) toast.error(`${error}`);
+				if (!signal.aborted) toast.error(describeApiError(error));
 				return null;
 			});
 
@@ -278,7 +279,7 @@
 
 	const deleteHandler = async (skill) => {
 		const res = await deleteSkillById(localStorage.token, skill.id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 

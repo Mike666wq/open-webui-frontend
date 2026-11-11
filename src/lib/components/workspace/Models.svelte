@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { describeApiError } from '$lib/utils/api-error';
 	import WorkspaceAccessModal from './common/WorkspaceAccessModal.svelte';
 	let accessModal: WorkspaceAccessModal;
 	import dayjs from 'dayjs';
@@ -217,7 +218,7 @@
 				page,
 				signal
 			).catch((error) => {
-				if (!signal.aborted) toast.error(`${error}`);
+				if (!signal.aborted) toast.error(describeApiError(error));
 				return null;
 			});
 
@@ -230,7 +231,7 @@
 
 				// get tags
 				const fetchedTags = await getModelTags(localStorage.token).catch((error) => {
-					if (!signal.aborted) toast.error(`${error}`);
+					if (!signal.aborted) toast.error(describeApiError(error));
 					return [];
 				});
 				if (!signal.aborted) tags = fetchedTags;

@@ -2,6 +2,7 @@
 	import { markDraftFiles, updateDraftFiles } from '$lib/resources/upload-drafts';
 	import { v4 as uuidv4 } from 'uuid';
 	import { toast } from 'svelte-sonner';
+	import { describeApiError } from '$lib/utils/api-error';
 
 	import { getContext, onDestroy, onMount, tick } from 'svelte';
 	import { fade } from 'svelte/transition';
@@ -439,7 +440,7 @@
 				await refreshChatList(localStorage.token);
 			}
 		} catch (error) {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 		} finally {
 			cloning = false;
 		}
@@ -557,7 +558,7 @@
 					callId,
 					'approve'
 				).catch(async (error) => {
-					toast.error(`${error}`);
+					toast.error(describeApiError(error));
 					await loadChat();
 					return null;
 				});
@@ -637,7 +638,7 @@
 				timed_out: timedOut
 			}
 		).catch(async (error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			await loadChat();
 		});
 		onToolCallResolved(res);
@@ -655,7 +656,7 @@
 			callId,
 			'reject'
 		).catch(async (error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			await loadChat();
 		});
 		onToolCallResolved(res);
@@ -3188,7 +3189,7 @@
 			session_id: $socket?.id,
 			id: responseMessageId
 		}).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			messages.at(-1).error = { content: error };
 			return null;
 		});
@@ -4416,13 +4417,13 @@
 		if (hasTaskIds || hasPendingAssistantResponse) {
 			if ($chatId) {
 				await stopTasksByChatId(localStorage.token, $chatId).catch((error) => {
-					toast.error(`${error}`);
+					toast.error(describeApiError(error));
 					return null;
 				});
 			} else {
 				for (const taskId of taskIds) {
 					const res = await stopTask(localStorage.token, taskId).catch((error) => {
-						toast.error(`${error}`);
+						toast.error(describeApiError(error));
 						return null;
 					});
 				}
@@ -4754,7 +4755,7 @@
 		if (chatId && folderId) {
 			const res = await updateChatFolderIdById(localStorage.token, chatId, folderId).catch(
 				(error) => {
-					toast.error(`${error}`);
+					toast.error(describeApiError(error));
 					return null;
 				}
 			);
@@ -4818,7 +4819,7 @@
 			}
 		} catch (error) {
 			console.error('Error deleting chat:', error);
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 		}
 	};
 </script>

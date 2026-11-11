@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { describeApiError } from '$lib/utils/api-error';
 	import ProfileImage from '$lib/components/chat/Messages/ProfileImage.svelte';
 	import { toast } from 'svelte-sonner';
 	import { getContext, onMount, onDestroy } from 'svelte';
@@ -70,7 +71,7 @@
 		try {
 			const res = await searchUsers(localStorage.token, query, orderBy, direction, page).catch(
 				(error) => {
-					toast.error(`${error}`);
+					toast.error(describeApiError(error));
 					return null;
 				}
 			);
