@@ -31,8 +31,20 @@ jobs:
         run: python3 -m py_compile scripts/*.py
       - name: Verify SAVE recognition against the captured API29 regression screenshot
         run: |
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr imagemagick
+          # apt mirrors on the runners fail intermittently (the azure mirror
+          # stopped resolving mid-day), so try each in turn before giving up —
+          # the OCR check is independent of the code under review.
+          install_ocr() {
+            sudo apt-get update
+            sudo apt-get install -y tesseract-ocr imagemagick
+          }
+          install_ocr \
+            || { echo '::notice::apt failed; retrying with archive.ubuntu.com'; \
+                 echo 'deb http://archive.ubuntu.com/ubuntu noble main universe' | sudo tee /etc/apt/sources.list.d/rewrite.list >/dev/null; \
+                 sudo apt-get update; sudo apt-get install -y tesseract-ocr imagemagick; } \
+            || { echo '::notice::apt failed again; trying fastly mirror'; \
+                 echo 'deb https://mirrors.edge.fastly.net/ubuntu/ noble main universe' | sudo tee /etc/apt/sources.list.d/rewrite.list >/dev/null; \
+                 sudo apt-get update; sudo apt-get install -y tesseract-ocr imagemagick; }
           python3 scripts/android-picker-ocr.py --image scripts/fixtures/android-save-api29.png --evidence "$RUNNER_TEMP/save-ocr-regression"
       - name: Run Node tests
         run: npm test
