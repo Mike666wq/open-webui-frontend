@@ -62,3 +62,18 @@ Two pitfalls:
 - Dev compiles each route on first load, so allow 20–40 s per navigation.
 - With a Chinese interface, locate elements by their **Chinese** label
   (`选择要预览的文件`), not by the English i18n key.
+
+## 耗时与已知限制
+
+全量跑（13 路由 × 2 主题 × 2 视口 = 52 组）在开发机上超过一小时，**不要**把它当成
+提交前的快速门禁。实测每组约一分钟，时间几乎都花在每个页面的
+`Runtime.evaluate` 测量上：脚本会遍历 `body *` 并对每个文本节点做 canvas 取色
+与祖先背景合成。
+
+务实的用法：
+
+- 提交前只跑**改动涉及的视口**，例如 `--viewports 390x844 --themes light,dark`。
+- 需要逐项核对时，用一次性脚本对目标元素取色（比全量扫描快两个数量级），
+  本仓库的 P-008 验收就是这么做的。
+- 脚本已给 `Page.navigate`（30s）与测量（60s）加了单路由超时，超时记为一条
+  发现而不是拖死整轮；但慢本身仍然是测量逻辑的固有成本。

@@ -53,6 +53,20 @@ const CONTRAST_EXEMPT = [
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * A single route must never be able to hang the whole run: one page that keeps
+ * streaming (or never fires load) would otherwise leave the audit waiting until
+ * the operator gives up, which is what happened the first time this ran across
+ * every route. Each step is bounded and a timeout is reported as a finding.
+ */
+function withTimeout(promise, ms, label) {
+	let timer;
+	const guard = new Promise((_, reject) => {
+		timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms: ${label}`)), ms);
+	});
+	return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
+}
+
 function chromeExecutable() {
 	const candidates = [
 		process.env.CHROME_BIN,
@@ -296,7 +310,7 @@ async function main() {
 		return result.result.value;
 	};
 	const goto = async (url, waitMs = 8000) => {
-		await call('Page.navigate', { url });
+		await withTimeout(call('Page.navigate', { url }), 30000, `navigate ${url}`);
 		await sleep(waitMs);
 	};
 
@@ -320,14 +334,23 @@ async function main() {
 				const tag = `${width < 600 ? 'mobile' : 'desktop'}-${theme}`;
 
 				for (const [label, route] of ROUTES) {
-					await goto(`${ORIGIN}${route}`, 9000);
+					try {
+						await goto(`${ORIGIN}${route}`, 9000);
+					} catch (error) {
+						failures.push(`${tag} ${label}: ${error.message}`);
+						continue;
+					}
 					await evaluate(`
 						const b = [...document.querySelectorAll('button')].find(x => /确认|开始使用|Got it/i.test(x.innerText || ''));
 						if (b) b.click();
 						return true;`);
 					await sleep(2200);
 
-					const measured = await evaluate(`return (${MEASURE});`);
+					const measured = await withTimeout(
+						evaluate(`return (${MEASURE});`),
+						60000,
+						`measure ${label}`
+					);
 					const lowContrast = measured.lowContrast.filter(
 						(entry) => entry.ratio < 4.5 && !CONTRAST_EXEMPT.some((re) => re.test(entry.text))
 					);
