@@ -218,7 +218,7 @@
 				{$i18n.t('Drop files here, or use Upload')}
 			</p>
 		{/if}
-		{#if syncing}<p class="px-3 py-1 text-xs text-gray-500">{syncing}</p>{/if}
+		{#if syncing}<p class="px-3 py-1 text-xs mist-text-muted">{syncing}</p>{/if}
 		<Files
 			bind:this={tree}
 			{knowledge}
@@ -247,7 +247,7 @@
 				onSaved={refresh}
 			/>{/key}
 	{:else}<div
-			class="flex min-w-0 flex-1 items-center justify-center bg-white text-xs text-gray-400 dark:bg-gray-900"
+			class="flex min-w-0 flex-1 items-center justify-center bg-[var(--mist-canvas)] text-xs mist-text-muted"
 		>
 			{$i18n.t('Select a file to preview')}
 		</div>{/if}

@@ -1094,3 +1094,20 @@ html[data-owui-appearance='on']
 .mist-text-muted {
 	color: var(--mist-muted);
 }
+
+/*
+ * P-008 K8: icon-only controls measure 20–28px on a phone, below the 32px a
+ * thumb can reliably hit. Enforce the real box size rather than a pseudo-element
+ * overlay: a `::after` hit area is invisible to `getBoundingClientRect()`, so the
+ * audit could never verify it, and "fixed but unmeasurable" is not fixed.
+ *
+ * Width-based media query on purpose: `pointer: coarse` does not match in
+ * headless Chrome, which would make the rule untestable in CI.
+ * Form fields are exempt — they are wide, and their hit area is not the issue.
+ */
+@media (max-width: 640px) {
+	button[aria-label]:not(.no-tap-target) {
+		min-width: 32px;
+		min-height: 32px;
+	}
+}

@@ -51,13 +51,31 @@ const createTurndown = (preserveBreaks: boolean) => {
 	service.escape = (value: string) => value;
 	service.use(gfm);
 
-	service.addRule('singleNewlineParagraphs', {
+	/**
+	 * Paragraphs are separated by a blank line.
+	 *
+	 * A single newline is a *soft* break inside a paragraph in Markdown, not a
+	 * paragraph boundary. Writing one newline between `<p>` elements therefore
+	 * produced Markdown that re-read as a single run-on paragraph: the second
+	 * save merged two paragraphs into one and turned the break into a space,
+	 * which silently destroyed the structure of every note that had more than
+	 * one paragraph.
+	 *
+	 * The blank line is also what every other Markdown renderer expects, so the
+	 * exported/shared note now renders the same way outside this editor.
+	 */
+	service.addRule('blockParagraphs', {
 		filter: (node: HTMLElement) => node.nodeName === 'P' && node.parentNode?.nodeName !== 'LI',
-		replacement: (content: string) => `\n${content}\n`
+		replacement: (content: string) => `\n\n${content}\n`
 	});
+	/**
+	 * A paragraph inside a list item keeps its own boundary too. Returning the
+	 * bare content glued two paragraphs of the same item together with no
+	 * separator at all ("firstsecond").
+	 */
 	service.addRule('listParagraphs', {
 		filter: (node: HTMLElement) => node.nodeName === 'P' && node.parentNode?.nodeName === 'LI',
-		replacement: (content: string) => content
+		replacement: (content: string) => `\n\n${content}`
 	});
 	service.addRule('taskItemCheckbox', {
 		filter: (node: HTMLElement) => node.nodeName === 'INPUT' && node.getAttribute('type') === 'checkbox',

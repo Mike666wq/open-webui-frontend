@@ -27,7 +27,7 @@
 			<div class="line-clamp-1 text-[0.8125rem] font-normal text-gray-700 dark:text-gray-200">
 				{title}
 			</div>
-			<div class="line-clamp-1 text-xs text-gray-500 dark:text-gray-500">
+			<div class="line-clamp-1 text-xs mist-text-muted">
 				{description}
 			</div>
 		</div>

@@ -67,12 +67,12 @@
 		{:else}
 			<div class="flex flex-col gap-2.5">
 				<label class="flex cursor-pointer items-center justify-between">
-					<span class="text-xs text-gray-600 dark:text-gray-400">
+					<span class="text-xs mist-text-muted">
 						{$i18n.t('settings.admin.subagents.enableSubAgents.label')}
 					</span>
 					<Switch bind:state={enabled} />
 				</label>
-				<p class="-mt-1 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+				<p class="-mt-1 text-[0.6875rem] mist-text-muted">
 					{$i18n.t(
 						'Allow the AI to delegate tasks to sub-agents. Each sub-agent creates a real chat with full tool access. Uses additional LLM calls.'
 					)}
@@ -80,7 +80,7 @@
 
 				{#if enabled}
 					<div>
-						<label class="text-xs text-gray-600 dark:text-gray-400" for="sa-concurrent">
+						<label class="text-xs mist-text-muted" for="sa-concurrent">
 							{$i18n.t('settings.admin.subagents.maxConcurrent.label')}
 						</label>
 						<div class="mt-1 flex items-center gap-1.5">
@@ -91,7 +91,7 @@
 								min="-1"
 								class="h-7 w-16 rounded-lg border border-gray-100/50 bg-gray-50/40 px-2 text-xs text-gray-700 outline-hidden transition-colors focus:border-blue-400 dark:border-white/[0.04] dark:bg-white/[0.03] dark:text-gray-300 dark:focus:border-blue-500"
 							/>
-							<span class="text-[0.6875rem] text-gray-400 dark:text-gray-600">
+							<span class="text-[0.6875rem] mist-text-muted">
 								{$i18n.t('simultaneous sub-agents')}
 							</span>
 						</div>
@@ -99,19 +99,19 @@
 
 					<div>
 						<label class="flex cursor-pointer items-center justify-between">
-							<span class="text-xs text-gray-600 dark:text-gray-400">
+							<span class="text-xs mist-text-muted">
 								{$i18n.t('settings.admin.subagents.enableBackgroundSubAgents.label')}
 							</span>
 							<Switch bind:state={backgroundEnabled} />
 						</label>
-						<p class="mt-1 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+						<p class="mt-1 text-[0.6875rem] mist-text-muted">
 							{$i18n.t('settings.admin.subagents.enableBackgroundSubAgents.description')}
 						</p>
 					</div>
 
 					{#if backgroundEnabled}
 						<div>
-							<label class="text-xs text-gray-600 dark:text-gray-400" for="sa-async">
+							<label class="text-xs mist-text-muted" for="sa-async">
 								{$i18n.t('settings.admin.subagents.maxBackground.label')}
 							</label>
 							<div class="mt-1 flex items-center gap-1.5">
@@ -122,7 +122,7 @@
 									min="-1"
 									class="h-7 w-16 rounded-lg border border-gray-100/50 bg-gray-50/40 px-2 text-xs text-gray-700 outline-hidden transition-colors focus:border-blue-400 dark:border-white/[0.04] dark:bg-white/[0.03] dark:text-gray-300 dark:focus:border-blue-500"
 								/>
-								<span class="text-[0.6875rem] text-gray-400 dark:text-gray-600">
+								<span class="text-[0.6875rem] mist-text-muted">
 									{$i18n.t('background sub-agents')}
 								</span>
 							</div>
@@ -130,7 +130,7 @@
 					{/if}
 
 					<div>
-						<label class="text-xs text-gray-600 dark:text-gray-400" for="sa-iterations">
+						<label class="text-xs mist-text-muted" for="sa-iterations">
 							{$i18n.t('settings.admin.subagents.maxIterations.label')}
 						</label>
 						<div class="mt-1 flex items-center gap-1.5">
@@ -142,14 +142,14 @@
 								max="100"
 								class="h-7 w-16 rounded-lg border border-gray-100/50 bg-gray-50/40 px-2 text-xs text-gray-700 outline-hidden transition-colors focus:border-blue-400 dark:border-white/[0.04] dark:bg-white/[0.03] dark:text-gray-300 dark:focus:border-blue-500"
 							/>
-							<span class="text-[0.6875rem] text-gray-400 dark:text-gray-600">
+							<span class="text-[0.6875rem] mist-text-muted">
 								{$i18n.t('tool loops per sub-agent')}
 							</span>
 						</div>
 					</div>
 
 					<div>
-						<label class="text-xs text-gray-600 dark:text-gray-400" for="sa-output">
+						<label class="text-xs mist-text-muted" for="sa-output">
 							{$i18n.t('settings.admin.subagents.maxOutput.label')}
 						</label>
 						<div class="mt-1 flex items-center gap-1.5">
@@ -162,12 +162,12 @@
 								step="1000"
 								class="h-7 w-20 rounded-lg border border-gray-100/50 bg-gray-50/40 px-2 text-xs text-gray-700 outline-hidden transition-colors focus:border-blue-400 dark:border-white/[0.04] dark:bg-white/[0.03] dark:text-gray-300 dark:focus:border-blue-500"
 							/>
-							<span class="text-[0.6875rem] text-gray-400 dark:text-gray-600">chars</span>
+							<span class="text-[0.6875rem] mist-text-muted">chars</span>
 						</div>
 					</div>
 
 					<div>
-						<label class="text-xs text-gray-600 dark:text-gray-400" for="sa-prompt">
+						<label class="text-xs mist-text-muted" for="sa-prompt">
 							{$i18n.t('settings.admin.subagents.systemPrompt.label')}
 						</label>
 						<textarea
@@ -177,7 +177,7 @@
 							placeholder={$i18n.t('You are a sub-agent...')}
 							class="mt-1 w-full resize-y rounded-lg border border-gray-100/50 bg-gray-50/40 px-2 py-1.5 font-mono text-xs text-gray-700 outline-hidden transition-colors focus:border-blue-400 dark:border-white/[0.04] dark:bg-white/[0.03] dark:text-gray-300 dark:focus:border-blue-500"
 						></textarea>
-						<p class="mt-0.5 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+						<p class="mt-0.5 text-[0.6875rem] mist-text-muted">
 							{$i18n.t('settings.admin.subagents.systemPrompt.description')}
 						</p>
 					</div>

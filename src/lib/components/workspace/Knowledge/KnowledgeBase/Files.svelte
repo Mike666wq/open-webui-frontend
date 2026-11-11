@@ -499,11 +499,11 @@
 		</div>
 	{:else if data.items.length < data.total}<button
 			type="button"
-			class="px-2 py-1 text-xs text-gray-500"
+			class="px-2 py-1 text-xs mist-text-muted"
 			on:click={() => load(id, true, search)}>{$i18n.t('Load more')}</button
 		>
 	{:else if !data.items.length && (search || !data.directories.length)}<p
-			class="px-2 py-1 text-xs text-gray-400"
+			class="px-2 py-1 text-xs mist-text-muted"
 		>
 			{search ? $i18n.t('No results found') : $i18n.t('No files')}
 		</p>{/if}

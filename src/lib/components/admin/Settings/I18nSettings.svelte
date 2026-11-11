@@ -27,7 +27,7 @@
 
 <div class="space-y-1.5">
 	<div class="flex min-h-7 flex-wrap items-center justify-between gap-x-2 gap-y-1">
-		<div class="text-xs text-gray-600 dark:text-gray-400">
+		<div class="text-xs mist-text-muted">
 			{$i18n.t('settings.admin.general.translations.uiTranslations.label')}
 		</div>
 		<div class="ms-auto flex shrink-0 items-center gap-1">
@@ -41,7 +41,7 @@
 					type="button"
 					aria-label={$i18n.t('settings.admin.general.translations.addTranslation.label')}
 					on:click={add}
-					class="flex size-6 items-center justify-center text-gray-400 dark:text-gray-600"
+					class="flex size-6 items-center justify-center mist-text-muted"
 				>
 					<Plus className="size-3.5" />
 				</button>
@@ -58,7 +58,7 @@
 					bind:value={entry.content}
 					aria-label={$i18n.t('Key')}
 					placeholder={$i18n.t('Key')}
-					class="{fieldClass} text-gray-500 dark:text-gray-400"
+					class="{fieldClass} mist-text-muted"
 				></textarea>
 				<textarea
 					rows="1"

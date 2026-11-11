@@ -40,6 +40,7 @@
 		name: string;
 		provider_id: string;
 		auth_type: string;
+		visibility?: string;
 		resolved_services?: Record<string, { operations?: string[] }>;
 	}> = [];
 
@@ -50,6 +51,18 @@
 	 * two use different endpoints and different payloads. The backend reports
 	 * the operations of the adapter the connection uses.
 	 */
+	/**
+	 * A private connection only works for its owner. Image generation is used by
+	 * everyone holding `features.image_generation`, so selecting one here is
+	 * almost always a mistake: those users get a refusal from the media API.
+	 * Warn at configuration time instead of letting them discover it later.
+	 */
+	$: imageConnection = providerConnections.find(
+		(connection) => connection.id === config?.IMAGES_PROVIDER_CONNECTION_ID
+	);
+	$: imageConnectionIsPrivate =
+		config?.IMAGE_GENERATION_ENGINE === 'provider' && imageConnection?.visibility === 'private';
+
 	$: editConnection = providerConnections.find(
 		(connection) => connection.id === config?.IMAGES_EDIT_PROVIDER_CONNECTION_ID
 	);
@@ -411,6 +424,14 @@
 									bind:value={config.IMAGE_GENERATION_MODEL}
 									bind:connectionId={config.IMAGES_PROVIDER_CONNECTION_ID}
 								/>
+
+								{#if imageConnectionIsPrivate}
+									<p class="mt-2 text-xs text-amber-700 dark:text-amber-400" role="status">
+										{$i18n.t(
+											'This provider connection is private, so only you can use it. Share it to let other users use image generation.'
+										)}
+									</p>
+								{/if}
 							</AdminSettingField>
 						{/if}
 						<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">

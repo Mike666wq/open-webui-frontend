@@ -845,7 +845,7 @@
 														.format('LLLL')}
 													className="hidden shrink-0 sm:flex"
 												>
-													<span class="text-[0.6875rem] leading-5 text-gray-400 dark:text-gray-500"
+													<span class="text-[0.6875rem] leading-5 mist-text-muted"
 														>{dayjs(model.updated_at * 1000)
 															.locale($i18n.language)
 															.fromNow()}</span
@@ -879,7 +879,7 @@
 								</div>
 
 								<div
-									class="hidden max-w-44 shrink-0 self-center truncate text-right text-[0.6875rem] leading-5 text-gray-500 dark:text-gray-500 md:block"
+									class="hidden max-w-44 shrink-0 self-center truncate text-right text-[0.6875rem] leading-5 mist-text-muted md:block"
 								>
 									<Tooltip
 										content={model?.user?.email ?? $i18n.t('Deleted User')}

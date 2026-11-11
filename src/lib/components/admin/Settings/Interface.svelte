@@ -209,10 +209,10 @@
 			<AdminSettingSection title={$i18n.t('settings.admin.interface.sections.tasks.title')} first>
 				<div>
 					<div class="mb-2">
-						<div class="text-xs text-gray-600 dark:text-gray-400">
+						<div class="text-xs mist-text-muted">
 							{$i18n.t('settings.admin.interface.taskModel.label')}
 						</div>
-						<div class="mt-1.5 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+						<div class="mt-1.5 text-[0.6875rem] mist-text-muted">
 							{$i18n.t('settings.admin.interface.taskModel.hint')}
 						</div>
 					</div>
@@ -264,17 +264,17 @@
 					</div>
 
 					<div class="mt-3 border-t border-gray-100/50 pt-3 dark:border-white/[0.04]">
-						<div class="text-xs text-gray-600 dark:text-gray-400">
+						<div class="text-xs mist-text-muted">
 							{$i18n.t('settings.admin.interface.auxiliaryPurpose.section')}
 						</div>
-						<div class="mt-1 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+						<div class="mt-1 text-[0.6875rem] mist-text-muted">
 							{$i18n.t('settings.admin.interface.auxiliaryPurpose.hint')}
 						</div>
 
 						<div class="mt-2 space-y-2">
 							{#each auxiliaryPurposes as purpose (purpose.key)}
 								<div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-									<div class="flex items-center text-xs text-gray-600 dark:text-gray-400">
+									<div class="flex items-center text-xs mist-text-muted">
 										{purpose.label}
 									</div>
 									<SettingsSelect
@@ -332,10 +332,10 @@
 								showTaskParameters = !showTaskParameters;
 							}}
 						>
-							<span class="text-xs text-gray-600 dark:text-gray-400">
+							<span class="text-xs mist-text-muted">
 								{$i18n.t('settings.admin.interface.taskModelParameters.label')}
 							</span>
-							<span class="text-[0.6875rem] text-gray-400 dark:text-gray-600">
+							<span class="text-[0.6875rem] mist-text-muted">
 								{showTaskParameters ? $i18n.t('Close') : $i18n.t('Configure')}
 							</span>
 						</button>
@@ -452,7 +452,7 @@
 								'Leave empty to use the default prompt, or enter a custom prompt'
 							)}
 						/>
-						<div class="mt-1 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+						<div class="mt-1 text-[0.6875rem] mist-text-muted">
 							{$i18n.t('settings.admin.interface.availableVariables.label')}:
 							<code>{'{{PREVIOUS_SUMMARY}}'}</code>,
 							<code>{'{{COMPACTED_MESSAGES}}'}</code>,

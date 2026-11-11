@@ -227,7 +227,7 @@
 									class="px-0.5 py-1 max-w-fit w-fit rounded-lg shrink-0 whitespace-nowrap flex text-right transition {selectedTab ===
 									'general'
 										? ''
-										: ' text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'}"
+										: ' mist-text-muted hover:text-[var(--mist-ink)]'}"
 									on:click={() => {
 										selectedTab = 'general';
 									}}
@@ -256,7 +256,7 @@
 									class="px-0.5 py-1 max-w-fit w-fit rounded-lg shrink-0 whitespace-nowrap flex text-right transition {selectedTab ===
 									'permissions'
 										? ''
-										: ' text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'}"
+										: ' mist-text-muted hover:text-[var(--mist-ink)]'}"
 									on:click={() => {
 										selectedTab = 'permissions';
 									}}
@@ -274,7 +274,7 @@
 									class="px-0.5 py-1 max-w-fit w-fit rounded-lg shrink-0 whitespace-nowrap flex text-right transition {selectedTab ===
 									'users'
 										? ''
-										: ' text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'}"
+										: ' mist-text-muted hover:text-[var(--mist-ink)]'}"
 									on:click={() => {
 										selectedTab = 'users';
 									}}
@@ -292,7 +292,7 @@
 									class="px-0.5 py-1 max-w-fit w-fit rounded-lg shrink-0 whitespace-nowrap flex text-right transition {selectedTab ===
 									'preview'
 										? ''
-										: ' text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'}"
+										: ' mist-text-muted hover:text-[var(--mist-ink)]'}"
 									on:click={() => {
 										selectedTab = 'preview';
 									}}

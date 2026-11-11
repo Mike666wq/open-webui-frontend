@@ -168,7 +168,7 @@
 			<div class="text-center text-xs text-gray-500 py-1">{$i18n.t('No models found')}</div>
 		{:else if rankedModels.length}
 			<table
-				class="w-full text-sm text-left text-gray-500 dark:text-gray-400 {loading
+				class="w-full text-sm text-left mist-text-muted {loading
 					? 'opacity-20'
 					: ''}"
 			>

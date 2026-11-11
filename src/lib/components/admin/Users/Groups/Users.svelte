@@ -113,12 +113,12 @@
 
 	const roleClass = (role: string) => {
 		if (role === 'admin') {
-			return 'text-[#4f6f93] dark:text-[#8ba6c6]';
+			return 'text-[#3a5678] dark:text-[#8ba6c6]';
 		}
 		if (role === 'user') {
 			return 'text-[#4f7a5a] dark:text-[#8db395]';
 		}
-		return 'text-gray-500 dark:text-gray-400';
+		return 'mist-text-muted';
 	};
 
 	const getUserList = async () => {
@@ -364,7 +364,7 @@
 		{#if users.length > 0}
 			<div class="scrollbar-hidden relative whitespace-nowrap overflow-x-auto max-w-full">
 				<table
-					class="w-full text-sm text-left text-gray-500 dark:text-gray-400 table-auto max-w-full"
+					class="w-full text-sm text-left mist-text-muted table-auto max-w-full"
 				>
 					<thead class="text-xs text-gray-800 uppercase bg-transparent dark:text-gray-200">
 						<tr class=" border-b-[1.5px] border-gray-50/50 dark:border-gray-800/10">

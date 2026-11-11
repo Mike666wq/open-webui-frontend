@@ -690,17 +690,17 @@
 />
 
 <div class="mt-5">
-	<div class="mb-2 text-xs text-gray-400 dark:text-gray-600">
+	<div class="mb-2 text-xs mist-text-muted">
 		{$i18n.t('settings.admin.general.events.events.label')}
 	</div>
 
 	<div class="flex flex-col w-full justify-between gap-2.5">
 		<div class="flex w-full items-start justify-between gap-4">
 			<div class="min-w-0">
-				<div class="text-xs text-gray-600 dark:text-gray-400">
+				<div class="text-xs mist-text-muted">
 					{$i18n.t('settings.admin.general.events.webhooks.label')}
 				</div>
-				<div class="mt-1.5 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+				<div class="mt-1.5 text-[0.6875rem] mist-text-muted">
 					{$i18n.t('settings.admin.general.events.webhooks.description')}
 				</div>
 			</div>
@@ -756,7 +756,7 @@
 		</div>
 
 		{#if webhooks.length === 0}
-			<div class="text-xs text-gray-400 dark:text-gray-500">
+			<div class="text-xs mist-text-muted">
 				{$i18n.t('No event webhooks configured.')}
 			</div>
 		{/if}

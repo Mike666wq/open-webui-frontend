@@ -563,7 +563,7 @@
 							</div>
 
 							<div
-								class="hidden max-w-44 shrink-0 self-center truncate text-right text-[0.6875rem] leading-5 text-gray-500 dark:text-gray-500 md:block"
+								class="hidden max-w-44 shrink-0 self-center truncate text-right text-[0.6875rem] leading-5 mist-text-muted md:block"
 							>
 								<Tooltip
 									content={skill?.user?.email ?? $i18n.t('Deleted User')}

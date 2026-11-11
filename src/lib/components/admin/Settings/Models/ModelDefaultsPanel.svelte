@@ -171,7 +171,7 @@
 
 	{#if expanded}
 		{#if loading}
-			<div class="py-1 text-xs text-gray-400 dark:text-gray-600">{$i18n.t('Loading...')}</div>
+			<div class="py-1 text-xs mist-text-muted">{$i18n.t('Loading...')}</div>
 		{:else}
 			<div class="space-y-0 pl-3">
 				<div>
@@ -183,7 +183,7 @@
 							showCapabilities = !showCapabilities;
 						}}
 					>
-						<span class="text-xs text-gray-600 dark:text-gray-400">
+						<span class="text-xs mist-text-muted">
 							<ModelSettingsLabel
 								label={$i18n.t('settings.admin.models.defaults.modelCapabilities.label')}
 								description={$i18n.t(
@@ -220,7 +220,7 @@
 							showParameters = !showParameters;
 						}}
 					>
-						<span class="text-xs text-gray-600 dark:text-gray-400">
+						<span class="text-xs mist-text-muted">
 							<ModelSettingsLabel
 								label={$i18n.t('settings.admin.models.defaults.modelParameters.label')}
 								description={$i18n.t(
@@ -254,7 +254,7 @@
 							showPromptSuggestions = !showPromptSuggestions;
 						}}
 					>
-						<span class="text-xs text-gray-600 dark:text-gray-400">
+						<span class="text-xs mist-text-muted">
 							<ModelSettingsLabel
 								label={$i18n.t('settings.admin.models.defaults.promptSuggestions.label')}
 								description={$i18n.t(

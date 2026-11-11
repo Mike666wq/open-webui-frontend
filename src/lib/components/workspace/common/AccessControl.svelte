@@ -511,7 +511,7 @@
 						<GlobeAlt className="size-3.5 text-gray-500 dark:text-gray-400" />
 					{/if}
 					<span>{visibilityOptions.find((option) => option.value === visibility)?.label}</span>
-					<ChevronDown className="size-3 text-gray-400 dark:text-gray-500" strokeWidth="2" />
+					<ChevronDown className="size-3 mist-text-muted" strokeWidth="2" />
 				</button>
 				<div slot="content">
 					<DropdownMenu className="min-w-40">

@@ -37,11 +37,11 @@
 			<Spinner className="size-5" />
 		</div>
 	{:then result}
-		<p class="my-2 text-xs text-gray-500 dark:text-gray-400">
+		<p class="my-2 text-xs mist-text-muted">
 			{$i18n.t('Inherited members are managed in their directly assigned groups.')}
 		</p>
 		{#if result.items.length > 0}
-			<table class="w-full table-fixed text-left text-sm text-gray-500 dark:text-gray-400">
+			<table class="w-full table-fixed text-left text-sm mist-text-muted">
 				<thead class="text-xs text-gray-800 uppercase dark:text-gray-200">
 					<tr class="border-b-[1.5px] border-gray-50/50 dark:border-gray-800/10">
 						<th scope="col" class="w-1/2 px-2.5 py-1.5">{$i18n.t('Name')}</th>

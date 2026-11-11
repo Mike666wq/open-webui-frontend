@@ -63,7 +63,7 @@
 		<AdminSettingSection first>
 			<div>
 				<div class="mb-2 flex items-center justify-between">
-					<div class="text-xs text-gray-600 dark:text-gray-400">{$i18n.t('Connected apps')}</div>
+					<div class="text-xs mist-text-muted">{$i18n.t('Connected apps')}</div>
 					<Tooltip content={$i18n.t('Add app')}
 						><button
 							type="button"
@@ -78,7 +78,7 @@
 					</div>
 				{:else}<div class="flex flex-col gap-1.5">
 						{#each apps as app (app.id)}
-							<div class="flex w-full items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
+							<div class="flex w-full items-center gap-3 text-xs mist-text-muted">
 								<div
 									class="flex min-w-0 flex-1 items-center gap-1.5 {app.is_active
 										? ''
@@ -93,7 +93,7 @@
 									{:else}<Grid className="size-4 shrink-0" strokeWidth="1.5" />{/if}
 									<span class="truncate"
 										>{app.name}
-										<span class="text-gray-400 dark:text-gray-600">{app.slug}</span></span
+										<span class="mist-text-muted">{app.slug}</span></span
 									>
 								</div>
 								{#if app.is_active}
@@ -110,7 +110,7 @@
 										><button
 											type="button"
 											aria-label={`${$i18n.t('Configure')} ${app.name}`}
-											class="flex size-6 items-center justify-center rounded-lg text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300"
+											class="flex size-6 items-center justify-center rounded-lg mist-text-muted transition-colors hover:text-[var(--mist-ink)]"
 											on:click={() => configure(app)}><Cog6 /></button
 										></Tooltip
 									>
@@ -130,11 +130,11 @@
 									</Tooltip>
 								</div>
 							</div>
-						{:else}<p class="text-[0.6875rem] text-gray-400 dark:text-gray-600">
+						{:else}<p class="text-[0.6875rem] mist-text-muted">
 								{$i18n.t('No apps connected.')}
 							</p>{/each}
 					</div>{/if}
-				<p class="mt-1 text-[0.6875rem] text-gray-400 dark:text-gray-600">
+				<p class="mt-1 text-[0.6875rem] mist-text-muted">
 					{$i18n.t('Connect external apps to Open WebUI.')}
 				</p>
 			</div>
