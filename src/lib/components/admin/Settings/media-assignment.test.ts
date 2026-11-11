@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	canBackInstancePurpose,
+	legacyFooterVisible,
 	connectionBlockedReason,
 	emptyWhitelistHint,
 	isAssignable,
@@ -109,6 +110,34 @@ describe('realtime is reported, not hidden', () => {
 		expect(isAssignable(purpose({ purpose: 'transcription' }))).toBe(true);
 		expect(isAssignable(purpose({ purpose: 'speech' }))).toBe(true);
 		expect(isAssignable(purpose({ purpose: 'image' }))).toBe(true);
+	});
+});
+
+describe('a legacy footer requires an actual legacy setup', () => {
+	// engine empty + no model + url defaulting: /audio/speech answers 404.
+	// Showing "旧配置" here presents a never-configured feature as configured.
+	it('is hidden when no engine was selected', () => {
+		const p = purpose({
+			purpose: 'speech',
+			legacy: { engine: '', base_url: 'https://host/v1', normalized_base_url: 'https://host/v1', model: '', has_api_key: true, configured: false, has_engine: false }
+		});
+		expect(legacyFooterVisible(p)).toBe(false);
+	});
+
+	it('is shown when an engine was selected and fields exist', () => {
+		const p = purpose({
+			purpose: 'image',
+			legacy: { engine: 'openai', base_url: 'https://host/v1/images/generations', normalized_base_url: 'https://host/v1', model: 'm', has_api_key: true, configured: true, has_engine: true }
+		});
+		expect(legacyFooterVisible(p)).toBe(true);
+	});
+
+	it('is shown when a key exists and an engine was selected', () => {
+		const p = purpose({
+			purpose: 'speech',
+			legacy: { engine: 'openai', base_url: '', normalized_base_url: '', model: '', has_api_key: true, configured: false, has_engine: true }
+		});
+		expect(legacyFooterVisible(p)).toBe(true);
 	});
 });
 

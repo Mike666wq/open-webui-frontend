@@ -24,6 +24,7 @@
 		connectionBlockedReason,
 		emptyWhitelistHint,
 		isAssignable,
+		legacyFooterVisible,
 		modeLabel,
 		primaryReason,
 		secretPlaceholder

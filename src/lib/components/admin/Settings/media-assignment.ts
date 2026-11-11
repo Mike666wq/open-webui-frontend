@@ -46,6 +46,15 @@ export const modeLabel = (
 ): string => t(`settings.admin.media.mode.${mode}`);
 
 /**
+ * A legacy block whose engine was never selected is not a legacy setup: the
+ * feature answers 404 outright, so it must read as unconfigured rather than
+ * as "configured the old way".
+ */
+export const legacyFooterVisible = (purpose: MediaAssignmentPurpose): boolean =>
+	Boolean(purpose.legacy.configured) ||
+	(Boolean(purpose.legacy.has_api_key) && purpose.legacy.has_engine !== false);
+
+/**
  * The credential is write-only, so the field can only say whether one exists.
  * Showing "已保存" is what makes an empty password box read as "unchanged"
  * rather than "you have no key".
