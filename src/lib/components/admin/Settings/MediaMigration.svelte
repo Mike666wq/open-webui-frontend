@@ -1,63 +1,33 @@
 <script lang="ts">
-	import { config } from '$lib/stores';
-	import { onMount, getContext } from 'svelte';
-	import { getMediaMigration, migrateMediaSetting } from '$lib/apis/providers';
+	/**
+	 * The inferred migration is gone.
+	 *
+	 * It guessed which connection corresponded to a legacy block by comparing a
+	 * full endpoint against a base URL and a decrypted key byte-for-byte, so it
+	 * could never match a shared connection; when it did fire it wrote a private
+	 * one that every other user then got a 403 from. Repairing the guess was the
+	 * wrong move — assignment is explicit now — so this notice points there
+	 * instead of offering a button that answers 410.
+	 */
 	export let purposes: string[] = [];
-	const i18n: any = getContext('i18n');
-	let rows: any[] = [];
-	let error = '';
-	let busy = false;
-	async function load() {
-		try {
-			rows = await getMediaMigration();
-		} catch (e) {
-			error = String(e);
-		}
-	}
-	onMount(() => {
-		if ($config?.features?.enable_provider_model_capabilities) load();
-	});
-	async function migrate(row: any) {
-		if (
-			!confirm(
-				$i18n.t(
-					'Create a private connection and switch this default model? Other users will need explicit access. Reload this settings page after migration.'
-				)
-			)
-		)
-			return;
-		busy = true;
-		error = '';
-		try {
-			await migrateMediaSetting(row.purpose, row.fingerprint);
-			await load();
-			location.reload();
-		} catch (e) {
-			error = String(e);
-		} finally {
-			busy = false;
-		}
-	}
+
+	const labels: Record<string, string> = {
+		transcription: '语音转写',
+		speech: '语音合成',
+		image: '生图',
+		realtime: '实时语音'
+	};
+
+	$: covered = purposes.map((purpose) => labels[purpose] ?? purpose).join(' / ');
 </script>
 
-{#each rows.filter((row) => purposes.includes(row.purpose)) as row}
-	<div class="mb-3 rounded-lg border border-amber-300 p-3 text-sm">
-		<p>{$i18n.t('Legacy configuration')} · {row.purpose} · {row.model}</p>
-		<p class="break-all text-xs">{row.base_url}</p>
-		<p class="my-1 text-xs">
-			{$i18n.t(
-				'Migration creates a private connection. Existing connections are not automatically merged.'
-			)}
-		</p>
-		{#if row.matching_connections?.length}<p class="text-xs">
-				{$i18n.t('Matching private connections')}: {row.matching_connections.join(', ')}
-			</p>{/if}
-		<button
-			type="button"
-			class="rounded border px-2 py-1"
-			disabled={busy || !row.configured}
-			on:click={() => migrate(row)}>{$i18n.t('Migrate to unified models')}</button
-		>
-	</div>
-{/each}
-{#if error}<p class="text-xs text-red-500">{error}</p>{/if}
+<div
+	class="rounded-xl border border-gray-100 p-3 text-xs text-gray-500 dark:border-gray-850 dark:text-gray-400"
+>
+	{#if covered}
+		<p>{covered}已统一到「服务商连接」出口。</p>
+	{/if}
+	<p class="mt-1">
+		自动迁移已退役：它按地址与密钥逐字比对推断目标连接，无法匹配共享连接，且会把全实例用途写成私有连接。请在「管理员设置 → 媒体出口」里显式指派连接与模型。
+	</p>
+</div>
