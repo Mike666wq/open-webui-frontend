@@ -33,6 +33,14 @@
 
 	let loading = false;
 
+	// Keys are write-only: the server reports presence, never the value. A blank
+	// field therefore means "unchanged", not "missing" — treat it as satisfied
+	// when a key is already stored, or every save would demand a re-entry.
+	const hasStoredKey = (field: string) => Boolean(config?.has_api_key?.[field]);
+	const keyIsMissing = (field: string) =>
+		(config?.[field] ?? '') === '' && !hasStoredKey(field);
+
+
 	let models: any[] | null = null;
 	let config: any = null;
 	let providerConnections: Array<{
@@ -63,6 +71,8 @@
 	$: imageConnectionIsPrivate =
 		config?.IMAGE_GENERATION_ENGINE === 'provider' && imageConnection?.visibility === 'private';
 
+	$: editConnectionIsPrivate =
+		config?.IMAGE_EDIT_ENGINE === 'provider' && editConnection?.visibility === 'private';
 	$: editConnection = providerConnections.find(
 		(connection) => connection.id === config?.IMAGES_EDIT_PROVIDER_CONNECTION_ID
 	);
@@ -159,12 +169,18 @@
 			config.ENABLE_IMAGE_GENERATION = false;
 
 			return null;
-		} else if (config.IMAGE_GENERATION_ENGINE === 'openai' && config.IMAGES_OPENAI_API_KEY === '') {
+		} else if (
+			config.IMAGE_GENERATION_ENGINE === 'openai' &&
+			keyIsMissing('IMAGES_OPENAI_API_KEY')
+		) {
 			toast.error($i18n.t('OpenAI API Key is required.'));
 			config.ENABLE_IMAGE_GENERATION = false;
 
 			return null;
-		} else if (config.IMAGE_GENERATION_ENGINE === 'gemini' && config.IMAGES_GEMINI_API_KEY === '') {
+		} else if (
+			config.IMAGE_GENERATION_ENGINE === 'gemini' &&
+			keyIsMissing('IMAGES_GEMINI_API_KEY')
+		) {
 			toast.error($i18n.t('Gemini API Key is required.'));
 			config.ENABLE_IMAGE_GENERATION = false;
 
@@ -176,11 +192,25 @@
 			toast.error($i18n.t('Select an API-key provider connection.'));
 			config.ENABLE_IMAGE_GENERATION = false;
 			return null;
+		} else if (config.IMAGE_GENERATION_ENGINE === 'provider' && imageConnectionIsPrivate) {
+			// Saving this would leave every other user with a 403 from the media
+			// resolver, and the settings page would look correctly configured.
+			toast.error(
+				$i18n.t('settings.admin.media.imagePrivateBlocked')
+			);
+			config.ENABLE_IMAGE_GENERATION = false;
+			return null;
 		} else if (
 			config.IMAGE_EDIT_ENGINE === 'provider' &&
 			!config.IMAGES_EDIT_PROVIDER_CONNECTION_ID
 		) {
 			toast.error($i18n.t('Select an API-key provider connection for image editing.'));
+			config.ENABLE_IMAGE_EDIT = false;
+			return null;
+		} else if (config.IMAGE_EDIT_ENGINE === 'provider' && editConnectionIsPrivate) {
+			toast.error(
+				$i18n.t('settings.admin.media.editPrivateBlocked')
+			);
 			config.ENABLE_IMAGE_EDIT = false;
 			return null;
 		}
@@ -502,7 +532,9 @@
 							<AdminSettingField label={$i18n.t('settings.admin.images.imagesOpenaiApiKey.label')}>
 								<SensitiveInput
 									variant="settings"
-									placeholder={$i18n.t('settings.admin.images.imagesOpenaiApiKey.label')}
+									placeholder={hasStoredKey('IMAGES_OPENAI_API_KEY')
+										? $i18n.t('settings.admin.media.keyStored')
+										: $i18n.t('settings.admin.images.imagesOpenaiApiKey.label')}
 									bind:value={config.IMAGES_OPENAI_API_KEY}
 									required={false}
 								/>

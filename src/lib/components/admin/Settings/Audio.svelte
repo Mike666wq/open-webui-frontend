@@ -123,7 +123,13 @@
 		name: string;
 		provider_id: string;
 		auth_type: string;
+		visibility?: string;
 	}> = [];
+
+	// TTS and transcription serve every user holding the feature permission, so
+	// a private connection would answer 403 to all of them.
+	const connectionIsPrivate = (connectionId: string) =>
+		providerConnections.find((row) => row.id === connectionId)?.visibility === 'private';
 	const inputClass =
 		'w-full h-7 rounded-lg border border-gray-100/50 bg-gray-50/40 px-2 text-xs text-gray-700 outline-hidden transition-colors placeholder:text-gray-300 focus:border-blue-400 dark:border-white/[0.04] dark:bg-white/[0.03] dark:text-gray-300 dark:placeholder:text-gray-700 dark:focus:border-blue-500';
 	const textareaClass =
@@ -183,6 +189,18 @@
 		}
 		if (STT_ENGINE === 'provider' && !STT_PROVIDER_CONNECTION_ID) {
 			toast.error($i18n.t('Select an API-key provider connection for transcription.'));
+			return;
+		}
+		if (TTS_ENGINE === 'provider' && connectionIsPrivate(TTS_PROVIDER_CONNECTION_ID)) {
+			toast.error(
+				$i18n.t('settings.admin.media.speechPrivateBlocked')
+			);
+			return;
+		}
+		if (STT_ENGINE === 'provider' && connectionIsPrivate(STT_PROVIDER_CONNECTION_ID)) {
+			toast.error(
+				$i18n.t('settings.admin.media.transcriptionPrivateBlocked')
+			);
 			return;
 		}
 		let openaiParams = {};

@@ -231,3 +231,74 @@ export const getProviderCalls = (filters: Record<string, string> = {}) =>
 export const previewLegacyMigration = () => request('/legacy-migration/preview');
 export const applyLegacyMigration = (payload: Record<string, unknown>) =>
 	request('/legacy-migration/apply', { method: 'POST', body: JSON.stringify(payload) });
+
+/**
+ * Media purposes are assigned explicitly, never inferred.
+ *
+ * Each of transcript / speech / image / realtime voice has exactly one exit:
+ * a provider connection plus one of its whitelisted models. The view reports
+ * the legacy block alongside it so an administrator can see what was
+ * configured before and revert, without the legacy values being authoritative.
+ */
+export interface MediaAssignmentLegacy {
+	engine: string;
+	base_url: string;
+	normalized_base_url: string;
+	model: string;
+	has_api_key: boolean;
+	configured: boolean;
+}
+
+export interface MediaAssignmentReason {
+	code: string;
+	message: string;
+}
+
+export interface MediaAssignmentPurpose {
+	purpose: 'transcription' | 'speech' | 'image' | 'realtime';
+	label: string;
+	mode: 'provider' | 'legacy' | 'unconfigured';
+	connection_id: string;
+	connection_name: string;
+	model: string;
+	upstream_model: string;
+	adapter: string;
+	legacy: MediaAssignmentLegacy;
+	ready: boolean;
+	reasons: MediaAssignmentReason[];
+}
+
+export interface MediaAssignmentCandidateModel {
+	id: string;
+	upstream_id: string;
+	display_name: string;
+	enabled: boolean;
+	verification: string;
+}
+
+export interface MediaAssignmentCandidate {
+	connection_id: string;
+	name: string;
+	provider_id: string;
+	visibility: string;
+	adapter: string;
+	supported: boolean;
+	models: MediaAssignmentCandidateModel[];
+}
+
+export interface MediaAssignmentView {
+	object: string;
+	purposes: MediaAssignmentPurpose[];
+	candidates: Record<string, MediaAssignmentCandidate[]>;
+}
+
+export const getMediaAssignment = (): Promise<MediaAssignmentView> => request('/media-assignment');
+
+export const assignMediaPurpose = (purpose: string, connectionId: string, modelId: string) =>
+	request(`/media-assignment/${encodeURIComponent(purpose)}`, {
+		method: 'PUT',
+		body: JSON.stringify({ connection_id: connectionId, model_id: modelId })
+	});
+
+export const revertMediaPurpose = (purpose: string) =>
+	request(`/media-assignment/${encodeURIComponent(purpose)}`, { method: 'DELETE' });

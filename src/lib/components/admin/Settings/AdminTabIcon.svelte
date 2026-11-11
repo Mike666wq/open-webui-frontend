@@ -86,6 +86,8 @@
 	<SoundHigh {className} {strokeWidth} />
 {:else if id === 'images'}
 	<Photo {className} {strokeWidth} />
+{:else if id === 'media'}
+	<Link {className} {strokeWidth} />
 {:else if id === 'pipelines'}
 	<QueueList {className} {strokeWidth} />
 {:else if id === 'db'}

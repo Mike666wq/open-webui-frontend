@@ -62,6 +62,7 @@
 	import AdminInterface from '$lib/components/admin/Settings/Interface.svelte';
 	import AdminAudio from '$lib/components/admin/Settings/Audio.svelte';
 	import AdminImages from '$lib/components/admin/Settings/Images.svelte';
+	import AdminMediaAssignment from '$lib/components/admin/Settings/MediaAssignment.svelte';
 	import AdminPipelines from '$lib/components/admin/Settings/Pipelines.svelte';
 	import AdminDatabase from '$lib/components/admin/Settings/Database.svelte';
 
@@ -176,6 +177,7 @@
 		'admin:documents': $i18n.t('Tools'),
 		'admin:audio': $i18n.t('Tools'),
 		'admin:images': $i18n.t('Tools'),
+		'admin:media': $i18n.t('Tools'),
 		'admin:web': $i18n.t('Tools'),
 		'admin:code-execution': $i18n.t('Tools'),
 		'admin:pipelines': $i18n.t('Tools'),
@@ -347,6 +349,12 @@
 			titleKey: 'settings.admin.images.title',
 			title: $i18n.t('settings.admin.images.title'),
 			searchPrefixes: ['settings.admin.images.']
+		},
+		{
+			id: 'admin:media',
+			titleKey: 'settings.admin.media.title',
+			title: $i18n.t('settings.admin.media.title'),
+			searchPrefixes: ['settings.admin.media.']
 		},
 		{
 			id: 'admin:web',
@@ -948,6 +956,8 @@
 						toast.success($i18n.t('Settings saved successfully!'));
 					}}
 				/>
+			{:else if selectedTab === 'admin:media'}
+				<AdminMediaAssignment />
 			{:else if selectedTab === 'admin:db'}
 				<AdminDatabase
 					saveHandler={() => {
