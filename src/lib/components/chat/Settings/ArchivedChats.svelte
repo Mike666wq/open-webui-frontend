@@ -10,6 +10,7 @@
 	import type { Writable } from 'svelte/store';
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
+	import { describeApiError } from '$lib/utils/api-error';
 
 	import {
 		archiveChatById,
@@ -119,7 +120,7 @@
 
 	const unarchiveHandler = async (id: string) => {
 		await archiveChatById(localStorage.token, id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 		});
 
 		chatList = chatList?.filter((chat) => chat.id !== id) ?? null;
@@ -132,7 +133,7 @@
 
 		const id = selectedChatId;
 		await deleteChatById(localStorage.token, id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 		});
 
 		chatList = chatList?.filter((chat) => chat.id !== id) ?? null;
@@ -156,7 +157,7 @@
 			await loadChats();
 			await refreshSidebar(localStorage.token);
 		} catch (error) {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 		} finally {
 			loading = false;
 		}

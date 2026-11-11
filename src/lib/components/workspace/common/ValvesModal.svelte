@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { describeApiError } from '$lib/utils/api-error';
 	import { toast } from 'svelte-sonner';
 	import { createEventDispatcher } from 'svelte';
 	import { onMount, getContext } from 'svelte';
@@ -72,23 +73,23 @@
 			if (userValves) {
 				if (type === 'tool') {
 					res = await updateToolUserValvesById(localStorage.token, id, valves).catch((error) => {
-						toast.error(`${error}`);
+						toast.error(describeApiError(error));
 					});
 				} else if (type === 'function') {
 					res = await updateFunctionUserValvesById(localStorage.token, id, valves).catch(
 						(error) => {
-							toast.error(`${error}`);
+							toast.error(describeApiError(error));
 						}
 					);
 				}
 			} else {
 				if (type === 'tool') {
 					res = await updateToolValvesById(localStorage.token, id, valves).catch((error) => {
-						toast.error(`${error}`);
+						toast.error(describeApiError(error));
 					});
 				} else if (type === 'function') {
 					res = await updateFunctionValvesById(localStorage.token, id, valves).catch((error) => {
-						toast.error(`${error}`);
+						toast.error(describeApiError(error));
 					});
 				}
 			}

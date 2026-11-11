@@ -16,6 +16,7 @@
 
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
+	import { describeApiError } from '$lib/utils/api-error';
 	import type { ChatParticipant } from '$lib/apis/folders';
 	import { goto, invalidate, invalidateAll } from '$app/navigation';
 	import { onMount, getContext, createEventDispatcher, tick } from 'svelte';
@@ -194,7 +195,7 @@
 
 	const markUnreadHandler = async () => {
 		const res = await markChatUnreadById(localStorage.token, id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 		if (!res) return;
@@ -240,7 +241,7 @@
 				TITLE: title
 			})
 		).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 
@@ -258,7 +259,7 @@
 		deleting = true;
 
 		const res = await deleteChatById(localStorage.token, id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 
@@ -305,7 +306,7 @@
 		if (chatId && folderId) {
 			const res = await updateChatFolderIdById(localStorage.token, chatId, folderId).catch(
 				(error) => {
-					toast.error(`${error}`);
+					toast.error(describeApiError(error));
 					return null;
 				}
 			);
@@ -500,7 +501,7 @@
 
 		const generatedTitle = await generateTitle(localStorage.token, model, messages).catch(
 			(error) => {
-				toast.error(`${error}`);
+				toast.error(describeApiError(error));
 				return null;
 			}
 		);

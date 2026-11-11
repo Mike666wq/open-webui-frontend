@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
+	import { describeApiError } from '$lib/utils/api-error';
 	import { getContext, onDestroy, onMount, tick } from 'svelte';
 	const i18n: any = getContext('i18n');
 
@@ -74,7 +75,7 @@
 				TITLE: chat?.title ?? 'Chat'
 			})
 		).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 
@@ -86,7 +87,7 @@
 
 	const markUnreadHandler = async (id) => {
 		const res = await markChatUnreadById(localStorage.token, id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 
@@ -115,7 +116,7 @@
 
 	const deleteChatHandler = async (id) => {
 		const res = await deleteChatById(localStorage.token, id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 
@@ -136,7 +137,7 @@
 		if (chatId && folderId) {
 			const res = await updateChatFolderIdById(localStorage.token, chatId, folderId).catch(
 				(error) => {
-					toast.error(`${error}`);
+					toast.error(describeApiError(error));
 					return null;
 				}
 			);
@@ -235,7 +236,7 @@
 
 		const generatedTitle = await generateTitle(localStorage.token, model, msgList).catch(
 			(error) => {
-				toast.error(`${error}`);
+				toast.error(describeApiError(error));
 				return null;
 			}
 		);

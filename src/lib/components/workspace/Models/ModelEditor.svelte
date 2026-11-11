@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { describeApiError } from '$lib/utils/api-error';
 	import ModelSettingsLabel from './ModelSettingsLabel.svelte';
 	import { toast } from 'svelte-sonner';
 	import { v4 as uuidv4 } from 'uuid';
@@ -732,7 +733,7 @@
 				)
 			);
 		} catch (error) {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 		}
 	};
 

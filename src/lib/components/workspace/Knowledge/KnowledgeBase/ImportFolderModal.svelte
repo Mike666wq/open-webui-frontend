@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { describeApiError } from '$lib/utils/api-error';
 	import { getContext, createEventDispatcher } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { i18n as I18n } from 'i18next';
@@ -119,7 +120,7 @@
 			);
 			plan = planFolderImport(entries, index.keys);
 		} catch (error) {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			// Preview without conflict information rather than blocking.
 			plan = planFolderImport(entries);
 		}
@@ -159,7 +160,7 @@
 			}
 			dispatch('completed', report);
 		} catch (error) {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			mode = 'preview';
 		} finally {
 			running = false;

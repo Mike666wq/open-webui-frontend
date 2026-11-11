@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { describeApiError } from '$lib/utils/api-error';
 	import WorkspaceAccessModal from './common/WorkspaceAccessModal.svelte';
 	let accessModal: WorkspaceAccessModal;
 	import { resolveLocalizedResource } from '$lib/utils/localizedContent';
@@ -106,7 +107,7 @@
 				label: $i18n.t('Export JSON'),
 				onClick: async () => {
 					const _tools = await exportTools(localStorage.token).catch((error) => {
-						toast.error(`${error}`);
+						toast.error(describeApiError(error));
 						return null;
 					});
 
@@ -186,7 +187,7 @@
 
 	const shareHandler = async (tool) => {
 		const item = await getToolById(localStorage.token, tool.id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 
@@ -213,7 +214,7 @@
 
 	const cloneHandler = async (tool) => {
 		const _tool = await getToolById(localStorage.token, tool.id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 
@@ -229,7 +230,7 @@
 
 	const exportHandler = async (tool) => {
 		const _tool = await getToolById(localStorage.token, tool.id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 
@@ -243,7 +244,7 @@
 
 	const deleteHandler = async (tool) => {
 		const res = await deleteToolById(localStorage.token, tool.id).catch((error) => {
-			toast.error(`${error}`);
+			toast.error(describeApiError(error));
 			return null;
 		});
 
@@ -684,7 +685,7 @@
 
 				for (const tool of _tools) {
 					const res = await createNewTool(localStorage.token, tool).catch((error) => {
-						toast.error(`${error}`);
+						toast.error(describeApiError(error));
 						return null;
 					});
 				}

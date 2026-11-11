@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { describeApiError } from '$lib/utils/api-error';
 	import { v4 as uuidv4 } from 'uuid';
 	import { onMount, tick, getContext } from 'svelte';
 
@@ -332,7 +333,7 @@
 				await updateSkillAccessGrants(localStorage.token, skill.id, accessGrants);
 				toast.success($i18n.t('Saved'));
 			} catch (error) {
-				toast.error(`${error}`);
+				toast.error(describeApiError(error));
 			}
 		}
 	}}

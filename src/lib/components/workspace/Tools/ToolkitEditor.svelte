@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { describeApiError } from '$lib/utils/api-error';
 	import { toast } from 'svelte-sonner';
 	import { getContext, onMount, tick } from 'svelte';
 
@@ -302,7 +303,7 @@ class Tools:
 				await updateToolAccessGrants(localStorage.token, id, accessGrants);
 				toast.success($i18n.t('Saved'));
 			} catch (error: any) {
-				toast.error(`${error}`);
+				toast.error(describeApiError(error));
 			}
 		}
 	}}
