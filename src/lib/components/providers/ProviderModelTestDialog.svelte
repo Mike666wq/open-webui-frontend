@@ -30,7 +30,6 @@
 	let audioError = '';
 	let text = '';
 	let prompt = '';
-		chatPrompt = 'Reply OK.';
 	let chatPrompt = 'Reply OK.';
 	let previousModelKey = '';
 	let size = '1024x1024';
