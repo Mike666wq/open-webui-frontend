@@ -97,7 +97,9 @@
 		templates.some((item) => item.group === group.id && item.supported)
 	);
 
-	const readableError = (err: unknown) => String(err).replace(/^Error:\s*/, '');
+	function readableError(err: unknown) {
+		return String(err).replace(/^Error:\s*/, '');
+	}
 
 	/**
 	 * Show a failure with its taxonomy when the backend sent one.

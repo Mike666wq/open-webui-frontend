@@ -80,47 +80,6 @@
 	let manualModelName = '';
 	let manualUses: Record<string, boolean> = { chat: true };
 
-	async function submitManualModel() {
-		if (!manualModelId.trim() || busy) return;
-		busy = true;
-		message = '';
-		try {
-			const id = manualModelId.trim();
-			const name = manualModelName.trim() || id;
-			const uses: Record<string, string> = {};
-			for (const purpose of PROVIDER_PURPOSES) {
-				if (manualUses[purpose]) {
-					const adapter =
-						serviceAdapters(template, purpose as ServicePurpose)[0] ??
-						PURPOSE_ADAPTERS[purpose as keyof typeof PURPOSE_ADAPTERS]?.[0];
-					if (adapter) uses[purpose] = adapter;
-				}
-			}
-			if (Object.keys(uses).length === 0) {
-				uses['chat'] =
-					serviceAdapters(template, 'chat')[0] ??
-					PURPOSE_ADAPTERS['chat'][0];
-			}
-			await addProviderModels(connection.id, {
-				upstream_ids: [id],
-				display_names: { [id]: name },
-				uses,
-				source: 'manual'
-			});
-			manualModelId = '';
-			manualModelName = '';
-			manualUses = { chat: true };
-			showManualAdd = false;
-			message = $i18n.t('Added to the model list');
-			toast.success($i18n.t('Model added to the list'));
-			await updated();
-		} catch (err) {
-			message = readableError(err);
-		} finally {
-			busy = false;
-		}
-	}
-
 	$: if (connection?.id !== previousConnection) {
 		previousConnection = connection?.id;
 		candidates = [];
@@ -148,7 +107,9 @@
 		if (onUpdated) await onUpdated();
 	}
 
-	const readableError = (err: unknown) => String(err).replace(/^Error:\s*/, '');
+	function readableError(err: unknown) {
+		return String(err).replace(/^Error:\s*/, '');
+	}
 
 	async function fetchModels() {
 		// Anti double submit: the button is disabled while fetching, but guard
@@ -207,6 +168,47 @@
 			await addProviderModels(connection.id, { upstream_ids: picked });
 			picked = [];
 			message = $i18n.t('Added to the model list');
+			await updated();
+		} catch (err) {
+			message = readableError(err);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function submitManualModel() {
+		if (!manualModelId.trim() || busy) return;
+		busy = true;
+		message = '';
+		try {
+			const id = manualModelId.trim();
+			const name = manualModelName.trim() || id;
+			const uses: Record<string, string> = {};
+			for (const purpose of PROVIDER_PURPOSES) {
+				if (manualUses[purpose]) {
+					const adapter =
+						serviceAdapters(template, purpose as ServicePurpose)[0] ??
+						PURPOSE_ADAPTERS[purpose as keyof typeof PURPOSE_ADAPTERS]?.[0];
+					if (adapter) uses[purpose] = adapter;
+				}
+			}
+			if (Object.keys(uses).length === 0) {
+				uses['chat'] =
+					serviceAdapters(template, 'chat')[0] ??
+					PURPOSE_ADAPTERS['chat'][0];
+			}
+			await addProviderModels(connection.id, {
+				upstream_ids: [id],
+				display_names: { [id]: name },
+				uses,
+				source: 'manual'
+			});
+			manualModelId = '';
+			manualModelName = '';
+			manualUses = { chat: true };
+			showManualAdd = false;
+			message = $i18n.t('Added to the model list');
+			toast.success($i18n.t('Model added to the list'));
 			await updated();
 		} catch (err) {
 			message = readableError(err);

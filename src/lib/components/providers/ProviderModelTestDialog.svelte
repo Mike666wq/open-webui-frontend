@@ -72,7 +72,9 @@
 		previousModelKey = '';
 	}
 
-	const readableError = (err: unknown) => String(err).replace(/^Error:\s*/, '');
+	function readableError(err: unknown) {
+		return String(err).replace(/^Error:\s*/, '');
+	}
 
 	function reset() {
 		generation += 1;
