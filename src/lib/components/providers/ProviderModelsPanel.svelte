@@ -632,10 +632,9 @@
 								</button>
 							{/if}
 							{#each purposesOf(model) as purpose}
-								{@const summary = formatVerificationSummary(model.verification, purpose)}
 								<button
 									type="button"
-									class="rounded-lg border px-2 py-1 dark:border-gray-700 {summary.status === 'passed' ? 'text-green-700 border-green-300 dark:text-green-400 dark:border-green-800' : summary.status === 'failed' ? 'text-red-600 border-red-300 dark:text-red-400 dark:border-red-800' : ''}"
+									class="rounded-lg border px-2 py-1 dark:border-gray-700 {model.verification?.[purpose]?.status === 'passed' ? 'text-green-700 border-green-300 dark:text-green-400 dark:border-green-800' : model.verification?.[purpose]?.status === 'failed' ? 'text-red-600 border-red-300 dark:text-red-400 dark:border-red-800' : ''}"
 									disabled={busy}
 									data-testid={`provider-test-${purpose}`}
 									on:click={() => openTest(model, purpose)}
@@ -644,8 +643,8 @@
 										purpose: $i18n.t(PURPOSE_LABEL_KEYS[purpose])
 									})}
 									· {verificationLabel(model.verification, purpose)}
-									{#if summary.status === 'passed' && summary.latency}
-										<span class="ml-1 font-mono text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">⚡{summary.label}</span>
+									{#if model.verification?.[purpose]?.status === 'passed' && (model.verification?.[purpose]?.elapsed_ms || model.verification?.[purpose]?.timings?.first_output_ms)}
+										<span class="ml-1 font-mono text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">⚡{model.verification[purpose].timings?.first_output_ms ? `TTFT ${model.verification[purpose].timings.first_output_ms}ms · ` : ''}{model.verification[purpose].elapsed_ms ?? model.verification[purpose].timings?.upstream_total_ms}ms</span>
 									{/if}
 								</button>
 							{/each}
