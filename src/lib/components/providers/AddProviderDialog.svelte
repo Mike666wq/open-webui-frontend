@@ -809,31 +809,6 @@
 									placeholder={$i18n.t('Model id')}
 								/>
 							{:else if purpose === 'chat'}
-								<div class="rounded-xl border p-2.5 bg-gray-50/60 dark:bg-gray-800/40 space-y-2 mb-2" data-testid="provider-manual-chat-box">
-									<p class="font-medium text-xs">{$i18n.t('Add custom model')}</p>
-									<div class="flex gap-2">
-										<input
-											class="flex-1 rounded-lg border bg-transparent p-1.5 text-xs dark:border-gray-700"
-											bind:value={manualChatModel}
-											data-testid="provider-manual-chat-model-input"
-											placeholder={$i18n.t('Model ID, e.g. gpt-4o')}
-										/>
-										<input
-											class="w-1/3 rounded-lg border bg-transparent p-1.5 text-xs dark:border-gray-700"
-											bind:value={manualChatName}
-											placeholder={$i18n.t('Name (optional)')}
-										/>
-										<button
-											type="button"
-											class="rounded-lg bg-black px-3 py-1.5 text-xs text-white disabled:opacity-50 dark:bg-white dark:text-black"
-											disabled={!manualChatModel.trim()}
-											data-testid="provider-manual-chat-model-add"
-											on:click={addManualChatModel}
-										>
-											{$i18n.t('Add')}
-										</button>
-									</div>
-								</div>
 								{#if candidates.length === 0}
 									<p class="rounded-lg border border-dashed p-3 text-xs">
 										{$i18n.t(
@@ -866,6 +841,31 @@
 										{/each}
 									</div>
 								{/if}
+								<div class="rounded-xl border p-2.5 bg-gray-50/60 dark:bg-gray-800/40 space-y-2 mt-2" data-testid="provider-manual-chat-box">
+									<p class="font-medium text-xs">{$i18n.t('Add custom model')}</p>
+									<div class="flex gap-2">
+										<input
+											class="flex-1 rounded-lg border bg-transparent p-1.5 text-xs dark:border-gray-700"
+											bind:value={manualChatModel}
+											data-testid="provider-manual-chat-model-input"
+											placeholder={$i18n.t('Model ID, e.g. gpt-4o')}
+										/>
+										<input
+											class="w-1/3 rounded-lg border bg-transparent p-1.5 text-xs dark:border-gray-700"
+											bind:value={manualChatName}
+											placeholder={$i18n.t('Name (optional)')}
+										/>
+										<button
+											type="button"
+											class="rounded-lg bg-black px-3 py-1.5 text-xs text-white disabled:opacity-50 dark:bg-white dark:text-black"
+											disabled={!manualChatModel.trim()}
+											data-testid="provider-manual-chat-model-add"
+											on:click={addManualChatModel}
+										>
+											{$i18n.t('Add')}
+										</button>
+									</div>
+								</div>
 							{/if}
 						</div>
 					{/if}
