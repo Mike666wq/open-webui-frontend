@@ -30,6 +30,8 @@
 	let audioError = '';
 	let text = '';
 	let prompt = '';
+	let chatPrompt = 'Reply OK.';
+	let previousModelKey = '';
 	let size = '1024x1024';
 	let count = 1;
 	let responseFormat = 'json';
@@ -55,7 +57,23 @@
 	$: supportedSizes = ['512x512', '768x768', '1024x1024', '1280x720', '720x1280', '1536x1024'];
 	$: responseFormats = (declaration.options?.response_format as string[]) ?? ['json'];
 
-	const readableError = (err: unknown) => String(err).replace(/^Error:\s*/, '');
+		$: if (show && model && purpose) {
+		const key = `${connection?.id}:${model?.upstream_id}:${purpose}`;
+		if (key !== previousModelKey) {
+			previousModelKey = key;
+			const prev = model?.verification?.[purpose];
+			if (prev && prev.status && prev.status !== 'untested' && !running && !result) {
+				result = prev;
+			}
+		}
+	}
+	$: if (!show) {
+		previousModelKey = '';
+	}
+
+	function readableError(err: unknown) {
+		return String(err).replace(/^Error:\s*/, '');
+	}
 
 	function reset() {
 		generation += 1;
@@ -76,6 +94,7 @@
 		audioError = '';
 		text = '';
 		prompt = '';
+		chatPrompt = 'Reply OK.';
 		size = '1024x1024';
 		count = 1;
 		responseFormat = 'json';
@@ -159,6 +178,9 @@
 				upstream_id: model?.upstream_id,
 				purpose
 			};
+			if (isChat) {
+				if (chatPrompt.trim()) payload.prompt = chatPrompt.trim();
+			}
 			if (isTranscription) {
 				if (!audioBase64) {
 					error = $i18n.t('Select an audio sample first.');
@@ -239,7 +261,17 @@
 			</p>
 		</div>
 
-		{#if isTranscription}
+		{#if isChat}
+			<label class="block text-xs">
+				{$i18n.t('Test message / Prompt')}
+				<input
+					class="mt-1 w-full rounded-lg border bg-transparent p-2 text-xs dark:border-gray-700"
+					bind:value={chatPrompt}
+					data-testid="provider-test-chat-prompt"
+					placeholder="Reply OK."
+				/>
+			</label>
+		{:else if isTranscription}
 			<label class="block text-xs">
 				{$i18n.t('Audio sample')}
 				<input
@@ -357,9 +389,41 @@
 				</ol>
 				<p>浏览器等待 / Browser elapsed: {browserMs} ms</p>
 				{#if result}
+					<div class="my-2 grid grid-cols-2 gap-2 text-xs" data-testid="provider-test-metrics-grid">
+						<div class="rounded-lg bg-gray-200/60 p-2 dark:bg-gray-700/60">
+							<span class="text-gray-500 dark:text-gray-400 block text-[11px]">{$i18n.t('Total Latency')}</span>
+							<span class="font-mono text-sm font-semibold">{result.elapsed_ms ?? result.timings?.upstream_total_ms ?? '-'} ms</span>
+						</div>
+						<div class="rounded-lg bg-gray-200/60 p-2 dark:bg-gray-700/60">
+							<span class="text-gray-500 dark:text-gray-400 block text-[11px]">{$i18n.t('TTFT (First output)')}</span>
+							<span class="font-mono text-sm font-semibold">{result.timings?.first_output_ms == null ? '-' : `${result.timings.first_output_ms} ms`}</span>
+						</div>
+						<div class="rounded-lg bg-gray-200/60 p-2 dark:bg-gray-700/60">
+							<span class="text-gray-500 dark:text-gray-400 block text-[11px]">{$i18n.t('Headers latency')}</span>
+							<span class="font-mono text-xs">{result.timings?.upstream_headers_ms == null ? '-' : `${result.timings.upstream_headers_ms} ms`}</span>
+						</div>
+						<div class="rounded-lg bg-gray-200/60 p-2 dark:bg-gray-700/60">
+							<span class="text-gray-500 dark:text-gray-400 block text-[11px]">{$i18n.t('Upstream total')}</span>
+							<span class="font-mono text-xs">{result.timings?.upstream_total_ms == null ? '-' : `${result.timings.upstream_total_ms} ms`}</span>
+						</div>
+					</div>
 					<p>测试总耗时 / Test total: {result.elapsed_ms ?? '未测得 / Unavailable'} ms</p>
 					<p>首输出 / First output: {result.timings?.first_output_ms == null ? '未测得 / Unavailable' : `${result.timings.first_output_ms} ms`}</p>
-					{#if result.usage}<p>用量 / Usage: {JSON.stringify(result.usage)}</p>{/if}
+					{#if result.usage}
+						<div class="rounded-lg bg-gray-200/60 p-2 dark:bg-gray-700/60 text-[11px]">
+							<span class="font-medium">{$i18n.t('Token Usage')}: </span>
+							<span class="font-mono">
+								Input: {result.usage.input_tokens ?? result.usage.prompt_tokens ?? 0} · 
+								Output: {result.usage.output_tokens ?? result.usage.completion_tokens ?? 0} · 
+								Total: {result.usage.total_tokens ?? 0}
+							</span>
+							{#if (result.usage.output_tokens ?? result.usage.completion_tokens) && result.timings?.first_output_ms && result.timings?.upstream_total_ms && (result.timings.upstream_total_ms - result.timings.first_output_ms) > 0}
+								<span class="ml-2 font-mono text-emerald-600 dark:text-emerald-400">
+									({((result.usage.output_tokens ?? result.usage.completion_tokens) / ((result.timings.upstream_total_ms - result.timings.first_output_ms) / 1000)).toFixed(1)} tokens/s)
+								</span>
+							{/if}
+						</div>
+					{/if}
 					{#if fallback}<p>旧版服务，仅测总耗时 / Legacy server: total time only.</p>{/if}
 				{/if}
 				{#if preview}<pre class="max-h-40 overflow-auto whitespace-pre-wrap break-words">{preview}</pre>{/if}

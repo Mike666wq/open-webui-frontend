@@ -38,6 +38,7 @@
 		PURPOSE_LABEL_KEYS,
 		PROVIDER_PURPOSES,
 		candidatePool,
+		formatVerificationSummary,
 		purposesOf,
 		purposesOfCandidate,
 		supportsPurpose,
@@ -74,6 +75,10 @@
 	let testModel: any = null;
 	let testOpen = false;
 	let fetchFeedback: FetchFeedback | null = feedbackCache.get(connection?.id);
+	let showManualAdd = false;
+	let manualModelId = '';
+	let manualModelName = '';
+	let manualUses: Record<string, boolean> = { chat: true };
 
 	$: if (connection?.id !== previousConnection) {
 		previousConnection = connection?.id;
@@ -102,7 +107,9 @@
 		if (onUpdated) await onUpdated();
 	}
 
-	const readableError = (err: unknown) => String(err).replace(/^Error:\s*/, '');
+	function readableError(err: unknown) {
+		return String(err).replace(/^Error:\s*/, '');
+	}
 
 	async function fetchModels() {
 		// Anti double submit: the button is disabled while fetching, but guard
@@ -161,6 +168,47 @@
 			await addProviderModels(connection.id, { upstream_ids: picked });
 			picked = [];
 			message = $i18n.t('Added to the model list');
+			await updated();
+		} catch (err) {
+			message = readableError(err);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function submitManualModel() {
+		if (!manualModelId.trim() || busy) return;
+		busy = true;
+		message = '';
+		try {
+			const id = manualModelId.trim();
+			const name = manualModelName.trim() || id;
+			const uses: Record<string, string> = {};
+			for (const purpose of PROVIDER_PURPOSES) {
+				if (manualUses[purpose]) {
+					const adapter =
+						serviceAdapters(template, purpose as ServicePurpose)[0] ??
+						PURPOSE_ADAPTERS[purpose as keyof typeof PURPOSE_ADAPTERS]?.[0];
+					if (adapter) uses[purpose] = adapter;
+				}
+			}
+			if (Object.keys(uses).length === 0) {
+				uses['chat'] =
+					serviceAdapters(template, 'chat')[0] ??
+					PURPOSE_ADAPTERS['chat'][0];
+			}
+			await addProviderModels(connection.id, {
+				upstream_ids: [id],
+				display_names: { [id]: name },
+				uses,
+				source: 'manual'
+			});
+			manualModelId = '';
+			manualModelName = '';
+			manualUses = { chat: true };
+			showManualAdd = false;
+			message = $i18n.t('Added to the model list');
+			toast.success($i18n.t('Model added to the list'));
 			await updated();
 		} catch (err) {
 			message = readableError(err);
@@ -293,15 +341,26 @@
 			</p>
 		</div>
 		{#if canManage}
-			<button
-				type="button"
-				class="rounded-lg border px-3 py-2 dark:border-gray-700"
-				disabled={fetching}
-				aria-busy={fetching}
-				on:click={fetchModels}
-			>
-				{fetching ? $i18n.t('Fetching…') : $i18n.t('Fetch model list')}
-			</button>
+			<div class="flex items-center gap-2">
+				<button
+					type="button"
+					class="rounded-lg border px-3 py-2 dark:border-gray-700"
+					disabled={fetching}
+					aria-busy={fetching}
+					on:click={fetchModels}
+				>
+					{fetching ? $i18n.t('Fetching…') : $i18n.t('Fetch model list')}
+				</button>
+				<button
+					type="button"
+					class="rounded-lg border px-3 py-2 text-xs dark:border-gray-700"
+					disabled={busy}
+					data-testid="provider-manual-add-toggle"
+					on:click={() => (showManualAdd = !showManualAdd)}
+				>
+					{showManualAdd ? $i18n.t('Cancel') : $i18n.t('Add custom model')}
+				</button>
+			</div>
 		{/if}
 	</div>
 
@@ -350,6 +409,77 @@
 				})}
 			</p>
 			<p class="mt-1 leading-relaxed">{providerErrorHint(fetchError)}</p>
+		</div>
+	{/if}
+
+	{#if showManualAdd}
+		<div
+			class="rounded-xl border p-3 bg-gray-50/70 dark:bg-gray-800/40 space-y-3"
+			data-testid="provider-manual-add-form"
+		>
+			<div class="flex items-center justify-between">
+				<p class="font-medium text-xs">{$i18n.t('Add custom model')}</p>
+				<button
+					type="button"
+					class="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+					on:click={() => (showManualAdd = false)}
+				>
+					✕
+				</button>
+			</div>
+			<div class="grid gap-2 sm:grid-cols-2">
+				<label class="block text-xs">
+					{$i18n.t('Model ID')}
+					<input
+						class="mt-1 w-full rounded-lg border bg-transparent p-2 text-xs dark:border-gray-700"
+						bind:value={manualModelId}
+						data-testid="provider-manual-id-input"
+						placeholder="e.g. gpt-4o, claude-3-5-sonnet"
+					/>
+				</label>
+				<label class="block text-xs">
+					{$i18n.t('Display Name (optional)')}
+					<input
+						class="mt-1 w-full rounded-lg border bg-transparent p-2 text-xs dark:border-gray-700"
+						bind:value={manualModelName}
+						data-testid="provider-manual-name-input"
+						placeholder="e.g. GPT-4o"
+					/>
+				</label>
+			</div>
+			<div class="space-y-1">
+				<p class="text-xs text-gray-600 dark:text-gray-300">{$i18n.t('Purposes')}</p>
+				<div class="flex flex-wrap gap-3">
+					{#each declaredPurposes as purpose (purpose)}
+						<label class="flex items-center gap-1 text-xs">
+							<input type="checkbox" bind:checked={manualUses[purpose]} />
+							{$i18n.t(PURPOSE_LABEL_KEYS[purpose])}
+						</label>
+					{/each}
+				</div>
+			</div>
+			<div class="flex justify-end gap-2">
+				<button
+					type="button"
+					class="rounded-lg border px-3 py-1.5 text-xs dark:border-gray-700"
+					on:click={() => {
+						showManualAdd = false;
+						manualModelId = '';
+						manualModelName = '';
+					}}
+				>
+					{$i18n.t('Cancel')}
+				</button>
+				<button
+					type="button"
+					class="rounded-lg bg-black px-4 py-1.5 text-xs text-white disabled:opacity-50 dark:bg-white dark:text-black"
+					disabled={busy || !manualModelId.trim()}
+					data-testid="provider-manual-add-submit"
+					on:click={submitManualModel}
+				>
+					{$i18n.t('Add to model list')}
+				</button>
+			</div>
 		</div>
 	{/if}
 
@@ -504,7 +634,7 @@
 							{#each purposesOf(model) as purpose}
 								<button
 									type="button"
-									class="rounded-lg border px-2 py-1 dark:border-gray-700"
+									class="rounded-lg border px-2 py-1 dark:border-gray-700 {model.verification?.[purpose]?.status === 'passed' ? 'text-green-700 border-green-300 dark:text-green-400 dark:border-green-800' : model.verification?.[purpose]?.status === 'failed' ? 'text-red-600 border-red-300 dark:text-red-400 dark:border-red-800' : ''}"
 									disabled={busy}
 									data-testid={`provider-test-${purpose}`}
 									on:click={() => openTest(model, purpose)}
@@ -513,6 +643,9 @@
 										purpose: $i18n.t(PURPOSE_LABEL_KEYS[purpose])
 									})}
 									· {verificationLabel(model.verification, purpose)}
+									{#if model.verification?.[purpose]?.status === 'passed' && (model.verification?.[purpose]?.elapsed_ms || model.verification?.[purpose]?.timings?.first_output_ms)}
+										<span class="ml-1 font-mono text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">⚡{model.verification[purpose].timings?.first_output_ms ? `TTFT ${model.verification[purpose].timings.first_output_ms}ms · ` : ''}{model.verification[purpose].elapsed_ms ?? model.verification[purpose].timings?.upstream_total_ms}ms</span>
+									{/if}
 								</button>
 							{/each}
 							<button

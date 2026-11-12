@@ -4539,5 +4539,19 @@
 	"settings.admin.media.keyMissing": "尚未设置密钥",
 	"settings.admin.media.noModelsHint": "该连接下还没有 {{purpose}} 模型，先到服务商连接里添加并启用再回来指派。",
 	"settings.admin.media.selectConnection": "请先选择一条服务商连接",
-	"settings.admin.media.selectModel": "请先选择一个模型"
+	"settings.admin.media.selectModel": "请先选择一个模型",
+	"Add custom model": "添加自定义模型",
+	"Add to model list": "添加至模型列表",
+	"Custom headers (optional JSON)": "自定义请求头（可选 JSON）",
+	"Display Name (optional)": "显示名称（可选）",
+	"Headers latency": "响应头延迟",
+	"Invalid JSON format for custom headers": "自定义请求头 JSON 格式无效",
+	"Model ID, e.g. gpt-4o": "模型 ID，如 gpt-4o",
+	"Model added to the list": "模型已添加至列表",
+	"Name (optional)": "名称（可选）",
+	"TTFT (First output)": "首字延迟 (TTFT)",
+	"Test message / Prompt": "测试消息 / 提示词",
+	"Token Usage": "Token 用量",
+	"Total Latency": "总延迟",
+	"Upstream total": "上游耗时"
 }

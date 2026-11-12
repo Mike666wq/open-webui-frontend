@@ -34,7 +34,27 @@ export interface ProviderModelEntry {
 	name?: string;
 	uses?: Record<string, string>;
 	enabled?: boolean;
-	verification?: Record<string, { status?: string; tested_at?: number; elapsed_ms?: number }>;
+	verification?: Record<
+		string,
+		{
+			status?: string;
+			tested_at?: number;
+			elapsed_ms?: number;
+			timings?: {
+				first_output_ms?: number | null;
+				upstream_headers_ms?: number | null;
+				upstream_total_ms?: number | null;
+			};
+			usage?: {
+				input_tokens?: number;
+				output_tokens?: number;
+				total_tokens?: number;
+				prompt_tokens?: number;
+				completion_tokens?: number;
+			};
+			error?: any;
+		}
+	>;
 }
 
 export interface ProviderCandidate {
@@ -101,6 +121,44 @@ export function verificationLabel(
 ): VerificationStatus {
 	const status = verification?.[purpose]?.status;
 	return status === 'passed' || status === 'failed' ? status : 'untested';
+}
+
+export interface VerificationSummary {
+	status: VerificationStatus;
+	label: string;
+	latency?: number;
+	ttft?: number;
+	usage?: Record<string, number>;
+}
+
+export function formatVerificationSummary(
+	verification: Record<string, any> | undefined,
+	purpose: ProviderPurpose
+): VerificationSummary {
+	const entry = verification?.[purpose];
+	const status: VerificationStatus =
+		entry?.status === 'passed' || entry?.status === 'failed' ? entry.status : 'untested';
+	if (status === 'untested') {
+		return { status: 'untested', label: 'untested' };
+	}
+	if (status === 'failed') {
+		return { status: 'failed', label: 'failed' };
+	}
+	const latency = entry?.elapsed_ms ?? entry?.timings?.upstream_total_ms;
+	const ttft = entry?.timings?.first_output_ms;
+	let label = 'passed';
+	if (typeof ttft === 'number' && typeof latency === 'number') {
+		label = `TTFT ${ttft}ms · ${latency}ms`;
+	} else if (typeof latency === 'number') {
+		label = `${latency}ms`;
+	}
+	return {
+		status: 'passed',
+		label,
+		latency: typeof latency === 'number' ? latency : undefined,
+		ttft: typeof ttft === 'number' ? ttft : undefined,
+		usage: entry?.usage
+	};
 }
 
 export function isAnyPurposeTested(
