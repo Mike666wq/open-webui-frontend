@@ -55,6 +55,9 @@
 	let region = '';
 	let workspaceId = '';
 	let apiType = 'openai';
+	let customHeaders = '';
+	let manualChatModel = '';
+	let manualChatName = '';
 	let visibility: 'private' | 'shared' = 'private';
 	let accessGrants: any[] = [];
 	let candidates: any[] = [];
@@ -109,6 +112,20 @@
 
 	const bailianNeedsWorkspace = (value: string) =>
 		['eu-central-1', 'us-east-1', 'ap-northeast-1'].includes(value);
+
+	function addManualChatModel() {
+		const id = manualChatModel.trim();
+		if (!id) return;
+		const displayName = manualChatName.trim() || id;
+		if (!candidates.some((c) => (c.upstream_id ?? c.id) === id)) {
+			candidates = [{ upstream_id: id, name: displayName, uses: { chat: 'openai-chat' } }, ...candidates];
+		}
+		if (!picked.includes(id)) {
+			picked = [...picked, id];
+		}
+		manualChatModel = '';
+		manualChatName = '';
+	}
 
 	function selectTemplate(item: ProviderTemplate) {
 		if (!item.supported) {
@@ -229,6 +246,16 @@
 				step = 'models';
 				return;
 			}
+			let parsedHeaders: Record<string, string> | undefined = undefined;
+			if (customHeaders.trim()) {
+				try {
+					parsedHeaders = JSON.parse(customHeaders.trim());
+				} catch {
+					error = $i18n.t('Invalid JSON format for custom headers');
+					errorDetail = null;
+					return;
+				}
+			}
 			const result = await verifyProviderDraft({
 				provider_template: templateId,
 				name: name.trim() || template?.name || templateId,
@@ -238,6 +265,7 @@
 					...(region.trim() ? { region: region.trim() } : {}),
 					...(workspaceId.trim() ? { workspace_id: workspaceId.trim() } : {}),
 					...(isCustom ? { api_type: apiType } : {}),
+					...(parsedHeaders ? { custom_headers: parsedHeaders } : {}),
 					...(Object.keys(servicesPayload()).length ? { services: servicesPayload() } : {})
 				},
 				...(apiKey ? { api_key: apiKey } : {})
@@ -349,6 +377,16 @@
 			const modelIds = selections.length
 				? [...new Set(selections.map((selection) => selection.upstream_id))]
 				: picked;
+			let parsedHeaders: Record<string, string> | undefined = undefined;
+			if (customHeaders.trim()) {
+				try {
+					parsedHeaders = JSON.parse(customHeaders.trim());
+				} catch {
+					error = $i18n.t('Invalid JSON format for custom headers');
+					errorDetail = null;
+					return;
+				}
+			}
 			await createProviderConnection({
 				provider_template: templateId,
 				name: name.trim() || template?.name || templateId,
@@ -359,6 +397,7 @@
 					...(region.trim() ? { region: region.trim() } : {}),
 					...(workspaceId.trim() ? { workspace_id: workspaceId.trim() } : {}),
 					...(isCustom ? { api_type: apiType } : {}),
+					...(parsedHeaders ? { custom_headers: parsedHeaders } : {}),
 					...(Object.keys(servicesPayload()).length ? { services: servicesPayload() } : {}),
 					model_ids: modelIds
 				},
@@ -596,6 +635,19 @@
 					</label>
 				{/if}
 
+				{#if !isOAuth}
+					<label class="block text-xs">
+						{$i18n.t('Custom headers (optional JSON)')}
+						<textarea
+							class="mt-1 w-full rounded-lg border bg-transparent p-2 font-mono text-xs dark:border-gray-700"
+							rows="2"
+							bind:value={customHeaders}
+							data-testid="provider-custom-headers"
+							placeholder={'{"HTTP-Referer": "https://myapp.com", "X-Title": "MyApp"}'}
+						/>
+					</label>
+				{/if}
+
 				{#if !isOAuth && servicePurposes.length > 0}
 					<div class="space-y-2 rounded-xl border p-3 dark:border-gray-700" data-testid="provider-services">
 						<p class="text-xs font-medium">{$i18n.t('Services')}</p>
@@ -755,6 +807,31 @@
 									placeholder={$i18n.t('Model id')}
 								/>
 							{:else if purpose === 'chat'}
+								<div class="rounded-xl border p-2.5 bg-gray-50/60 dark:bg-gray-800/40 space-y-2 mb-2" data-testid="provider-manual-chat-box">
+									<p class="font-medium text-xs">{$i18n.t('Add custom model')}</p>
+									<div class="flex gap-2">
+										<input
+											class="flex-1 rounded-lg border bg-transparent p-1.5 text-xs dark:border-gray-700"
+											bind:value={manualChatModel}
+											data-testid="provider-manual-chat-model-input"
+											placeholder={$i18n.t('Model ID, e.g. gpt-4o')}
+										/>
+										<input
+											class="w-1/3 rounded-lg border bg-transparent p-1.5 text-xs dark:border-gray-700"
+											bind:value={manualChatName}
+											placeholder={$i18n.t('Name (optional)')}
+										/>
+										<button
+											type="button"
+											class="rounded-lg bg-black px-3 py-1.5 text-xs text-white disabled:opacity-50 dark:bg-white dark:text-black"
+											disabled={!manualChatModel.trim()}
+											data-testid="provider-manual-chat-model-add"
+											on:click={addManualChatModel}
+										>
+											{$i18n.t('Add')}
+										</button>
+									</div>
+								</div>
 								{#if candidates.length === 0}
 									<p class="rounded-lg border border-dashed p-3 text-xs">
 										{$i18n.t(

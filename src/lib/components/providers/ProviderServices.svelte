@@ -65,6 +65,7 @@
 	let editRegion = '';
 	let editWorkspaceId = '';
 	let editApiType = 'openai';
+	let editCustomHeaders = '';
 
 	$: selected = connections.find((item) => item.id === selectedConnectionId) ?? null;
 	$: isAdmin = mode === 'admin';
@@ -247,6 +248,7 @@
 			connection.config?.region ?? (connection.provider_id === 'bailian' ? 'cn-beijing' : '');
 		editWorkspaceId = connection.config?.workspace_id ?? '';
 		editApiType = connection.config?.api_type ?? 'openai';
+		editCustomHeaders = connection.config?.custom_headers ? JSON.stringify(connection.config.custom_headers, null, 2) : '';
 	};
 
 	/**
@@ -294,11 +296,22 @@
 		try {
 			const payload: Record<string, unknown> = { name: editName.trim() };
 			if (!isOAuthConnection(connection)) {
+				let parsedCustomHeaders: Record<string, string> | undefined = undefined;
+				if (editCustomHeaders.trim()) {
+					try {
+						parsedCustomHeaders = JSON.parse(editCustomHeaders.trim());
+					} catch {
+						toast.error($i18n.t('Invalid JSON format for custom headers'));
+						workingId = '';
+						return;
+					}
+				}
 				const nextConfig = {
 					...(editBaseUrl.trim() ? { base_url: editBaseUrl.trim() } : {}),
 					...(editRegion.trim() ? { region: editRegion.trim() } : {}),
 					...(editWorkspaceId.trim() ? { workspace_id: editWorkspaceId.trim() } : {}),
 					...(connection.provider_id === 'custom' ? { api_type: editApiType } : {}),
+					...(parsedCustomHeaders ? { custom_headers: parsedCustomHeaders } : {}),
 					model_ids: connection.config?.model_ids ?? []
 				};
 				const oldConfig = connection.config ?? {};
@@ -306,7 +319,8 @@
 					(editBaseUrl.trim() || undefined) !== (oldConfig.base_url || undefined) ||
 					(editRegion.trim() || undefined) !== (oldConfig.region || undefined) ||
 					(editWorkspaceId.trim() || undefined) !== (oldConfig.workspace_id || undefined) ||
-					(connection.provider_id === 'custom' && editApiType !== (oldConfig.api_type ?? 'openai'));
+					(connection.provider_id === 'custom' && editApiType !== (oldConfig.api_type ?? 'openai')) ||
+					JSON.stringify(parsedCustomHeaders) !== JSON.stringify(oldConfig.custom_headers);
 				if (editApiKey.trim()) payload.api_key = editApiKey.trim();
 				if (configChanged || editApiKey.trim()) payload.config = nextConfig;
 			}
@@ -640,6 +654,19 @@
 									</label>
 								{/if}
 							{/if}
+							{#if !isOAuthConnection(selected)}
+								<label class="block text-xs text-gray-600 dark:text-gray-300">
+									{$i18n.t('Custom headers (optional JSON)')}
+									<textarea
+										class="mt-1 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-2 font-mono text-xs dark:border-gray-700"
+										rows="2"
+										bind:value={editCustomHeaders}
+										placeholder={'{"HTTP-Referer": "https://myapp.com", "X-Title": "MyApp"}'}
+										data-testid="provider-edit-custom-headers"
+									/>
+								</label>
+							{/if}
+
 							{#if isAdmin && !isOAuthConnection(selected)}
 								<label class="block text-xs text-gray-600 dark:text-gray-300">
 									{$i18n.t('Visibility')}

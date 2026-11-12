@@ -4535,5 +4535,19 @@
 	"settings.admin.media.keyMissing": "No key stored yet",
 	"settings.admin.media.noModelsHint": "This connection has no {{purpose}} model yet. Add and enable one under the provider connection, then come back to assign.",
 	"settings.admin.media.selectConnection": "Select a provider connection first",
-	"settings.admin.media.selectModel": "Select a model first"
+	"settings.admin.media.selectModel": "Select a model first",
+	"Add custom model": "Add custom model",
+	"Add to model list": "Add to model list",
+	"Custom headers (optional JSON)": "Custom headers (optional JSON)",
+	"Display Name (optional)": "Display Name (optional)",
+	"Headers latency": "Headers latency",
+	"Invalid JSON format for custom headers": "Invalid JSON format for custom headers",
+	"Model ID, e.g. gpt-4o": "Model ID, e.g. gpt-4o",
+	"Model added to the list": "Model added to the list",
+	"Name (optional)": "Name (optional)",
+	"TTFT (First output)": "TTFT (First output)",
+	"Test message / Prompt": "Test message / Prompt",
+	"Token Usage": "Token Usage",
+	"Total Latency": "Total Latency",
+	"Upstream total": "Upstream total"
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	candidatePool,
+	formatVerificationSummary,
 	isAnyPurposeTested,
 	purposesOf,
 	purposesOfCandidate,
@@ -39,6 +40,44 @@ describe('provider model helpers', () => {
 		expect(verificationLabel(undefined, 'chat')).toBe('untested');
 		expect(isAnyPurposeTested({ chat: { status: 'passed' } })).toBe(true);
 		expect(isAnyPurposeTested({ chat: { status: 'failed' } })).toBe(false);
+	});
+
+	it('formats verification summary with latency and TTFT', () => {
+		expect(formatVerificationSummary(undefined, 'chat')).toEqual({
+			status: 'untested',
+			label: 'untested'
+		});
+		expect(formatVerificationSummary({ chat: { status: 'failed' } }, 'chat')).toEqual({
+			status: 'failed',
+			label: 'failed'
+		});
+		expect(
+			formatVerificationSummary({ chat: { status: 'passed', elapsed_ms: 120 } }, 'chat')
+		).toEqual({
+			status: 'passed',
+			label: '120ms',
+			latency: 120,
+			ttft: undefined,
+			usage: undefined
+		});
+		expect(
+			formatVerificationSummary(
+				{
+					chat: {
+						status: 'passed',
+						elapsed_ms: 250,
+						timings: { first_output_ms: 80, upstream_total_ms: 250 }
+					}
+				},
+				'chat'
+			)
+		).toEqual({
+			status: 'passed',
+			label: 'TTFT 80ms · 250ms',
+			latency: 250,
+			ttft: 80,
+			usage: undefined
+		});
 	});
 
 	it('only offers the media purposes on the OpenAI compatible protocols', () => {
