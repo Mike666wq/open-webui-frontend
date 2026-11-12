@@ -69,16 +69,24 @@
 
 	$: selected = connections.find((item) => item.id === selectedConnectionId) ?? null;
 	$: isAdmin = mode === 'admin';
-	$: canManageConnection = (connection: any) =>
-		connection.visibility === 'shared'
+	function canManageConnection(connection: any) {
+		if (!connection) return false;
+		return connection.visibility === 'shared'
 			? $user?.role === 'admin'
 			: connection.owner_id === $user?.id;
-	$: isOAuthConnection = (connection: any) =>
-		['chatgpt', 'kimi'].includes(connection.provider_id) && connection.auth_type === 'oauth';
-	$: templateFor = (connection: any) =>
-		templates.find(
+	}
+
+	function isOAuthConnection(connection: any) {
+		if (!connection) return false;
+		return ['chatgpt', 'kimi'].includes(connection.provider_id) && connection.auth_type === 'oauth';
+	}
+
+	function templateFor(connection: any) {
+		if (!connection) return undefined;
+		return templates.find(
 			(item) => item.id === (connection?.provider_template ?? connection?.provider_id)
 		);
+	}
 	$: selectedError = selected?.catalog?.error ?? null;
 	$: selectedAction = selectedError
 		? providerErrorAction(selectedError, { authType: selected?.auth_type })
@@ -618,6 +626,16 @@
 										bind:value={editBaseUrl}
 									/>
 								</label>
+								<label class="block text-xs text-gray-600 dark:text-gray-300">
+									{$i18n.t('Custom headers (optional JSON)')}
+									<textarea
+										class="mt-1 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-2 font-mono text-xs dark:border-gray-700"
+										rows="2"
+										bind:value={editCustomHeaders}
+										placeholder={'{"HTTP-Referer": "https://myapp.com", "X-Title": "MyApp"}'}
+										data-testid="provider-edit-custom-headers"
+									/>
+								</label>
 								{#if selected.provider_id === 'bailian'}
 									<div class="grid gap-2 sm:grid-cols-2">
 										<label class="block text-xs text-gray-600 dark:text-gray-300">
@@ -656,19 +674,6 @@
 									</label>
 								{/if}
 							{/if}
-							{#if !isOAuthConnection(selected)}
-								<label class="block text-xs text-gray-600 dark:text-gray-300">
-									{$i18n.t('Custom headers (optional JSON)')}
-									<textarea
-										class="mt-1 w-full rounded-lg border border-gray-200 bg-transparent px-3 py-2 font-mono text-xs dark:border-gray-700"
-										rows="2"
-										bind:value={editCustomHeaders}
-										placeholder={'{"HTTP-Referer": "https://myapp.com", "X-Title": "MyApp"}'}
-										data-testid="provider-edit-custom-headers"
-									/>
-								</label>
-							{/if}
-
 							{#if isAdmin && !isOAuthConnection(selected)}
 								<label class="block text-xs text-gray-600 dark:text-gray-300">
 									{$i18n.t('Visibility')}
