@@ -6,7 +6,8 @@
 
 	import { tick, getContext, onMount, onDestroy } from 'svelte';
 
-	import { folders } from '$lib/stores';
+	import { folders, user } from '$lib/stores';
+	import { describeApiError } from '$lib/utils/api-error';
 	import { getFolders } from '$lib/apis/folders';
 	import { searchKnowledgeBases, searchKnowledgeFiles } from '$lib/apis/knowledge';
 	import { removeLastWordFromString, isValidHttpUrl, isYoutubeUrl, decodeString } from '$lib/utils';
@@ -25,6 +26,13 @@
 
 	let selectedIdx = 0;
 	let items = [];
+	let error = '';
+	let accountKey = '';
+	let seenAccountKey = '';
+
+	function currentToken() {
+		return typeof localStorage !== 'undefined' ? (localStorage.token ?? '') : '';
+	}
 	let searchDebounceTimer: ReturnType<typeof setTimeout>;
 
 	export let filteredItems = [];
@@ -81,6 +89,7 @@
 	});
 
 	const getItems = () => {
+		error = '';
 		getKnowledgeItems();
 		getKnowledgeFileItems();
 	};
@@ -95,7 +104,8 @@
 		.filter((folder) => folder.name.toLowerCase().includes(query.toLowerCase()));
 
 	const getKnowledgeItems = async () => {
-		const res = await searchKnowledgeBases(localStorage.token, query).catch(() => {
+		const res = await searchKnowledgeBases(localStorage.token, query).catch((e) => {
+			error = describeApiError(e);
 			return null;
 		});
 
@@ -110,7 +120,8 @@
 	};
 
 	const getKnowledgeFileItems = async () => {
-		const res = await searchKnowledgeFiles(localStorage.token, query).catch(() => {
+		const res = await searchKnowledgeFiles(localStorage.token, query).catch((e) => {
+			error = describeApiError(e);
 			return null;
 		});
 
@@ -126,6 +137,16 @@
 		}
 	};
 
+	$: accountKey = `${$user?.id ?? ''}:${currentToken()}`;
+	$: if (accountKey !== seenAccountKey) {
+		seenAccountKey = accountKey;
+		error = '';
+		items = [];
+		knowledgeItems = [];
+		fileItems = [];
+		getItems();
+	}
+
 	onMount(async () => {
 		if ($folders === null) {
 			await folders.set(await getFolders(localStorage.token));
@@ -135,7 +156,13 @@
 	});
 </script>
 
-{#if filteredItems.length > 0 || query.startsWith('http')}
+{#if error || filteredItems.length > 0 || query.startsWith('http')}
+	{#if error}
+		<div role="alert" class="flex items-center justify-between gap-2 rounded-lg bg-red-500/10 px-2 py-1.5 text-xs">
+			<span class="break-words">{error}</span>
+			<button class="shrink-0 underline" type="button" on:click={getItems}>{$i18n.t('Retry')}</button>
+		</div>
+	{/if}
 	{#each filteredItems as item, idx}
 		{#if idx === 0 || item?.type !== items[idx - 1]?.type}
 			<div class="px-2 py-1 text-[0.6875rem] text-gray-500 dark:text-gray-400">

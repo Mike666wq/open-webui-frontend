@@ -725,10 +725,12 @@
 																);
 																init();
 															}}
-															onSaveToKnowledge={() => {
-																selectedNote = note;
-																showKnowledgeModal = true;
-															}}
+															onSaveToKnowledge={note?.write_access !== false
+																? () => {
+																	selectedNote = note;
+																	showKnowledgeModal = true;
+																}
+																: null}
 															onChange={(state) => {
 																openNoteMenuId = state ? note.id : null;
 															}}
@@ -819,10 +821,12 @@
 																);
 																init();
 															}}
-														onSaveToKnowledge={() => {
-															selectedNote = note;
-															showKnowledgeModal = true;
-														}}
+														onSaveToKnowledge={note?.write_access !== false
+															? () => {
+																selectedNote = note;
+																showKnowledgeModal = true;
+															}
+															: null}
 														>
 															<button
 																class="flex size-5 items-center justify-center rounded-lg text-gray-400 transition hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
