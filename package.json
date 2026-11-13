@@ -13,7 +13,7 @@
 		"test:mobile:browser": "node scripts/mobile-browser-smoke.mjs",
 		"ui:audit": "node scripts/ui-audit.mjs",
 		"preview": "vite preview",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check": "svelte-kit sync && node scripts/svelte-check-baseline.mjs",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "npm run lint:frontend ; npm run lint:types ; npm run lint:backend",
 		"lint:frontend": "eslint . --fix",
@@ -24,7 +24,9 @@
 		"i18n:parse": "i18next --config i18next-parser.config.ts && prettier --write \"src/lib/i18n/**/*.{js,json}\"",
 		"cy:open": "cypress open",
 		"test:frontend": "vitest --passWithNoTests --exclude 'apps/**'",
-		"pyodide:fetch": "node scripts/prepare-pyodide.js"
+		"pyodide:fetch": "node scripts/prepare-pyodide.js",
+		"check:strict": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:baseline": "svelte-kit sync && node scripts/svelte-check-baseline.mjs --write-baseline"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "3.2.2",
