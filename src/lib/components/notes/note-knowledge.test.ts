@@ -9,6 +9,12 @@ import {
 	snapshotState,
 	upsertSnapshot
 } from './note-knowledge';
+import {
+	buildNoteFromChatPayload,
+	canonicalNoteTitle,
+	selectWritableKnowledgeBases,
+	snapshotViewState
+} from './note-knowledge';
 
 const FP = (title: string, content: string) => sha256(JSON.stringify([title, content]));
 
@@ -116,5 +122,49 @@ describe('snapshotIds', () => {
 	it('lists mapping keys and tolerates missing meta', () => {
 		expect(snapshotIds(null)).toEqual([]);
 		expect(snapshotIds({ note_knowledge: { a: {}, b: {} } })).toEqual(['a', 'b']);
+	});
+});
+
+
+describe('canonicalNoteTitle', () => {
+	it('uses a literal fallback and preserves non-empty titles', () => {
+		expect(canonicalNoteTitle('')).toBe('Untitled');
+		expect(canonicalNoteTitle('   ')).toBe('Untitled');
+		expect(canonicalNoteTitle(' C ')).toBe(' C ');
+		expect(noteSnapshotFingerprint('', 'C')).toBe(FP('Untitled', 'C'));
+	});
+});
+
+describe('selectWritableKnowledgeBases', () => {
+	it('accepts paged envelopes, filters explicit permissions and external sources, and dedupes', () => {
+		const bases = selectWritableKnowledgeBases({
+			items: [
+				{ id: 'a', name: 'A', write_access: true },
+				{ id: 'a', name: 'A duplicate', write_access: true },
+				{ id: 'b', name: 'B', write_access: false },
+				{ id: 'c', name: 'C', write_access: true, meta: { source: 'external' } },
+				{ id: 'd', name: 'D', write_access: true, external: true }
+			],
+			total: 5
+		});
+		expect(bases.map((b) => b.id)).toEqual(['a']);
+	});
+});
+
+describe('snapshotViewState', () => {
+	it('trusts server state and index state over local fingerprint guesses', () => {
+		expect(snapshotViewState({ state: 'indexing', fingerprint: 'x' }, 'y')).toBe('indexing');
+		expect(snapshotViewState({ state: 'synced', index_state: 'failed' }, 'x')).toBe('failed');
+		expect(snapshotViewState({ can_write: false }, 'x')).toBe('no-permission');
+		expect(snapshotViewState({ file_id: 'f', fingerprint: 'x' }, 'x')).toBe('synced');
+	});
+});
+
+describe('buildNoteFromChatPayload', () => {
+	it('omits blank optional fields', () => {
+		expect(buildNoteFromChatPayload('c1', 'm1')).toEqual({ chat_id: 'c1', message_id: 'm1' });
+		expect(buildNoteFromChatPayload('c1', 'm1', { title: ' T ', knowledgeId: ' kb ' })).toEqual({
+			chat_id: 'c1', message_id: 'm1', title: 'T', knowledge_id: 'kb'
+		});
 	});
 });

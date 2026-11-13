@@ -6,92 +6,56 @@ import { dirname, join } from 'path';
 const dir = dirname(fileURLToPath(import.meta.url));
 const read = (p: string) => readFileSync(join(dir, p), 'utf8');
 
-// P-004 step 3 (K1-K4): notes -> knowledge base closed loop.
-// Component rendering is not feasible without jsdom, so these are static
-// source assertions paired with the pure-function tests in note-knowledge.test.ts.
-describe('P-004 step 3: notes knowledge wiring', () => {
-	it('NoteMenu exposes a save-to-knowledge entry gated by the prop', () => {
-		const src = read('Notes/NoteMenu.svelte');
-
-		expect(src).toContain('onSaveToKnowledge');
-		expect(src).toMatch(/{#if onSaveToKnowledge}/);
-		expect(src).toContain("$i18n.t('Save to knowledge base')");
-		// Menu item is inside a conditional block so consumers without the prop
-		// are unaffected.
-		const itemIdx = src.indexOf("{#if onSaveToKnowledge}");
-		const endIdx = src.indexOf('{/if}', itemIdx);
-		expect(endIdx).toBeGreaterThan(itemIdx);
+describe('workspace loop: notes knowledge wiring', () => {
+	it('NoteKnowledgeModal uses readiness/sync/remove APIs and shared error formatting', () => {
+		const src = read('Notes/NoteKnowledgeModal.svelte');
+		for (const needle of [
+			'getNoteKnowledgeReadiness', 'getWorkspaceLoopReadiness', 'syncNoteKnowledge',
+			'removeNoteKnowledgeSnapshot', 'describeApiError', 'selectWritableKnowledgeBases',
+			'snapshotViewState', 'role="alert"', "$i18n.t('Retry')",
+			"$i18n.t('Knowledge loop not ready')", 'create-knowledge-base-link', 'save-to-knowledge-confirm'
+		]) expect(src, `missing ${needle}`).toContain(needle);
+		for (const oldApi of [
+			'uploadFile', 'renameFileById', 'updateFileDataContentById', 'addFileToKnowledgeById',
+			'updateFileFromKnowledgeById', 'updateNoteById'
+		]) expect(src, `old API still used: ${oldApi}`).not.toContain(oldApi);
+		expect(src).not.toContain("k.type !== 'external'");
 	});
 
-	it('Notes list page wires the modal for list and grid menus', () => {
+	it('Notes list/grid gates save-to-knowledge by write_access', () => {
 		const src = read('Notes.svelte');
-
-		expect(src).toContain("import NoteKnowledgeModal from './Notes/NoteKnowledgeModal.svelte'");
-		// Both menu usages pass the handler.
-		expect(src.match(/onSaveToKnowledge=\{\(\) => \{/g)?.length).toBe(2);
-		expect(src).toContain('showKnowledgeModal = true');
-		// Modal is mounted once.
+		expect(src.match(/note\?\.write_access !== false/g)?.length).toBe(2);
 		expect(src.match(/<NoteKnowledgeModal/g)?.length).toBe(1);
-		expect(src).toContain('note={selectedNote}');
 	});
 
-	it('NoteEditor adds toolbar entry, menu entry, modal and snapshot chips', () => {
+	it('NoteEditor canonicalizes titles and flushes pending note saves', () => {
 		const src = read('NoteEditor.svelte');
-
-		expect(src).toContain("import NoteKnowledgeModal from './Notes/NoteKnowledgeModal.svelte'");
-		expect(src).toContain("import { snapshotIds, snapshotState } from './note-knowledge'");
-		expect(src).toContain("import { getKnowledgeBases } from '$lib/apis/knowledge'");
-
-		// Toolbar button and menu entry are write-gated.
-		expect(src.match(/{#if note\?\.write_access}\s*\n\s*<Tooltip content=\{\$i18n\.t\('Save to knowledge base'\)\}/)?.length).toBe(1);
-		expect(src).toContain(
-			'onSaveToKnowledge={note?.write_access ? () => (showKnowledgeModal = true) : null}'
-		);
-
-		// Chips row renders from server-backed meta only.
-		expect(src).toContain('data-testid="knowledge-snapshot-chips"');
-		expect(src).toContain('knowledgeSnapshotEntries');
-		expect(src).toContain("snapshotState(\n\t\t\t\t\tnote.meta,");
-		// Chips fall back to the unavailable text when the base is gone.
-		expect(src.match(/This knowledge base is unavailable or deleted/g)?.length).toBe(2);
-
-		// Modal mounted; only meta is synced back to the live note object.
-		expect(src.match(/<NoteKnowledgeModal/g)?.length).toBe(1);
-		expect(src).toContain('note.meta = updated.meta');
+		expect(src).toContain('canonicalNoteTitle');
+		expect(src).toContain('openKnowledgeModal');
+		expect(src).toContain("$i18n.t('Saving note before snapshot')");
+		expect(src).toContain('describeApiError');
+		expect(src).toContain('note?.write_access ? openKnowledgeModal : null');
 	});
 
-	it('i18n keys exist in zh-CN and en-US with parity', () => {
+	it('API wrappers expose all workspace-loop endpoints', () => {
+		const src = read('../../apis/notes/index.ts');
+		for (const needle of ['/loop/readiness', '/knowledge/readiness', '/knowledge/', '/sync', '/snapshot', '/from-chat'])
+			expect(src, `missing API path ${needle}`).toContain(needle);
+	});
+
+	it('i18n keys exist in zh-CN and en-US with non-empty values', () => {
 		const zh = JSON.parse(read('../../i18n/locales/zh-CN/translation.json'));
 		const en = JSON.parse(read('../../i18n/locales/en-US/translation.json'));
-
 		const keys = [
-			'Save to knowledge base',
-			'Saved to knowledge',
-			'Select knowledge base',
-			'Snapshot up to date',
-			'Snapshot has changes',
-			'This knowledge base is unavailable or deleted',
-			'Force update',
-			'Failed to save to knowledge base'
+			'No writable knowledge bases', 'Create a knowledge base', 'Retry', 'Remove snapshot',
+			'Remove from knowledge base', 'Indexing…', 'Indexing failed', 'No permission to save to knowledge',
+			'Saving note before snapshot', 'Snapshot linked; indexing in progress', 'Conversation saved to note',
+			'Conversation saved to knowledge base', 'Knowledge loop not ready', 'Knowledge bases failed to load',
+			'Notes failed to load', 'Save as note', 'Save to knowledge', 'Session changed, please retry.'
 		];
-
 		for (const key of keys) {
-			expect(zh[key], `zh-CN missing "${key}"`).toBeTruthy();
-			expect(en, `en-US missing "${key}"`).toHaveProperty(key);
-		}
-
-		// Reused keys must already exist upstream.
-		for (const key of [
-			'Save',
-			'Saving...',
-			'Update',
-			'Remove',
-			'Untitled',
-			'Knowledge snapshot updated',
-			'Saved {{document}} to {{knowledge}}'
-		]) {
-			expect(zh[key], `zh-CN missing reused key "${key}"`).toBeTruthy();
-			expect(en[key] ?? '').toBeDefined();
+			expect(String(zh[key] ?? ''), `zh-CN missing ${key}`).not.toBe('');
+			expect(String(en[key] ?? ''), `en-US missing ${key}`).not.toBe('');
 		}
 	});
 });

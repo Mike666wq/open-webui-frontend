@@ -442,6 +442,252 @@ export const getPinnedNoteList = async (token: string = '') => {
 	return res ?? [];
 };
 
+/**
+ * The workspace loop is coordinated by the server: the frontend only reads the
+ * readiness it publishes and asks the server to perform the write.
+ *
+ * Every wrapper below follows the convention used by the rest of this file —
+ * `err.detail` is rethrown verbatim (the structured detail the backend sends
+ * is what `describeApiError` turns into a readable sentence) and nothing is
+ * swallowed.
+ */
+
+export type KnowledgeBaseSummary = {
+	id: string;
+	name?: string | null;
+	write_access?: boolean | null;
+	external?: boolean | null;
+	meta?: Record<string, any> | null;
+};
+
+export type WorkspaceLoopReadiness = {
+	ready: boolean;
+	reason_code: string | null;
+	user?: Record<string, any> | null;
+	embedding?: Record<string, any> | null;
+	knowledge_bases?: KnowledgeBaseSummary[] | null;
+	features?: Record<string, any> | null;
+};
+
+export type NoteKnowledgeSnapshotEntry = {
+	knowledge_id: string;
+	name?: string | null;
+	file_id?: string | null;
+	fingerprint?: string | null;
+	updated_at?: number | null;
+	state?: string | null;
+	index_state?: string | null;
+	index_error?: string | null;
+	can_write?: boolean | null;
+	exists?: boolean | null;
+	external?: boolean | null;
+};
+
+export type NoteKnowledgeReadiness = {
+	ready: boolean;
+	reason_code: string | null;
+	note?: { id: string; title?: string | null; write_access?: boolean | null } | null;
+	current_fingerprint?: string | null;
+	embedding?: Record<string, any> | null;
+	knowledge_bases?: KnowledgeBaseSummary[] | null;
+	snapshots?: NoteKnowledgeSnapshotEntry[] | null;
+};
+
+export type NoteKnowledgeSyncResult = {
+	ok: boolean;
+	action?: 'noop' | 'created' | 'updated' | 'repaired' | string;
+	state?: 'synced' | 'indexing' | 'failed' | string;
+	note_id?: string;
+	knowledge_id?: string;
+	file_id?: string | null;
+	fingerprint?: string | null;
+	updated_at?: number | null;
+	index_state?: string | null;
+	index_error?: string | null;
+	cleanup_status?: string | null;
+	message?: string | null;
+};
+
+export type NoteKnowledgeSnapshotRemoval = {
+	ok: boolean;
+	removed_mapping?: boolean;
+	removed_file?: boolean;
+	file_id?: string | null;
+};
+
+export type CreateNoteFromChatPayload = {
+	chat_id: string;
+	message_id: string;
+	title?: string;
+	knowledge_id?: string;
+};
+
+export const getWorkspaceLoopReadiness = async (token: string = '') => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/notes/loop/readiness`, {
+		method: 'GET',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			authorization: `Bearer ${token}`
+		}
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err?.detail ?? err;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res as WorkspaceLoopReadiness;
+};
+
+export const getNoteKnowledgeReadiness = async (token: string = '', noteId: string) => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/notes/${noteId}/knowledge/readiness`, {
+		method: 'GET',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			authorization: `Bearer ${token}`
+		}
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err?.detail ?? err;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res as NoteKnowledgeReadiness;
+};
+
+export const syncNoteKnowledge = async (
+	token: string = '',
+	noteId: string,
+	knowledgeId: string,
+	force: boolean = false
+) => {
+	let error = null;
+
+	const res = await fetch(
+		`${WEBUI_API_BASE_URL}/notes/${noteId}/knowledge/${knowledgeId}/sync`,
+		{
+			method: 'POST',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				authorization: `Bearer ${token}`
+			},
+			body: JSON.stringify({ force })
+		}
+	)
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err?.detail ?? err;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res as NoteKnowledgeSyncResult;
+};
+
+export const removeNoteKnowledgeSnapshot = async (
+	token: string = '',
+	noteId: string,
+	knowledgeId: string,
+	removeFile: boolean = false
+) => {
+	let error = null;
+
+	const res = await fetch(
+		`${WEBUI_API_BASE_URL}/notes/${noteId}/knowledge/${knowledgeId}/snapshot?remove_file=${removeFile}`,
+		{
+			method: 'DELETE',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				authorization: `Bearer ${token}`
+			}
+		}
+	)
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err?.detail ?? err;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res as NoteKnowledgeSnapshotRemoval;
+};
+
+export const createNoteFromChat = async (
+	token: string = '',
+	payload: CreateNoteFromChatPayload
+) => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/notes/from-chat`, {
+		method: 'POST',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			authorization: `Bearer ${token}`
+		},
+		body: JSON.stringify({
+			chat_id: payload?.chat_id,
+			message_id: payload?.message_id,
+			...(payload?.title ? { title: payload.title } : {}),
+			...(payload?.knowledge_id ? { knowledge_id: payload.knowledge_id } : {})
+		})
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err?.detail ?? err;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
 export const toggleNotePinnedStatusById = async (token: string, id: string) => {
 	let error = null;
 

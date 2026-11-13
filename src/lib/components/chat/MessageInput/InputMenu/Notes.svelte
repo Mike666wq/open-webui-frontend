@@ -3,6 +3,8 @@
 	import { onDestroy, onMount, tick, getContext } from 'svelte';
 
 	import { decodeString } from '$lib/utils';
+	import { describeApiError } from '$lib/utils/api-error';
+	import { user } from '$lib/stores';
 	import { getNoteList, searchNotes } from '$lib/apis/notes';
 
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
@@ -12,6 +14,14 @@
 	import SearchInput from './SearchInput.svelte';
 
 	const i18n = getContext<typeof import('$lib/i18n').default>('i18n');
+
+	function currentToken() {
+		return typeof localStorage !== 'undefined' ? (localStorage.token ?? '') : '';
+	}
+
+	let error = '';
+	let accountKey = '';
+	let seenAccountKey = '';
 
 	export let onSelect = (e) => {};
 
@@ -42,6 +52,7 @@
 
 	const init = async () => {
 		requestId += 1;
+		error = '';
 		searchedQuery = query;
 		page = 1;
 		items = [];
@@ -62,9 +73,13 @@
 		itemsLoading = true;
 		const res = query.trim()
 			? await searchNotes(localStorage.token, query.trim(), null, 'read', null, page).catch(
-					() => null
+					(e) => {
+						error = describeApiError(e);
+						return null;
+					}
 				)
-			: await getNoteList(localStorage.token, page).catch(() => {
+			: await getNoteList(localStorage.token, page).catch((e) => {
+					error = describeApiError(e);
 					return [];
 				});
 		if (activeRequestId !== requestId) return res;
@@ -93,6 +108,14 @@
 		return res;
 	};
 
+	$: accountKey = `${$user?.id ?? ''}:${currentToken()}`;
+	$: if (accountKey !== seenAccountKey) {
+		seenAccountKey = accountKey;
+		error = '';
+		items = [];
+		if (initialized) init();
+	}
+
 	onMount(async () => {
 		await getItemsPage();
 		await tick();
@@ -109,6 +132,13 @@
 {#if loaded}
 	<div class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
 		<SearchInput bind:value={query} placeholder={$i18n.t('Search Notes')} />
+
+		{#if error}
+			<div role="alert" class="mx-1 flex items-center justify-between gap-2 rounded-lg bg-red-500/10 p-2 text-xs">
+				<span class="break-words">{error}</span>
+				<button class="shrink-0 underline" type="button" on:click={init}>{$i18n.t('Retry')}</button>
+			</div>
+		{/if}
 
 		<div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin">
 			{#if items.length === 0 && itemsLoading}

@@ -2,6 +2,8 @@
 	import { onDestroy, onMount, tick, getContext } from 'svelte';
 
 	import { decodeString } from '$lib/utils';
+	import { describeApiError } from '$lib/utils/api-error';
+	import { user } from '$lib/stores';
 	import { searchKnowledgeBases, searchKnowledgeFilesById } from '$lib/apis/knowledge';
 
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
@@ -14,6 +16,14 @@
 	import SearchInput from './SearchInput.svelte';
 
 	const i18n = getContext('i18n');
+
+	function currentToken() {
+		return typeof localStorage !== 'undefined' ? (localStorage.token ?? '') : '';
+	}
+
+	let error = '';
+	let accountKey = '';
+	let seenAccountKey = '';
 
 	export let onSelect = (e) => {};
 
@@ -65,7 +75,8 @@
 			null,
 			null,
 			selectedFileItemsPage
-		).catch(() => {
+		).catch((e) => {
+			error = describeApiError(e);
 			return null;
 		});
 		if (activeRequestId !== selectedFileRequestId) return res;
@@ -117,6 +128,7 @@
 
 	const init = async () => {
 		requestId += 1;
+		error = '';
 		searchedQuery = query;
 		reset();
 		selectedItem = null;
@@ -145,7 +157,8 @@
 			query.trim() || null,
 			null,
 			page
-		).catch(() => {
+		).catch((e) => {
+			error = describeApiError(e);
 			return null;
 		});
 		if (activeRequestId !== requestId) return res;
@@ -172,6 +185,15 @@
 		return res;
 	};
 
+	$: accountKey = `${$user?.id ?? ''}:${currentToken()}`;
+	$: if (accountKey !== seenAccountKey) {
+		seenAccountKey = accountKey;
+		error = '';
+		items = [];
+		selectedItem = null;
+		if (initialized) init();
+	}
+
 	onMount(async () => {
 		await init();
 		await tick();
@@ -187,6 +209,13 @@
 {#if loaded}
 	<div class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
 		<SearchInput bind:value={query} placeholder={$i18n.t('Search Knowledge')} />
+
+		{#if error}
+			<div role="alert" class="mx-1 flex items-center justify-between gap-2 rounded-lg bg-red-500/10 p-2 text-xs">
+				<span class="break-words">{error}</span>
+				<button class="shrink-0 underline" type="button" on:click={init}>{$i18n.t('Retry')}</button>
+			</div>
+		{/if}
 
 		<div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin">
 			{#if items.length === 0 && itemsLoading}

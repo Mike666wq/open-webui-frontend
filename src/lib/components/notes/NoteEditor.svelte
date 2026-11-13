@@ -83,7 +83,12 @@
 	import RecordMenu from './RecordMenu.svelte';
 	import NoteMenu from './Notes/NoteMenu.svelte';
 	import NoteKnowledgeModal from './Notes/NoteKnowledgeModal.svelte';
-	import { snapshotIds, snapshotState } from './note-knowledge';
+	import {
+		canonicalNoteTitle,
+		noteSnapshotFingerprint,
+		snapshotIds,
+		snapshotViewState
+	} from './note-knowledge';
 	import EllipsisHorizontal from '../icons/EllipsisHorizontal.svelte';
 	import Sparkles from '../icons/Sparkles.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
@@ -166,6 +171,9 @@
 	let showKnowledgeModal = false;
 	let knowledgeNames = {};
 	let knowledgeNamesLoaded = false;
+	// True while a note save is in flight: the snapshot must not be taken from
+	// a note whose content the server has not seen yet.
+	let savingNote = false;
 
 	// K4: persisted knowledge snapshots stay visible when the note is reopened.
 	const loadKnowledgeNames = async () => {
@@ -186,21 +194,63 @@
 		}
 	};
 
+	// The fingerprint the server compares against. The canonical title rule is
+	// the same on both sides, so a local fallback never disagrees with the
+	// backend about whether a snapshot is current.
+	$: currentFingerprint = note
+		? noteSnapshotFingerprint(canonicalNoteTitle(note.title ?? ''), note.data?.content?.md ?? '')
+		: '';
+
 	$: knowledgeSnapshotEntries = note
-		? snapshotIds(note.meta).map((kbId) => ({
-				id: kbId,
-				name: knowledgeNames[kbId] ?? null,
-				state: snapshotState(
-					note.meta,
-					kbId,
-					note.title ?? '',
-					note.data?.content?.md ?? ''
-				)
-			}))
+		? snapshotIds(note.meta).map((kbId) => {
+				const mapping = note.meta?.note_knowledge?.[kbId];
+				return {
+					id: kbId,
+					name: knowledgeNames[kbId] ?? null,
+					// The server owns the state; the fingerprint is only the
+					// fallback for mappings written before the loop existed.
+					state: snapshotViewState(mapping, currentFingerprint),
+					indexError: mapping?.index_error ?? null
+				};
+			})
 		: [];
 	$: if (knowledgeSnapshotEntries.length > 0) {
 		loadKnowledgeNames();
 	}
+
+	const knowledgeStateLabel = (state: string) => {
+		switch (state) {
+			case 'synced':
+				return $i18n.t('Snapshot up to date');
+			case 'changed':
+				return $i18n.t('Snapshot has changes');
+			case 'indexing':
+				return $i18n.t('Indexing…');
+			case 'failed':
+				return $i18n.t('Indexing failed');
+			case 'no-permission':
+				return $i18n.t('No permission to save to knowledge');
+			case 'unavailable':
+				return $i18n.t('This knowledge base is unavailable or deleted');
+			default:
+				return $i18n.t('Save to knowledge');
+		}
+	};
+
+	const knowledgeStateColor = (state: string) => {
+		switch (state) {
+			case 'synced':
+				return 'bg-green-500';
+			case 'failed':
+			case 'no-permission':
+			case 'unavailable':
+				return 'bg-red-500';
+			case 'indexing':
+				return 'bg-blue-500';
+			default:
+				return 'bg-amber-500';
+		}
+	};
 	let titleGenerating = false;
 
 	let dragged = false;
@@ -247,18 +297,44 @@
 	let debounceTimeout: NodeJS.Timeout | null = null;
 
 	const saveHandler = async () => {
-		const res = await updateNoteById(localStorage.token, id, {
-			title: note?.title === '' ? $i18n.t('Untitled') : note.title,
-			data: {
-				files: files
-			}
-		}).catch((e) => {
-			toast.error(`${e}`);
-		});
+		savingNote = true;
 
-		if (res) {
-			pinnedNotes.set(await getPinnedNoteList(localStorage.token).catch(() => []));
+		try {
+			// The title is stored canonically: a localized "Untitled" would
+			// change the fingerprint every time the interface language changed.
+			const res = await updateNoteById(localStorage.token, id, {
+				title: canonicalNoteTitle(note?.title),
+				data: {
+					files: files
+				}
+			}).catch((e) => {
+				toast.error(describeApiError(e));
+				return null;
+			});
+
+			if (res) {
+				pinnedNotes.set(await getPinnedNoteList(localStorage.token).catch(() => []));
+			}
+
+			return res;
+		} finally {
+			savingNote = false;
 		}
+	};
+
+	// The snapshot has to describe the note the server holds, so a pending
+	// debounced save is flushed before the knowledge modal opens.
+	const openKnowledgeModal = async () => {
+		if (savingNote) return;
+
+		if (debounceTimeout) {
+			clearTimeout(debounceTimeout);
+			debounceTimeout = null;
+			toast.info($i18n.t('Saving note before snapshot'));
+			await saveHandler();
+		}
+
+		showKnowledgeModal = true;
 	};
 
 	const changeDebounceHandler = () => {
@@ -573,7 +649,7 @@ ${content}
 
 				fileItem.status = 'uploaded';
 				fileItem.file = await getFileById(localStorage.token, uploadedFile.id).catch((e) => {
-					toast.error(`${e}`);
+					toast.error(describeApiError(e));
 					return null;
 				});
 				fileItem.id = uploadedFile.id;
@@ -587,7 +663,7 @@ ${content}
 				files = files.filter((item) => item?.itemId !== tempItemId);
 			}
 		} catch (e) {
-			toast.error(`${e}`);
+			toast.error(describeApiError(e));
 			files = files.filter((item) => item?.itemId !== tempItemId);
 		}
 
@@ -1068,6 +1144,9 @@ ${content}
 			if (updated?.meta) {
 				note.meta = updated.meta;
 			}
+			// A mapping may have been added or removed: the base names behind
+			// the chips have to be read again.
+			knowledgeNamesLoaded = false;
 		}}
 	/>
 {/if}
@@ -1254,9 +1333,12 @@ ${content}
 									<Tooltip content={$i18n.t('Save to knowledge base')} placement="top">
 										<button
 											type="button"
-											class="p-1 bg-transparent hover:bg-white/5 transition rounded-lg"
-											aria-label={$i18n.t('Save to knowledge base')}
-											on:click={() => (showKnowledgeModal = true)}
+											class="p-1 bg-transparent hover:bg-white/5 transition rounded-lg disabled:cursor-not-allowed disabled:opacity-50"
+											aria-label={savingNote
+												? $i18n.t('Saving note before snapshot')
+												: $i18n.t('Save to knowledge base')}
+											disabled={savingNote}
+											on:click={openKnowledgeModal}
 										>
 											<CloudArrowUp className="size-4" strokeWidth="1.8" />
 										</button>
@@ -1322,7 +1404,7 @@ ${content}
 								<NoteMenu
 									bind:autoFormat
 									showAutoFormat={note?.write_access ?? false}
-									onSaveToKnowledge={note?.write_access ? () => (showKnowledgeModal = true) : null}
+									onSaveToKnowledge={note?.write_access ? openKnowledgeModal : null}
 									onUploadFiles={note?.write_access ? uploadNoteFilesHandler : null}
 									onDownload={(type) => {
 										downloadHandler(type);

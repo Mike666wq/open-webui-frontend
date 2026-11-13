@@ -4553,5 +4553,21 @@
 	"Test message / Prompt": "测试消息 / 提示词",
 	"Token Usage": "Token 用量",
 	"Total Latency": "总延迟",
-	"Upstream total": "上游耗时"
+	"Upstream total": "上游耗时",
+	"No writable knowledge bases": "暂无可写入的知识库",
+	"Remove snapshot": "移除快照",
+	"Remove from knowledge base": "从知识库移除",
+	"Indexing…": "索引中…",
+	"Indexing failed": "索引失败",
+	"No permission to save to knowledge": "没有保存到知识库的权限",
+	"Saving note before snapshot": "正在保存笔记，然后创建快照",
+	"Snapshot linked; indexing in progress": "快照已关联，正在建立索引",
+	"Conversation saved to note": "对话已保存为笔记",
+	"Conversation saved to knowledge base": "对话已保存到知识库",
+	"Knowledge loop not ready": "知识库写入通道未就绪",
+	"Knowledge bases failed to load": "知识库加载失败",
+	"Notes failed to load": "笔记加载失败",
+	"Save as note": "保存为笔记",
+	"Save to knowledge": "保存到知识库",
+	"Session changed, please retry.": "登录状态已变化，请重试。"
 }
