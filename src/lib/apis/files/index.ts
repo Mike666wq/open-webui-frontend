@@ -497,6 +497,25 @@ export const getFileBlobById = async (
 	return response.blob();
 };
 
+export const getFilePreviewBlobById = async (
+	token: string,
+	id: string,
+	{ signal }: { signal?: AbortSignal } = {}
+): Promise<Blob> => {
+	const response = await fetch(`${WEBUI_API_BASE_URL}/files/${encodeURIComponent(id)}/preview`, {
+		headers: { authorization: `Bearer ${token}` },
+		signal
+	});
+	if (!response.ok) {
+		const error = await response.json().catch(() => null);
+		throw new FileContentError(
+			error?.detail || `Unable to load file preview (${response.status})`,
+			response.status
+		);
+	}
+	return response.blob();
+};
+
 export const getFileIndexedText = async (
 	token: string,
 	id: string,
