@@ -13,6 +13,7 @@
 		FileContentError,
 		getFileBlobById,
 		getFileIndexedText,
+		getFilePreviewBlobById,
 		updateFileDataContentById
 	} from '$lib/apis/files';
 	import FilePreview from '$lib/components/chat/FileNav/FilePreview.svelte';
@@ -153,6 +154,18 @@
 			} else if (ext === 'pptx' || mime.includes('presentationml')) {
 				const { pptxToImages } = await import('$lib/utils/pptxToHtml');
 				const result = await pptxToImages(await blob.arrayBuffer());
+				data = { fileOfficeSlides: result.images };
+			} else if (ext === 'ppt' || mime === 'application/vnd.ms-powerpoint') {
+				// LibreOffice converts legacy PPT server-side; the browser then uses
+				// the same slide renderer as native PPTX.
+				const { pptxToImages } = await import('$lib/utils/pptxToHtml');
+				const previewBlob = await getFilePreviewBlobById(localStorage.token, file.id!, {
+					signal
+				});
+				if (signal.aborted || key !== request) return;
+				const result = await pptxToImages(await previewBlob.arrayBuffer());
+				previewName = name.replace(/\.ppt$/i, '.pptx');
+				if (previewName === name) previewName = `${name}.pptx`;
 				data = { fileOfficeSlides: result.images };
 			} else if (
 				mime.startsWith('text/') ||
