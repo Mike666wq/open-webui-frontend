@@ -249,7 +249,8 @@ export const convertMessagesToHistory = (messages) => {
 // completion fields (content/done/error), missing id/role/parentId.
 // Reconstruct graph fields so already-corrupted chats recover on open.
 export const sanitizeHistory = (history) => {
-	if (!history?.messages || typeof history.messages !== 'object') return;
+	if (!history?.messages || typeof history.messages !== 'object') return false;
+	const before = JSON.stringify(history);
 
 	// Purge entries that aren't usable objects
 	for (const [id, message] of Object.entries(history.messages)) {
@@ -315,6 +316,8 @@ export const sanitizeHistory = (history) => {
 	for (const message of Object.values(history.messages)) {
 		message.childrenIds = message.childrenIds.filter((childId) => history.messages[childId]);
 	}
+
+	return JSON.stringify(history) !== before;
 };
 
 export const getGravatarURL = (email) => {

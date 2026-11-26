@@ -1153,6 +1153,8 @@
 	"Failed to generate title": "生成标题失败",
 	"Failed to import models": "导入模型配置失败",
 	"Failed to load chat": "加载对话失败",
+	"Failed to load chats": "加载对话列表失败",
+	"Failed to load pinned chats": "加载置顶对话失败",
 	"Failed to load chat preview": "对话预览加载失败",
 	"Failed to load DOCX file. Please try downloading it instead.": "无法加载 DOCX 文件，请尝试下载后查看。",
 	"Failed to load Excel/CSV file. Please try downloading it instead.": "加载 Excel/CSV 文件失败，请尝试直接下载文件。",

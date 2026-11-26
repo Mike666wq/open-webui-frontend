@@ -3,6 +3,14 @@
 	import { v4 as uuidv4 } from 'uuid';
 	import { toast } from 'svelte-sonner';
 	import { describeApiError } from '$lib/utils/api-error';
+	import {
+		isSharedReadOnly,
+		isChatNotFoundError,
+		isChatUnauthorizedError,
+		resolveLoadedChatModels,
+		hasUnsavedLocalBranch,
+		resolveDraftRestore
+	} from '$lib/utils/chat-load';
 
 	import { getContext, onDestroy, onMount, tick } from 'svelte';
 	import { fade } from 'svelte/transition';
@@ -413,10 +421,13 @@
 	let contextCompactionToastId = null;
 
 	let chat: any = null;
+	let chatLoadError: unknown = null;
 	let tags = [];
 
 	// Non-owners may reply when the sharing mode allows it, but cannot save chat edits.
-	$: isShared = chat != null && chat.user_id !== $user?.id;
+	// The share route redirects continue-mode shares to /c/<real id>, so the real
+	// chat payload (chat.chat.share_mode) is the source of truth here.
+	$: isShared = isSharedReadOnly(chat, $user?.id);
 	$: if (isShared && $showCallOverlay) showCallOverlay.set(false);
 	$: canClone = isShared && ($user?.role === 'admin' || ($user?.permissions?.chat?.import ?? true));
 	let cloning = false;
@@ -483,6 +494,12 @@
 	let showChatVariablesModal = false;
 	let loadedChatIdProp = '';
 	let currentDraftKey = '';
+	// Draft restoration has two triggers (onMount init and chatIdProp navigation).
+	// A generation token plus a serial queue makes sure only the latest
+	// navigation restores its own draft, and never races an older async read.
+	let draftRestoreGeneration = 0;
+	let draftRestoreChain: Promise<unknown> = Promise.resolve();
+	let draftRestoreClaimedGeneration = -1;
 
 	// Chat parameters own the approval mode; chats without an override use the user default.
 	$: toolApprovalMode =
@@ -840,6 +857,33 @@
 		}
 	};
 
+	// Read and apply a draft exactly once for a given navigation generation.
+	// Both callers enqueue here; a generation is claimed at enqueue time so a
+	// second trigger for the same draft becomes a no-op, and a superseded
+	// generation is skipped when the queued task finally runs.
+	const restoreDraftOnce = (
+		storageChatInput: string | null,
+		draftKey: string | null,
+		generation: number
+	): Promise<boolean> => {
+		if (!storageChatInput || generation <= draftRestoreClaimedGeneration) {
+			return Promise.resolve(false);
+		}
+		draftRestoreClaimedGeneration = generation;
+		const request = { generation, key: draftKey };
+		const task = draftRestoreChain.then(() =>
+			resolveDraftRestore(
+				request,
+				{ generation: draftRestoreGeneration, key: draftKey },
+				() => restoreChatInput(storageChatInput),
+				false
+			)
+		);
+		// Keep the chain alive even if a consumer ignores a rejected restore.
+		draftRestoreChain = task.catch(() => {});
+		return task;
+	};
+
 	const withSelectedText = (text: string) =>
 		embedded && selectedText?.trim()
 			? `${text}\n\nSelected note text for replace_note_content operations:\n${selectedText.trim()}`
@@ -875,6 +919,8 @@
 	}
 
 	const navigateHandler = async () => {
+		const generation = ++draftRestoreGeneration;
+		const draftKey = chatIdProp || null;
 		cancelBrowserInteractions();
 		bridge?.end();
 		noteChatDebug('navigateHandler start');
@@ -926,7 +972,7 @@
 				await processNextInQueue(chatIdProp);
 			}
 
-			if (!(await restoreChatInput(storageChatInput))) {
+			if (!(await restoreDraftOnce(storageChatInput, draftKey, generation))) {
 				await setDefaults();
 			}
 
@@ -1369,7 +1415,18 @@
 				];
 			}
 		}
-		if ((!currentId || follow) && incoming.currentId && next[incoming.currentId]) {
+		const keepLocalBranch = hasUnsavedLocalBranch(
+			baseline,
+			next,
+			incoming.currentId,
+			currentId,
+			history.messages
+		);
+		if (
+			(!currentId || (follow && !keepLocalBranch)) &&
+			incoming.currentId &&
+			next[incoming.currentId]
+		) {
 			history.currentId = incoming.currentId;
 			autoScrollToBottom();
 		}
@@ -1389,9 +1446,22 @@
 				mergeChatMessages(fresh.chat.history, baseline);
 			} catch (error) {
 				if ($chatId === id && joinedChatId === id) {
-					chat = null;
-					history = { messages: {}, currentId: null };
-					if (!embedded) await goto('/');
+					// A share with a transient auth error stays mounted with an error;
+					// the home page is only for chats that no longer exist.
+					const unauthorized = isChatUnauthorizedError(error);
+					chat = unauthorized ? chat : null;
+					chatLoadError = error;
+					if (!unauthorized) history = { messages: {}, currentId: null };
+					if (isChatNotFoundError(error) && !unauthorized) {
+						if (!embedded) await goto('/');
+					} else {
+						const detail = describeApiError(error, $i18n.t('Failed to load chat'));
+						toast.error(detail, {
+							id: 'chat-load-error',
+							duration: 8000,
+							action: !embedded ? { label: $i18n.t('Retry'), onClick: () => refreshChat() } : undefined
+						});
+					}
 				}
 			} finally {
 				if (chatRefresh?.id === id) chatRefresh = null;
@@ -1929,6 +1999,8 @@
 		);
 
 		const init = async () => {
+			const generation = ++draftRestoreGeneration;
+			const draftKey = chatIdProp || null;
 			if (!chatIdProp) {
 				loading = false;
 				await tick();
@@ -1946,7 +2018,7 @@
 				imageGenerationEnabled = false;
 				codeInterpreterEnabled = false;
 
-				await restoreChatInput(storageChatInput);
+				await restoreDraftOnce(storageChatInput, draftKey, generation);
 			}
 
 			messageInput?.focus({ preventScroll: true });
@@ -2816,6 +2888,9 @@
 
 	const loadChat = async () => {
 		noteChatDebug('loadChat start');
+		// A previous failed load must not leave a read-only shell behind on retry.
+		chat = null;
+		chatLoadError = null;
 		// chatIdProp is empty for chats started from the home page (URL set via replaceState)
 		chatId.set(chatIdProp || $chatId);
 		noteChatDebug('loadChat set active chat id');
@@ -2825,17 +2900,34 @@
 			temporaryChatEnabled.set(false);
 		}
 
+		let loadFailure: unknown = null;
 		chat = await getChatById(localStorage.token, $chatId).catch(async (error) => {
 			console.error('[note-chat] getChatById failed', {
 				chatIdProp,
 				activeChatId: $chatId,
 				error
 			});
-			if (!embedded) {
-				await goto('/');
+			loadFailure = error;
+			// Only a definitely gone chat should kick the user back to the home
+			// page. Transient/network/5xx and temporary share errors keep the URL
+			// and offer a retry instead of silently losing the conversation.
+			if (isChatNotFoundError(error) && !isChatUnauthorizedError(error)) {
+				if (!embedded) {
+					await goto('/');
+				}
+			} else {
+				const detail = describeApiError(error, $i18n.t('Failed to load chat'));
+				toast.error(detail, {
+					id: 'chat-load-error',
+					duration: 8000,
+					action: !embedded
+						? { label: $i18n.t('Retry'), onClick: () => loadChat() }
+						: undefined
+				});
 			}
 			return null;
 		});
+		chatLoadError = loadFailure;
 		noteChatDebug('getChatById completed', {
 			found: !!chat,
 			chatId: chat?.id,
@@ -2864,16 +2956,19 @@
 					messageCount: Object.keys(chatContent?.history?.messages ?? {}).length
 				});
 
-				selectedModels =
+				const savedModels =
 					(chatContent?.models ?? undefined) !== undefined
 						? chatContent.models
 						: [chatContent.models ?? ''];
 
-				// An empty model list is not evidence that the chat's models are gone.
 				if ($models.length > 0) {
-					selectedModels = selectedModels.filter((modelId) =>
-						$models.map((m) => m.id).includes(modelId)
+					selectedModels = resolveLoadedChatModels(
+						savedModels,
+						$models.map((m) => m.id),
+						(ids) => normalizeSelectedModels(ids)
 					);
+				} else {
+					selectedModels = Array.isArray(savedModels) ? [...savedModels] : savedModels;
 				}
 
 				if (!($user?.role === 'admin' || ($user?.permissions?.chat?.multiple_models ?? true))) {
@@ -2898,8 +2993,10 @@
 				}
 
 				// Sanitize history: repair orphaned references and structurally-malformed
-				// nodes from failed regenerations (#24424, #24157, #20474)
-				sanitizeHistory(history);
+				// nodes from failed regenerations (#24424, #24157, #20474). Persist the
+				// repair for owned chats so the same damage does not reappear on every
+				// refresh; shared read-only chats must stay untouched.
+				const historyRepaired = sanitizeHistory(history);
 
 				chatTitle.set(chatContent.title);
 
@@ -2973,10 +3070,27 @@
 					}
 				}
 
+				if (historyRepaired && !isShared && !$temporaryChatEnabled) {
+					const repairedChatId = $chatId;
+					void saveChatHandler(repairedChatId, history).catch((error) => {
+						console.error('[chat] failed to persist repaired history', error);
+						toast.error($i18n.t('Failed to save conversation'));
+					});
+				}
+
 				await tick();
 
+				chatLoadError = null;
 				return true;
 			} else {
+				chatLoadError = new Error($i18n.t('Failed to load chat'));
+				toast.error($i18n.t('Failed to load chat'), {
+					id: 'chat-load-error',
+					duration: 8000,
+					action: !embedded
+						? { label: $i18n.t('Retry'), onClick: () => loadChat() }
+						: undefined
+				});
 				console.warn('[note-chat] chat response missing chat payload', {
 					chatIdProp,
 					activeChatId: $chatId,
@@ -2989,6 +3103,7 @@
 			chatIdProp,
 			activeChatId: $chatId
 		});
+		return false;
 	};
 
 	const scrollToBottom = async (behavior = 'auto') => {
@@ -4336,6 +4451,17 @@
 			history.messages[responseMessageId] = responseMessage;
 			history.currentId = responseMessageId;
 
+			// The request never reached the completion handler, so nothing else
+			// will persist this branch. Refreshing without this save would drop
+			// both the user's message and the error response. Shared read-only
+			// chats and temporary chats stay memory-only by design.
+			try {
+				await saveChatHandler(_chatId, history);
+			} catch (saveError) {
+				console.error('[chat] failed to persist socket error state', saveError);
+				toast.error($i18n.t('Failed to save conversation'));
+			}
+
 			return null;
 		});
 
@@ -5016,6 +5142,21 @@
 			<div class="w-full h-full flex">
 				<div class="h-full flex relative max-w-full min-w-0 flex-1 flex-col">
 					<FilesOverlay show={dragged} />
+					{#if chatLoadError && (!isChatNotFoundError(chatLoadError) || isChatUnauthorizedError(chatLoadError))}
+						<div
+							class="mx-auto mt-3 flex max-w-md items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+							role="alert"
+						>
+							<span class="min-w-0 flex-1">{$i18n.t('Failed to load chat')}</span>
+							<button
+								type="button"
+								class="shrink-0 rounded-md px-2 py-1 font-medium text-gray-900 underline hover:bg-gray-100 dark:text-white dark:hover:bg-gray-800"
+								on:click={() => loadChat()}
+							>
+								{$i18n.t('Retry')}
+							</button>
+						</div>
+					{/if}
 					{#if embedded}
 						<div
 							class="h-10 shrink-0 flex items-center justify-between gap-2 border-b border-gray-50/80 px-3 text-gray-700 dark:border-gray-850/40 dark:text-gray-200"

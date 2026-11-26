@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { getContext, onMount, onDestroy } from 'svelte';
+	import { get } from 'svelte/store';
 	import { goto } from '$app/navigation';
 	import { v4 as uuid } from 'uuid';
 	import { toast } from 'svelte-sonner';
@@ -7,6 +8,7 @@
 	import { userSignOut } from '$lib/apis/auths';
 	import { resourceRequest, summarizeTask, type Resource, type ResourceKind, type Preflight, type Task } from '$lib/resources/api';
 	import { clearDeviceCategory, deviceUsage, type DeviceCategory, type DeviceUsage } from '$lib/resources/device';
+	import { createRequestGuard } from '$lib/resources/refresh-guard';
 	import { scrollableX } from '$lib/actions/scrollableX';
 
 	const i18n = getContext<any>('i18n');
@@ -41,9 +43,10 @@
 	let previewKey = '';
 	let deviceConfirm: DeviceCategory | 'logout' | null = null;
 	let result: Task | null = null;
-	let generation = 0;
 	let disposed = false;
-	let poll: ReturnType<typeof setInterval>;
+	let poll: ReturnType<typeof setInterval> | undefined;
+	let pollAccount: string | undefined;
+	const guard = createRequestGuard();
 	const iconPaths: Record<string, string> = {
 		overview: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
 		resources: 'M3 7h7l2-3h9v16H3z', device: 'M3 4h18v13H3z M8 21h8 M12 17v4',
@@ -136,8 +139,9 @@
 		selected = new Set();
 	}
 	async function refresh() {
-		const request = ++generation;
-		const account = $user?.id;
+		// Generation advances once per refresh. Non-refresh requests issued while
+		// this is in flight must not invalidate it.
+		const request = guard.begin($user?.id);
 		loading = true;
 		error = '';
 		try {
@@ -149,19 +153,19 @@
 				resourceRequest<any>('/rules'), deviceUsage().catch(() => []),
 				$user?.role === 'admin' ? resourceRequest<any>('/admin/overview') : Promise.resolve(null)
 			]);
-			if (disposed || request !== generation || account !== $user?.id) return;
+			if (!guard.isCurrent(request, disposed, get(user)?.id)) return;
 			compatible = true;
 			stats = overview; items = listing.items; total = listing.total;
 			recycled = bin; tasks = jobs; rules = policy; devices = usage; admin = accounts;
 			if (result && ['pending', 'running'].includes(result.state)) result = jobs.find((task) => task.id === result?.id) ?? result;
 		} catch (cause) {
-			if (disposed || request !== generation) return;
+			if (!guard.isCurrent(request, disposed, get(user)?.id)) return;
 			compatible = false;
 			error = cause instanceof Error ? cause.message : String(cause);
 			// Keep local device controls usable when this server has no new API.
 			devices = await deviceUsage().catch(() => []);
 		} finally {
-			if (request === generation) loading = false;
+			if (guard.isCurrent(request, disposed, get(user)?.id)) loading = false;
 		}
 	}
 	async function prepare(action: 'recycle' | 'restore' | 'purge', allMatching = false) {
@@ -204,9 +208,17 @@
 	}
 	async function retry(task: Task) {
 		busy = true;
-		try { result = await resourceRequest<Task>(`/tasks/${task.id}/retry`, {}); await refresh(); }
-		catch (cause) { error = String(cause); }
-		finally { busy = false; }
+		const request = guard.issue();
+		try {
+			const retried = await resourceRequest<Task>(`/tasks/${task.id}/retry`, {});
+			if (!guard.isCurrent(request, disposed, get(user)?.id)) return;
+			result = retried;
+			await refresh();
+		} catch (cause) {
+			if (guard.isCurrent(request, disposed, get(user)?.id)) error = String(cause);
+		} finally {
+			busy = false;
+		}
 	}
 	async function clearDevice() {
 		if (!deviceConfirm) return;
@@ -232,13 +244,33 @@
 		catch (cause) { error = String(cause); }
 		finally { busy = false; }
 	}
-	onMount(() => {
-		refresh();
+	function restartPolling() {
+		// A new account must never keep the previous account's polling timer.
+		if (poll) clearInterval(poll);
+		pollAccount = get(user)?.id;
 		poll = setInterval(() => {
+			if (disposed || get(user)?.id !== pollAccount) {
+				clearInterval(poll);
+				poll = undefined;
+				return;
+			}
 			if (tasks.some((task) => ['pending', 'running'].includes(task.state)) && !busy && !preview) refresh();
 		}, 3000);
+	}
+	onMount(() => {
+		refresh();
+		restartPolling();
 	});
-	onDestroy(() => { disposed = true; generation++; clearInterval(poll); });
+	// Svelte 5 effect: reacts to account switches, tears down the old timer.
+	$: {
+		const account = $user?.id;
+		if (!disposed && account !== pollAccount && pollAccount !== undefined) restartPolling();
+	}
+	onDestroy(() => {
+		disposed = true;
+		if (poll) clearInterval(poll);
+		poll = undefined;
+	});
 </script>
 
 {#snippet resourceIcon(kind: string)}

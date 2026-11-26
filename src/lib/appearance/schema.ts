@@ -199,6 +199,11 @@ const normalizeFocus = (
 		};
 	}
 
+	// A focus pair of crop rectangles is newer than `crop`; prefer it so an old
+	// focus rectangle cannot overwrite the focus the user last dragged.
+	const migratedFocusPair = fromPair(value);
+	if (migratedFocusPair) return migratedFocusPair;
+
 	const migratedPair = fromPair(pairSource);
 	if (migratedPair) return migratedPair;
 

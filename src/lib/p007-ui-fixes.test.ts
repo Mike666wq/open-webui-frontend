@@ -17,6 +17,39 @@ const read = (p: string) => readFileSync(join(dir, p), 'utf8');
 // P-007 S4/S5 (K14-K20). Component rendering needs a browser, so these are
 // static source assertions in the same style as notes-knowledge-p004.test.ts,
 // paired with the pure Markdown tests in utils/tiptap-markdown.test.ts.
+describe('fork: chat load and sidebar recovery', () => {
+	const chatsApi = read('apis/chats/index.ts');
+	const chat = read('components/chat/Chat.svelte');
+	const chatList = read('stores/chatList.ts');
+
+	it('getChatById keeps detail and reports HTTP status with an encoded id', () => {
+		expect(chatsApi).toContain('toChatLoadError');
+		expect(chatsApi).toContain('/chats/${encodeURIComponent(id)}');
+	});
+
+	it('chat load errors are classified instead of all redirecting home', () => {
+		expect(chat).toContain('isChatNotFoundError(error)');
+		expect(chat).toContain('isChatUnauthorizedError(error)');
+		expect(chat).toContain('resolveLoadedChatModels(');
+		const catchStart = chat.indexOf('getChatById failed');
+		const catchBlock = chat.slice(catchStart, catchStart + 900);
+		expect(catchBlock).toContain("await goto('/')");
+		expect(catchBlock).toContain('loadFailure = error');
+		expect(catchBlock).toContain('toast.error');
+	});
+
+	it('continue-mode shares are not treated as read-only', () => {
+		expect(chat).toContain('isSharedReadOnly(chat, $user?.id)');
+		expect(chat).toContain("chat?.chat?.share_mode !== 'continue'");
+	});
+
+	it('sidebar retains the previous list when a refresh fails', () => {
+		expect(chatList).toContain('Promise.all([');
+		expect(chatList).toContain('if (!chatsResult.ok) {');
+		expect(chatList).toContain('shouldMarkChatListAllLoaded(');
+	});
+});
+
 describe('P-007 K14: suggested-prompt caption uses the contrast-checked token', () => {
 	const chat = read('components/chat/Chat.svelte');
 

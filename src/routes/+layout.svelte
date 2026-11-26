@@ -40,7 +40,7 @@
 		pyodideWorker,
 		desktopEvent
 	} from '$lib/stores';
-	import { refreshChatList } from '$lib/stores/chatList';
+	import { refreshChatList, resetChatListState } from '$lib/stores/chatList';
 	import { sortChannels } from '$lib/messaging/model';
 	import { subscribePresenceAlerts } from '$lib/messaging/presence-alerts';
 	import { postNativeNotification } from '$lib/messaging/native-notify';
@@ -1336,6 +1336,10 @@
 		let queueUserId = $user?.id;
 		const unsubscribeQueueUser = user.subscribe(async (value) => {
 			if (queueUserId !== value?.id) {
+				// Clear the previous account's sidebar/pagination state on
+				// sign-in, sign-out and account switches, including sessions
+				// invalidated by an expired token.
+				resetChatListState();
 				channelRequestQueues.set({});
 				queueUserId = value?.id;
 			}

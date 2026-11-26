@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
+	import { describeApiError } from '$lib/utils/api-error';
 	import { v4 as uuidv4 } from 'uuid';
 	import Sortable from 'sortablejs';
 
@@ -445,11 +446,28 @@
 	};
 
 	const refreshChatRows = async () => {
-		const result = await refreshChatList(localStorage.token, { refreshPinned: true });
-		if (result.accepted) {
-			await initFolders();
-			await Promise.all(Object.values(folderRegistry).map((folder) => folder?.setFolderItems?.()));
-			chatListReady = true;
+		try {
+			const result = await refreshChatList(localStorage.token, { refreshPinned: true });
+			if (result.error) {
+				toast.error($i18n.t('Failed to load pinned chats'), {
+					id: 'chat-list-refresh-error',
+					duration: 5000
+				});
+			}
+			if (result.accepted) {
+				await initFolders();
+				await Promise.all(Object.values(folderRegistry).map((folder) => folder?.setFolderItems?.()));
+				chatListReady = true;
+			}
+		} catch (error) {
+			// refreshChatList keeps the previous list; recover the sidebar instead
+			// of leaving it stuck behind a spinner forever.
+			chatListReady = $chats !== null;
+			toast.error(describeApiError(error, $i18n.t('Failed to load chats')), {
+				id: 'chat-list-refresh-error',
+				duration: 5000,
+				action: { label: $i18n.t('Retry'), onClick: () => refreshChatRows() }
+			});
 		}
 	};
 
