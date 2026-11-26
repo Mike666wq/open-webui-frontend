@@ -1156,6 +1156,8 @@
 	"Failed to generate title": "",
 	"Failed to import models": "",
 	"Failed to load chat": "",
+	"Failed to load chats": "",
+	"Failed to load pinned chats": "",
 	"Failed to load chat preview": "",
 	"Failed to load DOCX file. Please try downloading it instead.": "",
 	"Failed to load Excel/CSV file. Please try downloading it instead.": "",

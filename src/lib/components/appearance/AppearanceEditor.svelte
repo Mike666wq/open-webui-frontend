@@ -31,6 +31,8 @@
 		loadWallpaperAsset,
 		listWallpaperAssets,
 		deleteWallpaperAsset,
+		isWallpaperInUse,
+		planCancelDisposition,
 		contrastRatio,
 		OFFICIAL_WELCOME_VIDEO_URL,
 		type AppearancePreset,
@@ -422,10 +424,7 @@
 	}
 
 	async function removeLibraryImage(assetId: string) {
-		const inUse = [draft.modes.light.background, draft.modes.dark.background].some(
-			(background) => background.kind === 'local-image' && background.assetId === assetId
-		);
-		if (inUse) {
+		if (isWallpaperInUse(assetId, draft, library, previewUrls)) {
 			toast.info(copy('这张图正在作为背景使用', 'This image is the active background'));
 			return;
 		}
@@ -434,6 +433,9 @@
 		const item = library.find((entry) => entry.id === assetId);
 		if (item) URL.revokeObjectURL(item.url);
 		library = library.filter((entry) => entry.id !== assetId);
+		for (const mode of ['light', 'dark'] as const) {
+			if (previewUrls[mode] === item?.url) delete previewUrls[mode];
+		}
 		toast.success(copy('已从图库删除', 'Removed from the library'));
 	}
 
@@ -493,6 +495,37 @@
 	}
 
 	function cancelChanges() {
+		const disposition = planCancelDisposition(
+			pendingBlobs,
+			draft,
+			$appearanceSettings,
+			copy(
+				'导入的主题含本地壁纸，已保留在图库；其他更改已取消。',
+				'The imported theme included a local wallpaper. It was kept in the library; other changes were cancelled.'
+			)
+		);
+		if (Object.keys(disposition.assetsToPersist).length) {
+			// Kick off the commit before cleanupPreviewUrls() drops the blobs. The
+			// appearance settings themselves are deliberately untouched.
+			void persistAppearanceChange({
+				origin: window.location.origin,
+				draft,
+				previous: $appearanceSettings,
+				pendingBlobs: { ...disposition.assetsToPersist }
+			})
+				.then(() => {
+					toast.success(disposition.notice ?? '');
+					void refreshLibrary();
+				})
+				.catch(() => {
+					toast.error(
+						copy(
+							'导入的壁纸无法保存，已回滚。',
+							'The imported wallpaper could not be saved and was rolled back.'
+						)
+					);
+				});
+		}
 		cleanupPreviewUrls();
 		endAppearancePreview();
 		onclose();

@@ -93,6 +93,33 @@ describe('appearance schema v6', () => {
 		}
 	});
 
+	it('prefers a focus crop pair over an older crop rectangle', () => {
+		const settings = normalizeAppearance({
+			modes: {
+				light: {
+					background: {
+						kind: 'local-image',
+						assetId: 'img',
+						focus: {
+							portrait: { x: 0.6, y: 0, width: 0.2, height: 0.8 },
+							landscape: { x: 0.3, y: 0, width: 0.4, height: 0.8 }
+						},
+						crop: { x: 0.1, y: 0, width: 0.2, height: 0.8 },
+						mask: 22,
+						blur: 8
+					}
+				}
+			}
+		});
+		const background = settings.modes.light.background;
+		expect(background.kind).toBe('local-image');
+		if (background.kind === 'local-image') {
+			// focus pair wins; the older single crop would give portrait 0.2.
+			expect(background.focus.portrait).toBeCloseTo(0.7, 5);
+			expect(background.focus.landscape).toBeCloseTo(0.5, 5);
+		}
+	});
+
 	it('clamps explicit focus values into 0-1', () => {
 		const settings = normalizeAppearance({
 			modes: {

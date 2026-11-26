@@ -47,6 +47,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci --no-audit --no-fund
+        env:
+          npm_config_onnxruntime_node_install_cuda: skip
       - run: npm run frontend:test
       - run: npm run test:frontend -- --run
       - run: npm run build

@@ -85,6 +85,7 @@ export {
 	loadAppearance,
 	saveAppearance
 } from './storage';
+export { isWallpaperInUse, planCancelDisposition } from './wallpaper-session';
 export {
 	parseThemeFile,
 	serializeThemeFile,

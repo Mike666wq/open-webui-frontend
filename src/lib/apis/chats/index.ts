@@ -1,13 +1,6 @@
 import { WEBUI_API_BASE_URL } from '$lib/constants';
 import { getTimeRange } from '$lib/utils';
-
-const getErrorDetail = (err: any) => {
-	if (Array.isArray(err?.detail)) {
-		return err.detail.map((e: { msg?: string }) => e.msg || JSON.stringify(e)).join(', ');
-	}
-
-	return err?.detail ?? err;
-};
+import { getErrorDetail, toChatLoadError } from '$lib/utils/chat-load';
 
 export const getChatConfig = async (token: string) => {
 	let error = null;
@@ -755,8 +748,9 @@ export const getChatListByTagName = async (token: string = '', tagName: string) 
 
 export const getChatById = async (token: string, id: string) => {
 	let error = null;
+	let status = 0;
 
-	const res = await fetch(`${WEBUI_API_BASE_URL}/chats/${id}`, {
+	const res = await fetch(`${WEBUI_API_BASE_URL}/chats/${encodeURIComponent(id)}`, {
 		method: 'GET',
 		headers: {
 			Accept: 'application/json',
@@ -765,14 +759,15 @@ export const getChatById = async (token: string, id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			status = res.status;
+			if (!res.ok) throw Object.assign(await res.json(), { status: res.status });
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = toChatLoadError(err, status);
 
 			console.error(err);
 			return null;

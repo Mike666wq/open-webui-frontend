@@ -53,6 +53,35 @@ describe('appearance persistence', () => {
 		expect(deleteAsset).toHaveBeenCalledWith('new');
 	});
 
+	it('rolls back only assets that were not referenced by the previous settings', async () => {
+		const deleteAsset = vi.fn().mockResolvedValue(undefined);
+		const previous = localImageSettings('old');
+		const draft = localImageSettings('replacement');
+		const saveAsset = vi.fn().mockResolvedValue(undefined);
+
+		await expect(
+			persistAppearanceChange({
+				origin: 'https://example.test',
+				draft,
+				previous,
+				pendingBlobs: {
+					old: new Blob(['still referenced by previous settings']),
+					replacement: new Blob(['only referenced by the draft'])
+				},
+				saveAsset,
+				saveSettings: vi.fn(() => {
+					throw new Error('storage unavailable');
+				}),
+				deleteAsset
+			})
+		).rejects.toThrow(/storage unavailable/);
+
+		expect(saveAsset).toHaveBeenCalledTimes(2);
+		expect(deleteAsset).toHaveBeenCalledTimes(1);
+		expect(deleteAsset).toHaveBeenCalledWith('replacement');
+		expect(deleteAsset).not.toHaveBeenCalledWith('old');
+	});
+
 	it('commits the new asset and keeps library images for reuse', async () => {
 		const deleteAsset = vi.fn().mockResolvedValue(undefined);
 		const result = await persistAppearanceChange({
@@ -66,5 +95,30 @@ describe('appearance persistence', () => {
 		});
 		expect(result.modes.light.background).toMatchObject({ assetId: 'new' });
 		expect(deleteAsset).not.toHaveBeenCalledWith('old');
+	});
+
+	it('removes assets written by this attempt that the saved settings no longer reference', async () => {
+		const deleteAsset = vi.fn().mockResolvedValue(undefined);
+		const draft = localImageSettings('new');
+		const saveAsset = vi.fn().mockResolvedValue(undefined);
+
+		const result = await persistAppearanceChange({
+			origin: 'https://example.test',
+			draft,
+			previous: localImageSettings('old'),
+			pendingBlobs: {
+				new: new Blob(['active']),
+				orphan: new Blob(['no longer referenced'])
+			},
+			saveAsset,
+			saveSettings: vi.fn((_origin: string, settings: AppearanceSettings) => settings),
+			deleteAsset
+		});
+
+		expect(result.modes.light.background).toMatchObject({ assetId: 'new' });
+		expect(saveAsset).toHaveBeenCalledTimes(2);
+		expect(deleteAsset).toHaveBeenCalledTimes(1);
+		expect(deleteAsset).toHaveBeenCalledWith('orphan');
+		expect(deleteAsset).not.toHaveBeenCalledWith('new');
 	});
 });
